@@ -2,8 +2,10 @@
 
 import os
 import shutil
+import types
 import time
 import csv
+from collections import namedtuple
 import zipfile
 import pickle
 
@@ -12,21 +14,33 @@ from google.transit import gtfs_realtime_pb2
 import graphviz
 import pandas as pd
 
+import transit_systems as ts
+
+'''
+with open("data_file.txt", newline="") as infile:
+    reader = csv.reader(infile)
+    _fields = ('a', 'few', 'fields')
+    route_info = namedtuple('route_info', _fields)
+    next(reader)
+    for row in map(route_info._make, reader):
+        yield row
+'''
 
 def _locate_csv(name, gtfs_settings):
     return '%s/%s.txt' % (gtfs_settings.static_data_path, name)
 
+'''
 class Simp:
     """ Class for simple object that can take attributes
 
-    Usage: o = Simp(attr1 = val1, attr2 = val2, attr3 = val3)
+        Usage: o = Simp(attr1 = val1, attr2 = val2, attr3 = val3)
     """
     def attr(self):
         return self.__dict__.items()
 
     def __init__(self, **kwds):
         self.__dict__.update(kwds)
-
+'''
 
 STATUS_MESSAGES = ['approaching', 'stopped at', 'in transit to']
 
@@ -52,8 +66,8 @@ class Stop:
 
     def __init__(self, stop_id):
         self.id_ = stop_id
-        self.upcoming_trains = Simp()
-        self.routes_that_stop_here = []
+        self.upcoming_trains = {}
+        self.routes_that_stop_here = {}
 
 
 class ShapeBuilder:
@@ -65,17 +79,20 @@ class ShapeBuilder:
     id_ = stops = None
 
     def add_stop(self, stop_id):
-        setattr(self.stops, stop_id, Stop(stop_id))
+        #setattr(self.stops, stop_id, Stop(stop_id))
+        self.stops.update({stop_id:Stop(stop_id)})
 
     def __init__(self, parent_route, shape_id):
         self.route = parent_route
         self.id_ = shape_id
-        self.stops = Simp()
+        #self.stops = types.SimpleNamespace()
+        self.stops = {}
 
 class Shape(ShapeBuilder):
     def display(self):
         print('        '+self.id_)
-        for _, stop in self.stops.attr():
+        #for _, stop in self.stops.attr():
+        for _, stop in self.stops.items():
             stop.display()
 
     def __init__(self, parent_route, shape_id):
@@ -86,26 +103,30 @@ class RouteBuilder:
     shapes = branches = None
 
     def add_shape(self, shape_id):
-        setattr(self.shapes, shape_id, Shape(self, shape_id))
+        #setattr(self.shapes, shape_id, Shape(self, shape_id))
+        self.shapes.update({shape_id:Shape(self, shape_id)})
 
-    def __init__(self, transit_system, id_, long_name, desc, color='', text_color=''):
+    def __init__(self, transit_system, route_info):
         self.transit_system = transit_system
-        self.id_ = id_
-        self.long_name = long_name
-        self.desc = desc
-        self.color = color
-        self.text_color = text_color
-        self.shapes = Simp()
-        self.branches = Simp()
+        self.id_ = route_info['id_']
+        self.long_name = route_info['long_name']
+        self.desc = route_info['desc']
+        self.color = route_info['color']
+        self.text_color = route_info['text_color']
+        #self.shapes = types.SimpleNamespace()
+        self.shapes = {}
+        #self.branches = types.SimpleNamespace()
+        self.branches = {}
 
 class Route(RouteBuilder):
     def display(self):
         print('    '+self.id_)
-        for _, shape in self.shapes.attr():
+        #for _, shape in self.shapes.attr():
+        for _, shape in self.shapes.items():
             shape.display()
 
-    def __init__(self, transit_system, id_, long_name, desc, color='', text_color=''):
-        super().__init__(transit_system, id_, long_name, desc, color, text_color)
+    def __init__(self, transit_system, route_info):
+        super().__init__(transit_system, route_info)
 
 
 class TransitSystemBuilder:
@@ -113,7 +134,7 @@ class TransitSystemBuilder:
 
     TODO: docstring for this class
     """
-    routes = gtfs_settings = stop_info = None
+    routes = gtfs_settings = stops_info = routes_info =None
 
     _has_parent_station_column = True
     _rswn_list_of_columns = [
@@ -174,16 +195,12 @@ class TransitSystemBuilder:
             print(f'Creating {to_}')
 
         print(f'Downloading GTFS static data from {url}')
-<<<<<<< HEAD
         try:
             _new_data = requests.get(url, allow_redirects=True)
             open(f'{to_}/schedule_data.zip', 'wb').write(_new_data.content)
         except requests.exceptions.ConnectionError:
             exit(f'\nERROR:\nFailed to connect to {url}\n')
-=======
-        _new_data = requests.get(url, allow_redirects=True)
-        open(f'{to_}/schedule_data.zip', 'wb').write(_new_data.content)
->>>>>>> 95472a46a3b2a2a9fb46b5f1d467697a6608d77b
+
 
     def _unzip_new_schedule_data(self, temp_dir, to_):
         _old_data = None
@@ -195,10 +212,7 @@ class TransitSystemBuilder:
         os.makedirs(to_)
 
         print(f'Unzipping schedule_data.zip to {to_}')
-<<<<<<< HEAD
-=======
-        os.makedirs(to_)
->>>>>>> 95472a46a3b2a2a9fb46b5f1d467697a6608d77b
+
         with zipfile.ZipFile(f'{temp_dir}/schedule_data.zip', "r") as zip_ref:
             zip_ref.extractall(to_)
 
@@ -222,43 +236,56 @@ class TransitSystemBuilder:
         self._merge_trips_and_stops()
         self._load_travel_time_for_stops()
 
+    def load_routes_info(self):
+        with open(_locate_csv('routes', self.gtfs_settings), mode='r') as infile:
+            reader = csv.DictReader(infile)
+            # route_id,agency_id,route_short_name,route_long_name,route_desc,route_type,route_url,route_color,route_text_color
+            for row in reader:
+                _route_name = types.SimpleNamespace(
+                    long_name=['route_long_name'],
+                    desc=row['route_desc'],
+                    color=row['route_color'],
+                    text_color=row['route_text_color']
+                )
+                self.routes_info[row['route_id']] = _stop_name
 
-    def load_stop_info(self):
+    def load_stops_info(self):
         with open(_locate_csv('stops', self.gtfs_settings), mode='r') as infile:
             reader = csv.DictReader(infile)
-            for rows in reader:
-                _stop_name = Simp(name=['stop_name'])
-                #s.name, s.lat, s.lon = rows['stop_name'], rows['stop_lat'], rows['stop_lon']
-                self.stop_info[rows['stop_id']] = _stop_name
+            for row in reader:
+                _stop_name = types.SimpleNamespace(
+                    name=row['stop_name'],
+                    lat=row['stop_lat'],
+                    lon=row['stop_lon']
+                )
+                self.stops_info[row['stop_id']] = _stop_name
 
-    def add_route(self, route_id, route_long_name, route_desc, route_color='', route_text_color=''):
+    def add_route(self, route_info):
+        route_id = route_info['id_']
         print(f'Adding route: {route_id}')
-        setattr(
-            self.routes,
-            route_id,
-            Route(self, route_id, route_long_name, route_desc, route_color, route_text_color)
-        )
+        self.routes.update({route_id:Route(self, route_info)})
 
     def load_all_routes(self):
         with open(_locate_csv('routes', self.gtfs_settings), mode='r') as infile:
             csv_reader = csv.DictReader(infile)
             for row in csv_reader:
-                route_id = row['route_id']
+                route_info = {}
+                route_info['id_'] = row['route_id']
 
                 if row['route_color'].strip():
-                    route_color = '#'+row['route_color']
+                    route_info['color'] = '#'+row['route_color']
                 else:
-                    route_color = 'lightgrey'
+                    route_info['color'] = 'lightgrey'
 
                 if row['route_text_color'].strip():
-                    route_text_color = '#'+row['route_text_color']
+                    route_info['text_color'] = '#'+row['route_text_color']
                 else:
-                    route_text_color = 'black'
+                    route_info['text_color'] = 'black'
 
-                route_long_name = row['route_id']+': '+row['route_long_name']
-                route_desc = row['route_desc']
+                route_info['long_name'] = row['route_id']+': '+row['route_long_name']
+                route_info['desc'] = row['route_desc']
 
-                self.add_route(route_id, route_long_name, route_desc, route_color, route_text_color)
+                self.add_route(route_info)
 
     def build_routes_shapes_stops(self):
         with open(_locate_csv('route_stops_with_names', self.gtfs_settings), mode='r') as rswn:
@@ -274,10 +301,11 @@ class TransitSystemBuilder:
                     else:
                         current_shape_id = new_shape_id
                         route.add_shape(current_shape_id)
-                        shape = getattr(route.shapes, current_shape_id)
+                        shape = route.shapes[current_shape_id]
                 else:
                     current_route_id = new_route_id
-                    route = getattr(self.routes, current_route_id)
+                    print(f'trying {current_route_id}')
+                    route = self.routes[current_route_id]
 
     def build_branches(self):
         # is this necessary?
@@ -285,7 +313,7 @@ class TransitSystemBuilder:
 
     def build(self):
         print("Loading stop names...")
-        self.load_stop_info()
+        self.load_stops_info()
         print("Done.\nLoading route information...")
         self.load_all_routes()
         print("Done.\nLoading GTFS static data into Route Shape and Stop objects...")
@@ -307,13 +335,13 @@ class TransitSystemBuilder:
     def __init__(self, name, gtfs_settings):
         self.name = name
         self.gtfs_settings = gtfs_settings
-        self.routes = Simp()
-        self.stop_info = {}
+        self.routes = {}
+        self.stops_info = {}
 
 class TransitSystem(TransitSystemBuilder):
     def display(self):
         print(self.name)
-        for _, route in self.routes.attr():
+        for _, route in self.routes.items():
             route.display()
 
     def map_each_route(self, route_desc_filter=None):
@@ -321,7 +349,7 @@ class TransitSystem(TransitSystemBuilder):
         _r = graphviz.Graph()
         print('Mapping the network of stops for: ', end='')
         _first = True
-        for route_id, route in self.routes.attr():
+        for route_id, route in self.routes.items():
             if not _first:
                 print(', ', end='')
             _first = False
@@ -344,10 +372,10 @@ class TransitSystem(TransitSystemBuilder):
                 this_stop = stop_id + route_id
                 if this_stop not in list_of_nodes:
                     list_of_nodes.append(this_stop)
-                    route = getattr(self.routes, route_id)
+                    route = self.routes[route_id]
                     _stop_networks[route_id].node(
                         this_stop,
-                        label=self.stop_info[stop_id].name,
+                        label=self.stops_info[stop_id].name,
                         style='filled',
                         fontsize='14',
                         fillcolor=route.color,
@@ -367,7 +395,7 @@ class TransitSystem(TransitSystemBuilder):
         format_ = 'pdf'
         outfile_ = f'{self.name}_routes_graph'
         print(f'\nWriting network graph to {outfile_}.{format_}')
-        for route_id, route in self.routes.attr():
+        for route_id, route in self.routes.items():
             _r.subgraph(_stop_networks[route_id])
         graph_dir = '/var/www/html/route_viz'
         _r.render(filename=outfile_, directory=graph_dir, cleanup=True, format=format_)
@@ -414,19 +442,23 @@ class Feed:
             if entity.HasField('vehicle'):
                 if route is entity.vehicle.trip.route_id:
                     _status = STATUS_MESSAGES[entity.vehicle.current_status]
-                    _name = self.transit_system.stop_info[entity.vehicle.stop_id].name
+                    _name = self.transit_system.stops_info[entity.vehicle.stop_id].name
                     print(f'Train is {_status} {_name}')
 
-    def next_arrivals(self, train, stop):
+    def interate_stop_time_update_arrivals(self, entity):
         arrivals = []
+        for stop_time_update in entity.trip_update.stop_time_update:
+            if stop_time_update.stop_id == stop:
+                if stop_time_update.arrival.time > time.time():
+                    arrivals.append(stop_time_update.arrival.time)
+        return arrivals
+
+    def next_arrivals(self, train, stop):
         for entity in self.feed.entity:
             if entity.HasField('trip_update'):
                 if entity.trip_update.trip.route_id == train:
-                    for stop_time_update in entity.trip_update.stop_time_update:
-                        if stop_time_update.stop_id == stop:
-                            if stop_time_update.arrival.time > time.time():
-                                arrivals.append(stop_time_update.arrival.time)
-        return arrivals
+                    return self.interate_stop_time_update_arrivals(entity)
+
 
     def timestamp(self):
         return self.feed.header.timestamp
@@ -446,54 +478,6 @@ class Feed:
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
-
-class MTASubway(TransitSystem):
-    """MTA_Subway extends TransitSystem with specific settings for the MTA's GTFS implementation
-    """
-    def _get_url(self, route_id):
-        _base_url = self.gtfs_settings.gtfs_base_feed_url
-        _key = self.gtfs_settings.api_key
-        _feed = self.gtfs_settings.which_feed[route_id]
-        return f'{_base_url}?key={_key}&feed_id={_feed}'
-
-    def __init__(self, name):
-        self.gtfs_settings = Simp(
-            which_feed={
-                '1':'1', '2':'1', '3':'1', '4':'1', '5':'1', '6':'1', 'GS':'1',
-                'A':'26', 'C':'26', 'E':'26', 'H':'26', 'FS':'26',
-                'N':'16', 'Q':'16', 'R':'16', 'W':'16',
-                'B':'21', 'D':'21', 'F':'21', 'M':'21',
-                'L':'2',
-                'SI':'11',
-                'G':'31',
-                'J':'36', 'Z':'36',
-                '7':'51'
-            },
-            feeds=['1', '2', '11', '16', '21', '26', '31', '51'],
-            api_key='f775a76bd1960c98831b3c2b06c19bb5',
-            gtfs_static_url='http://web.mta.info/developers/data/nyct/subway/google_transit.zip',
-            gtfs_base_feed_url='http://datamine.mta.info/mta_esi.php',
-            gtfs_feed_url=lambda route_id: self._get_url(route_id),
-            static_data_path='schedule_data/MTA'
-        )
-        super().__init__(name, self.gtfs_settings)
-
-
-class MBTASubway(TransitSystem):
-    """MBTA_Subway extends TransitSystem with specific settings for the MBTA's GTFS implementation
-    """
-    def __init__(self, name):
-        self.gtfs_settings = Simp(
-            api_key='',
-            gtfs_static_url='https://cdn.mbta.com/MBTA_GTFS.zip',
-            gtfs_feed_url=lambda route_id: '',
-            static_data_path='schedule_data/MBTA'
-            )
-        super().__init__(name, self.gtfs_settings)
-        self._rswn_list_of_columns.remove('parent_station')
-        self._has_parent_station_column = False
-
-
 def main():
     '''
     mta =  MTASubway('MTASubway')
@@ -502,7 +486,7 @@ def main():
     new_boi = mta.load('stored_transit_systems/MTA.pkl')
     new_boi.display()
     '''
-    mta = MTASubway('MTASubway')
+    mta = ts.MTASubway('MTASubway')
     mta.build()
     mta.display()
     #mta.map_each_route()
