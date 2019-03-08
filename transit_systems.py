@@ -1,4 +1,4 @@
-from gtfs_parser import TransitSystem
+from static import TransitSystem
 import types
 
 class MTASubway(TransitSystem):
