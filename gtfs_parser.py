@@ -7,7 +7,21 @@ from google.transit import gtfs_realtime_pb2
 import graphviz
 import pandas as pd
 
-from project_functions import _get, _set, _locate_csv, _rotate, Simp
+
+def _locate_csv(name, gtfs_settings):
+    return '%s/%s.txt' % (gtfs_settings.static_data_path, name)
+
+class Simp:
+    """ Class for simple object that can take attributes
+
+    Usage: o = Simp(attr1 = val1, attr2 = val2, attr3 = val3)
+    """
+    def __init__(self, **kwds):
+        self.__dict__.update(kwds)
+
+    def attr(o):
+        #return [a for a in dir(o) if not a.startswith('__') and not a == 'attr']
+        return o.__dict__.items()
 
 
 STATUS_MESSAGES = ['approaching', 'stopped at', 'in transit to']
@@ -48,7 +62,7 @@ class ShapeBuilder:
     id_ = stops = None
 
     def add_stop(self, stop_id):
-        _set(self.stops, stop_id, Stop(stop_id))
+        setattr(self.stops, stop_id, Stop(stop_id))
 
     def __init__(self, parent_route, shape_id):
         self.route = parent_route
@@ -69,7 +83,7 @@ class RouteBuilder:
     shapes = branches = None
 
     def add_shape(self, shape_id):
-        _set(self.shapes, shape_id, Shape(self, shape_id))
+        setattr(self.shapes, shape_id, Shape(self, shape_id))
 
     def __init__(self, parent_transit_system, route_id, route_long_name, route_desc, color = '', text_color = ''):
         self.parent_transit_system = parent_transit_system
@@ -177,7 +191,7 @@ class TransitSystemBuilder:
 
     def add_route(self, route_id, route_long_name, route_desc, route_color = '', route_text_color = ''):
         print(f'Adding route: {route_id}')
-        _set(self.routes, route_id, Route(self, route_id, route_long_name, route_desc, route_color, route_text_color))
+        setattr(self.routes, route_id, Route(self, route_id, route_long_name, route_desc, route_color, route_text_color))
 
     def load_all_routes(self):
         with open(_locate_csv('routes',self.gtfs_settings), mode='r') as infile:
@@ -214,10 +228,10 @@ class TransitSystemBuilder:
                     else:
                         current_shape_id = new_shape_id
                         route.add_shape(current_shape_id)
-                        shape = _get(route.shapes, current_shape_id)
+                        shape = getattr(route.shapes, current_shape_id)
                 else:
                     current_route_id = new_route_id
-                    route = _get(self.routes, current_route_id)
+                    route = getattr(self.routes, current_route_id)
 
     def build_branches(self):
         # is this necessary?
@@ -281,7 +295,7 @@ class TransitSystem(TransitSystemBuilder):
                 this_stop = stop_id + route_id
                 if this_stop not in list_of_nodes:
                     list_of_nodes.append(this_stop)
-                    route = _get(self.routes, route_id)
+                    route = getattr(self.routes, route_id)
                     _stop_networks[route_id].node(this_stop,label=self.stop_info[stop_id].name,style='filled',fontsize='14',fillcolor=route.color,fontcolor=route.text_color)
 
                 this_shape = row['shape_id']
