@@ -174,11 +174,16 @@ class TransitSystemBuilder:
             print(f'Creating {to_}')
 
         print(f'Downloading GTFS static data from {url}')
+<<<<<<< HEAD
         try:
             _new_data = requests.get(url, allow_redirects=True)
             open(f'{to_}/schedule_data.zip', 'wb').write(_new_data.content)
         except requests.exceptions.ConnectionError:
             exit(f'\nERROR:\nFailed to connect to {url}\n')
+=======
+        _new_data = requests.get(url, allow_redirects=True)
+        open(f'{to_}/schedule_data.zip', 'wb').write(_new_data.content)
+>>>>>>> 95472a46a3b2a2a9fb46b5f1d467697a6608d77b
 
     def _unzip_new_schedule_data(self, temp_dir, to_):
         _old_data = None
@@ -190,6 +195,10 @@ class TransitSystemBuilder:
         os.makedirs(to_)
 
         print(f'Unzipping schedule_data.zip to {to_}')
+<<<<<<< HEAD
+=======
+        os.makedirs(to_)
+>>>>>>> 95472a46a3b2a2a9fb46b5f1d467697a6608d77b
         with zipfile.ZipFile(f'{temp_dir}/schedule_data.zip', "r") as zip_ref:
             zip_ref.extractall(to_)
 
