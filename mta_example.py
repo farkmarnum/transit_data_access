@@ -10,7 +10,8 @@ import inspect
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
 
-mta =  gtfs.MTA_Subway('MTA_Subway')
+mta =  gtfs.MTASubway('MTA_subway')
+#mta.update()
 mta.build()
 mta.display()
 
