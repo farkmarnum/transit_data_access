@@ -27,9 +27,6 @@ gtfs_parser.py
    TransitSystem.map_each_route() produces a visual representation (currently PDF) of the map of connections within each route, using dot
 
 
-project_functions.py
- * Holds utility functions for gtfs_parser.py
-
 mta_example.py
  * Example of a Python script that uses gtfs_parser classes and methods
 
