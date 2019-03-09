@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 import time
 import os
-import requests
+import grequests
 
 import static
 import transit_systems as ts_list
@@ -15,10 +15,11 @@ def main():
 
     mta.build()
 
-    with requests.Session() as s:
+    with grequests.Session() as s:
         for i in range(10):
             time_before = time.time()
-            realtime_feeds = realtime.Feeds(mta, s)
+            realtime_feed = realtime.Feeds(mta, s)
+            print(realtime_feed.timestamp('1'))
             time_after = time.time()
             print(time_after - time_before)
 

@@ -1,8 +1,23 @@
 import time
 from collections import namedtuple
-import requests
+import asyncio
+import aiohttp
 from google.transit import gtfs_realtime_pb2
 import transit_systems as ts_list
+
+
+async def fetch_http(session, feed_id, url):
+    async with session.get(url) as response:
+        if response.status != 200:
+            response.raise_for_status()
+        response_body = await response.read()
+        return [feed_id, response_body]
+
+
+async def fetch_all(session, urls):
+    results = await asyncio.gather(*[asyncio.create_task(fetch_http(session, feed_id, url)) for feed_id, url in urls])
+    return results
+
 
 class Train:
     """Analogous to GTFS trip_id
@@ -22,14 +37,16 @@ class Train:
 class Feeds:
     """Gets a new realtime GTFS feed
     """
-    def all_feeds(self, session):
-        all_data = {}
-        for feed_id, url in self.urls.items():
-            response = session.get(url)
-            feed_message = gtfs_realtime_pb2.FeedMessage()
-            feed_message.ParseFromString(response.content)
-            all_data[feed_id] = feed_message
-        return all_data
+    async def all_feeds(self):
+        async with aiohttp.ClientSession() as session:
+            response = await fetch_all(session, self.urls.items())
+            all_data = {}
+            for feed_id, resp in response:
+                #print(feed_id)
+                gtfs_feed = gtfs_realtime_pb2.FeedMessage()
+                gtfs_feed.ParseFromString(resp)
+                all_data.update({feed_id: gtfs_feed})
+            return all_data
 
     def trains_by_route(self, route_id):
         feed_id = self.which_feed[route_id]
@@ -55,8 +72,8 @@ class Feeds:
                     return self.interate_stop_time_update_arrivals(entity)
 
 
-    def timestamp(self):
-        return self.data_.header.timestamp
+    def timestamp(self, feed_id):
+        return self.data_[feed_id].header.timestamp
 
     def feed_size(self):
         for feed_id in self.feed_ids:
@@ -69,4 +86,4 @@ class Feeds:
         self.which_feed = ts.gtfs_settings.which_feed
         self.urls = ts.gtfs_settings.gtfs_realtime_urls
         self.feed_ids = ts.gtfs_settings.feed_ids
-        self.data_ = self.all_feeds(session)
+        self.data_ = asyncio.run(self.all_feeds())
