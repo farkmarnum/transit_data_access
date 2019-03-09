@@ -18,7 +18,6 @@ async def fetch_all(session, urls):
     results = await asyncio.gather(*[asyncio.create_task(fetch_http(session, feed_id, url)) for feed_id, url in urls])
     return results
 
-
 class Train:
     """Analogous to GTFS trip_id
 
@@ -82,7 +81,7 @@ class Feeds:
     def print_feeds(self):
         print(self.data_)
 
-    def __init__(self, ts, session):
+    def __init__(self, ts):
         self.which_feed = ts.gtfs_settings.which_feed
         self.urls = ts.gtfs_settings.gtfs_realtime_urls
         self.feed_ids = ts.gtfs_settings.feed_ids

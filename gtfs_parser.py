@@ -16,7 +16,7 @@ def main():
 
     for i in range(10):
         time_before = time.time()
-        realtime_feed = realtime.Feeds(mta, s)
+        realtime_feed = realtime.Feeds(mta)
         print(realtime_feed.timestamp('1'))
         time_after = time.time()
         print(time_after - time_before)
