@@ -1,21 +1,20 @@
 #!/usr/bin/python3
 import time
+import os
 import requests
 
 import static
 import transit_systems as ts_list
 import realtime
 
-def is_loaded(ts_name):
-    # check if the database is already populated for this ts
-    return True
 
 def main():
-    ts_name = 'MTA_subway'
-    if is_loaded(ts_name):
-        mta = static.load(ts_list.MTASubway, ts_name)
-    else:
-        mta = static.pull(ts_list.MTASubway, ts_name)
+    mta = ts_list.MTASubway('MTA_subway')
+    if not mta.is_loaded():
+        mta.update_ts()
+
+    mta.build()
+
     with requests.Session() as s:
         for i in range(10):
             time_before = time.time()

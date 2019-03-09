@@ -9,7 +9,20 @@ import pickle
 import requests
 import graphviz
 import pandas as pd
+import logging
 
+list_of_files = [
+    'agency.txt',
+    'calendar_dates.txt',
+    'calendar.txt',
+    'route_stops_with_names.txt',
+    'routes.txt',
+    'shapes.txt',
+    'stop_times.txt',
+    'stops.txt',
+    'transfers.txt',
+    'trips.txt'
+]
 
 def _locate_csv(name, gtfs_settings):
     return '%s/%s.txt' % (gtfs_settings.static_data_path, name)
@@ -113,7 +126,7 @@ class TransitSystemBuilder:
         return row['stop_id']
 
     def _merge_trips_and_stops(self):
-        print("Cross referencing route, stop, and trip information...")
+        logging.debug("Cross referencing route, stop, and trip information...")
 
         trips_csv = _locate_csv('trips', self.gtfs_settings)
         stops_csv = _locate_csv('stops', self.gtfs_settings)
@@ -139,14 +152,14 @@ class TransitSystemBuilder:
 
     def _load_travel_time_for_stops(self):
         # TODO
-        print("Calculating travel time between each stop...")
+        logging.debug("Calculating travel time between each stop...")
 
     def _download_new_schedule_data(self, url, to_):
         if not os.path.exists(to_):
             os.makedirs(to_)
-            print(f'Creating {to_}')
+            logging.debug(f'Creating {to_}')
 
-        print(f'Downloading GTFS static data from {url}')
+        logging.debug(f'Downloading GTFS static data from {url}')
         try:
             _new_data = requests.get(url, allow_redirects=True)
             open(f'{to_}/schedule_data.zip', 'wb').write(_new_data.content)
@@ -158,25 +171,23 @@ class TransitSystemBuilder:
         _old_data = None
         if os.path.exists(to_):
             _old_data = f'{to_}_OLD'
-            print(f'Moving {to_} to {_old_data}')
+            logging.debug(f'Moving {to_} to {_old_data}')
             os.rename(to_, _old_data)
 
         os.makedirs(to_)
 
-        print(f'Unzipping schedule_data.zip to {to_}')
+        logging.debug(f'Unzipping schedule_data.zip to {to_}')
 
         with zipfile.ZipFile(f'{temp_dir}/schedule_data.zip', "r") as zip_ref:
             zip_ref.extractall(to_)
 
-        print(f'Deleting {temp_dir}')
+        logging.debug(f'Deleting {temp_dir}')
         shutil.rmtree(temp_dir)
         if _old_data:
-            print(f'Deleting {_old_data}')
+            logging.debug(f'Deleting {_old_data}')
             shutil.rmtree(_old_data)
 
     def update_ts(self):
-        sys.exit()
-        print(f'Updating GTFS static files for {self.name}')
         url = self.gtfs_settings.gtfs_static_url
         path = self.gtfs_settings.static_data_path
 
@@ -188,6 +199,13 @@ class TransitSystemBuilder:
         self._unzip_new_schedule_data(temp_dir=temp_dir, to_=path)
         self._merge_trips_and_stops()
         self._load_travel_time_for_stops()
+
+    def is_loaded(self):
+        all_files_are_loaded = True
+        for file_ in list_of_files:
+            file_full = f'{self.gtfs_settings.static_data_path}/{file_}'
+            all_files_are_loaded *= os.path.isfile(file_full)
+        return all_files_are_loaded
 
     def load_routes_info(self):
         with open(_locate_csv('routes', self.gtfs_settings), mode='r') as infile:
@@ -214,7 +232,7 @@ class TransitSystemBuilder:
 
     def add_route(self, route_info):
         route_id = route_info['id_']
-        print(f'Adding route: {route_id}')
+        logging.debug(f'Adding route: {route_id}')
         self.routes.update({route_id:Route(self, route_info)})
 
     def load_all_routes(self):
@@ -263,13 +281,13 @@ class TransitSystemBuilder:
         pass
 
     def build(self):
-        print("Loading stop names...")
+        logging.debug("Loading stop names...")
         self.load_stops_info()
-        print("Done.\nLoading route information...")
+        logging.debug("Done.\nLoading route information...")
         self.load_all_routes()
-        print("Done.\nLoading GTFS static data into Route Shape and Stop objects...")
+        logging.debug("Done.\nLoading GTFS static data into Route Shape and Stop objects...")
         self.build_routes_shapes_stops()
-        print("Done.\nConsolidating 'shape.txt' data into a full network for each route...")
+        logging.debug("Done.\nConsolidating 'shape.txt' data into a full network for each route...")
         self.build_branches()
 
     def store_to_pickle(self, outfile):
@@ -301,13 +319,9 @@ class TransitSystem(TransitSystemBuilder):
     def map_each_route(self, route_desc_filter=None):
         _stop_networks = {}
         _r = graphviz.Graph()
-        print('Mapping the network of stops for: ', end='')
-        _first = True
+        logging.debug('Mapping the network of stops for: ', end='')
         for route_id, route in self.routes.items():
-            if not _first:
-                print(', ', end='')
-            _first = False
-            print(route_id, end='')
+            logging.debug(route_id)
             if route_desc_filter is None or route.route_info.desc in route_desc_filter:
                 _stop_networks[route_id] = graphviz.Graph(name='cluster_'+route_id)
                 _stop_networks[route_id].graph_attr['label'] = route_id
@@ -348,7 +362,7 @@ class TransitSystem(TransitSystemBuilder):
 
         format_ = 'pdf'
         outfile_ = f'{self.name}_routes_graph'
-        print(f'\nWriting network graph to {outfile_}.{format_}')
+        logging.debug(f'\nWriting network graph to {outfile_}.{format_}')
         for route_id, route in self.routes.items():
             _r.subgraph(_stop_networks[route_id])
         graph_dir = '/var/www/html/route_viz'
@@ -356,15 +370,3 @@ class TransitSystem(TransitSystemBuilder):
 
     def __init__(self, name, gtfs_settings):
         super().__init__(name, gtfs_settings)
-
-
-def pull(ts, name):
-    new_ts = ts(name)
-    new_ts.update_ts()
-    new_ts.build()
-    return new_ts
-
-def load(ts, name):
-    new_ts = ts(name)
-    new_ts.build()
-    return new_ts
