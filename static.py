@@ -1,4 +1,5 @@
 import os
+import sys
 import shutil
 import types
 import time
@@ -62,24 +63,20 @@ class Shape(ShapeBuilder):
 
 class RouteBuilder:
     """Construction functions for Route"""
-    shapes = branches = None
+    shapes = branches = route_info = None
 
     def add_shape(self, shape_id):
         self.shapes.update({shape_id:Shape(self, shape_id)})
 
     def __init__(self, transit_system, route_info):
         self.transit_system = transit_system
-        self.id_ = route_info['id_']
-        self.long_name = route_info['long_name']
-        self.desc = route_info['desc']
-        self.color = route_info['color']
-        self.text_color = route_info['text_color']
+        self.route_info = route_info
         self.shapes = {}
         self.branches = {}
 
 class Route(RouteBuilder):
     def display(self):
-        print('    '+self.id_)
+        print('    '+self.route_info['id_'])
         for _, shape in self.shapes.items():
             shape.display()
 
@@ -177,7 +174,8 @@ class TransitSystemBuilder:
             print(f'Deleting {_old_data}')
             shutil.rmtree(_old_data)
 
-    def update(self):
+    def update_ts(self):
+        sys.exit()
         print(f'Updating GTFS static files for {self.name}')
         url = self.gtfs_settings.gtfs_static_url
         path = self.gtfs_settings.static_data_path
@@ -258,7 +256,6 @@ class TransitSystemBuilder:
                         shape = route.shapes[current_shape_id]
                 else:
                     current_route_id = new_route_id
-                    print(f'trying {current_route_id}')
                     route = self.routes[current_route_id]
 
     def build_branches(self):
@@ -275,13 +272,13 @@ class TransitSystemBuilder:
         print("Done.\nConsolidating 'shape.txt' data into a full network for each route...")
         self.build_branches()
 
-    def store(self, outfile):
+    def store_to_pickle(self, outfile):
         with open(outfile, 'wb') as pickle_file:
             pickle.dump(self, pickle_file, pickle.HIGHEST_PROTOCOL)
 
     #TODO fix this (dill?)
     '''
-    def load(self, infile):
+    def load_from_picle(self, infile):
         with open(infile, 'rb') as pickle_file:
             self = pickle.load(pickle_file)
     '''
@@ -311,7 +308,7 @@ class TransitSystem(TransitSystemBuilder):
                 print(', ', end='')
             _first = False
             print(route_id, end='')
-            if route_desc_filter is None or route.desc in route_desc_filter:
+            if route_desc_filter is None or route.route_info.desc in route_desc_filter:
                 _stop_networks[route_id] = graphviz.Graph(name='cluster_'+route_id)
                 _stop_networks[route_id].graph_attr['label'] = route_id
                 _stop_networks[route_id].graph_attr['fontsize'] = '36'
@@ -335,8 +332,8 @@ class TransitSystem(TransitSystemBuilder):
                         label=self.stops_info[stop_id].name,
                         style='filled',
                         fontsize='14',
-                        fillcolor=route.color,
-                        fontcolor=route.text_color
+                        fillcolor=route.route_info.color,
+                        fontcolor=route.route_info.text_color
                     )
 
                 this_shape = row['shape_id']
@@ -359,3 +356,15 @@ class TransitSystem(TransitSystemBuilder):
 
     def __init__(self, name, gtfs_settings):
         super().__init__(name, gtfs_settings)
+
+
+def pull(ts, name):
+    new_ts = ts(name)
+    new_ts.update_ts()
+    new_ts.build()
+    return new_ts
+
+def load(ts, name):
+    new_ts = ts(name)
+    new_ts.build()
+    return new_ts
