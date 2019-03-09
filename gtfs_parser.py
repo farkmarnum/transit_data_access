@@ -13,15 +13,12 @@ def main():
         mta.update_ts()
 
     mta.build()
-
-    for i in range(10):
-        time_before = time.time()
-        realtime_feed = realtime.Feeds(mta)
-        realtime_feed.display()
-        print(realtime_feed.timestamp('1'))
-        time_after = time.time()
-        print(time_after - time_before)
-
+    time_before = time.time()
+    realtime_feed = realtime.Feeds(mta)
+    time_after = time.time()
+    print(time_after - time_before)
+    
+    print(realtime_feed.timestamp('1'))
 
 if __name__ == "__main__":
     main()
