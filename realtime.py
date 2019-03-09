@@ -78,7 +78,7 @@ class Feeds:
         for feed_id in self.feed_ids:
             print(len(str(self.data_[feed_id])))
 
-    def print_feeds(self):
+    def display(self):
         print(self.data_)
 
     def __init__(self, ts):
