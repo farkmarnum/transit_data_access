@@ -13,12 +13,12 @@ def main():
         mta.update_ts()
 
     mta.build()
-    time_before = time.time()
+    #time_before = time.time()
     realtime_feed = realtime.Feeds(mta)
-    time_after = time.time()
-    print(time_after - time_before)
-    
-    print(realtime_feed.timestamp('1'))
+    #time_after = time.time()
+    #print(time_after - time_before)
+    #print(realtime_feed.timestamp('1'))
+    print(realtime_feed.trains_by_route('2'))
 
 if __name__ == "__main__":
     main()
