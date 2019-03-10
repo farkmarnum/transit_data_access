@@ -1,12 +1,17 @@
-import time
-from collections import namedtuple
+#!/usr/bin/python3
+"""Classes and methods for static GTFS data
+"""
+#import time
+#from collections import namedtuple
 import asyncio
 import aiohttp
 from google.transit import gtfs_realtime_pb2
-import transit_systems as ts_list
+#import transit_systems as ts_list
 
 
 async def fetch_http(session, feed_id, url):
+    """Gets an http response with async from url & passes it along with feed_id
+    """
     async with session.get(url) as response:
         if response.status != 200:
             response.raise_for_status()
@@ -15,7 +20,11 @@ async def fetch_http(session, feed_id, url):
 
 
 async def fetch_all(session, urls):
-    results = await asyncio.gather(*[asyncio.create_task(fetch_http(session, feed_id, url)) for feed_id, url in urls])
+    """Sets up an asyncio http request for each feed
+    """
+    results = await asyncio.gather(
+        *[asyncio.create_task(fetch_http(session, feed_id, url)) for feed_id, url in urls]
+    )
     return results
 
 class Train:
@@ -37,6 +46,8 @@ class Feeds:
     """Gets a new realtime GTFS feed
     """
     async def all_feeds(self):
+        """Get all feeds concurrently with asyncio via fetch_all()
+        """
         async with aiohttp.ClientSession() as session:
             response = await fetch_all(session, self.urls.items())
             all_data = {}
@@ -48,6 +59,8 @@ class Feeds:
             return all_data
 
     def trains_by_route(self, route_id):
+        """Gets all the trains running on a given route
+        """
         feed_id = self.which_feed[route_id]
         for entity in self.data_[feed_id].entity:
             if entity.HasField('vehicle'):
@@ -77,14 +90,15 @@ class Feeds:
     '''
 
     def timestamp(self, feed_id):
+        """Gets the feed timestamp from the header
+        """
         return self.data_[feed_id].header.timestamp
 
     def feed_size(self):
+        """Gets the size of all feeds put together
+        """
         for feed_id in self.feed_ids:
             print(len(str(self.data_[feed_id])))
-
-    def display(self):
-        print(self.data_)
 
     def __init__(self, ts):
         self.transit_system = ts

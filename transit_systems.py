@@ -1,3 +1,6 @@
+#!/usr/bin/python3
+"""Configuration information for specific transit systems
+"""
 from static import TransitSystem
 import types
 
