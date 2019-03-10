@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 """Configuration information for specific transit systems
 """
-from static import TransitSystem
 import types
+from static import TransitSystem
 
 class MTASubway(TransitSystem):
     """MTA_Subway extends TransitSystem with specific settings for the MTA's GTFS implementation
@@ -30,7 +30,7 @@ class MTASubway(TransitSystem):
             }
         )
         feed_ids = ['1', '2', '11', '16', '21', '26', '31', '51']
-        url_list = { feed_id:self._get_url(feed_id) for feed_id in feed_ids }
+        url_list = {feed_id:self._get_url(feed_id) for feed_id in feed_ids}
         self.gtfs_settings.gtfs_realtime_urls = url_list
         self.gtfs_settings.feed_ids = feed_ids
         super().__init__(name, self.gtfs_settings)

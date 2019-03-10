@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 """Classes and methods for static GTFS data
 """
-#import time
-#from collections import namedtuple
+import time
+
 import asyncio
 import aiohttp
 from google.transit import gtfs_realtime_pb2
@@ -69,25 +69,24 @@ class Feeds:
                     _status = entity.vehicle.current_status
                     _name = self.transit_system.stops_info[entity.vehicle.stop_id].name
                     print(f'Train is {_status} {_name}')
-    '''
-    def iterate_stop_time_update_arrivals(self, entity, stop):
-        arrivals = []
-        for stop_time_update in entity.trip_update.stop_time_update:
-            if stop_time_update.stop_id == stop:
-                if stop_time_update.arrival.time > time.time():
-                    arrivals.append(stop_time_update.arrival.time)
-        return arrivals
 
     def next_arrivals(self, route_id, stop):
+        """Gets the next arrivals for a stop & route
+        """
         #data_ = self.data_[self.which_feed[route_id]]
         #print(f'{self.which_feed[route_id]} for {route_id}')
         data_ = self.data_['1']
+        arrivals = []
         for entity in data_.entity:
             if entity.HasField('trip_update'):
                 print(entity.trip_update.trip.route_id)
                 if entity.trip_update.trip.route_id == route_id:
-                    return self.iterate_stop_time_update_arrivals(entity, stop)
-    '''
+                    for stop_time_update in entity.trip_update.stop_time_update:
+                        if stop_time_update.stop_id == stop:
+                            if stop_time_update.arrival.time > time.time():
+                                arrivals.append(stop_time_update.arrival.time)
+        return arrivals
+
 
     def timestamp(self, feed_id):
         """Gets the feed timestamp from the header
