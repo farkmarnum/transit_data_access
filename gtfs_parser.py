@@ -1,24 +1,31 @@
 #!/usr/bin/python3
-import static
+"""Example usage of gtfs_parser methods
+"""
+#from datetime import datetime
+import time
+
+#import static
 import transit_systems as ts_list
 import realtime
 
-def is_loaded(ts_name):
-    # check if the database is already populated for this ts
-    return False
-
-def pull(ts, name_):
-    new_ts = ts(name_)
-    new_ts.update()
-    new_ts.build()
-    new_ts.display()
-    return new_ts
-
 def main():
-    ts_name = 'MTA_subway'
+    """ testing
+    """
+    mta = ts_list.MTASubway('MTA_subway')
+    if not mta.is_loaded():
+        mta.update_ts()
 
-    if not is_loaded('MTA_subway'):
-        mta = pull(ts_list.MTASubway, 'MTA_subway')
+    mta.build()
+    #time_before = time.time()
+    realtime_feed = realtime.Feeds(mta)
+    #time_after = time.time()
+    #print(time_after - time_before)
+    #print(realtime_feed.timestamp('1'))
+
+    for arrival_time in realtime_feed.next_arrivals('1', '116S'):
+        print((arrival_time-int(time.time()))/60)
+
+    #print(realtime_feed.trains_by_route('2'))
 
 if __name__ == "__main__":
     main()
