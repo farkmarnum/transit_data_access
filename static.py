@@ -41,7 +41,6 @@ class Stop:
     Usage: Stop(stop_id)
     id = stop_id, '201S' for example
     """
-    #id_ = None
 
     def display(self):
         """Prints self._id"""
@@ -58,7 +57,6 @@ class Shape:
     Usage: Shape(parent_route, shape_id)
     id = shape_id, '2..S08R' for example
     """
-    #id_ = stops = None
     def display(self):
         """Prints self._id and then calls display() for each Stop in self.stops"""
         print('        '+self.id_)
@@ -80,7 +78,6 @@ class Shape:
 class Route:
     """Analogous to GTFS 'route_id'.
     """
-    #shapes = branches = route_info = None
 
     def display(self):
         """Prints self.route_info['id_'] and then calls display() for each Shape in self.shapes"""
@@ -103,7 +100,6 @@ class Route:
 
 class TransitSystem:
     """Construction functions for TransitSystem"""
-    #routes = gtfs_settings = stops_info = routes_info = None
 
     _has_parent_station_column = True
     _rswn_list_of_columns = [
