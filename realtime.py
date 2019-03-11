@@ -33,8 +33,8 @@ class Train:
     next_stop = analogous to GTFS trip_update.stop_time_update[0].stop_id
     next_stop_arrival = analogous to GTFS trip_update.stop_time_update[0].arrival
     """
-    next_stop = None
-    next_stop_arrival = None
+    #next_stop = None
+    #next_stop_arrival = None
 
     def __init__(self, trip_id, route_id):# branch_id = None):
         self.id_ = trip_id
@@ -79,10 +79,11 @@ class Feeds:
         arrivals = []
         for entity in data_.entity:
             if entity.HasField('trip_update'):
-                print(entity.trip_update.trip.route_id)
+                #print(entity.trip_update.trip.route_id)
                 if entity.trip_update.trip.route_id == route_id:
                     for stop_time_update in entity.trip_update.stop_time_update:
                         if stop_time_update.stop_id == stop:
+                            print(stop_time_update.stop_id)
                             if stop_time_update.arrival.time > time.time():
                                 arrivals.append(stop_time_update.arrival.time)
         return arrivals
