@@ -114,4 +114,5 @@ class Feeds:
         #self.which_feed = ts.gtfs_settings.which_feed
         #self.feed_ids = ts.gtfs_settings.feed_ids
         self.url = ts.gtfs_settings.gtfs_realtime_url
-        self.data_ = asyncio.run(self.get_feed())
+        #self.data_ = asyncio.run(self.get_feed())
+        self.data_ = get_feed_with_responses()
