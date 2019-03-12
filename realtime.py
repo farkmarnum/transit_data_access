@@ -1,76 +1,33 @@
 #!/usr/bin/python3
 """Classes and methods for static GTFS data
 """
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
 import time
 import requests
-
-import asyncio
-import aiohttp
+import os
+import json
+#import asyncio
+#import aiohttp
 from google.transit import gtfs_realtime_pb2
-#import transit_systems as ts_list
 
-'''
-async def fetch_http(session, url):
-    """Gets an http response with async from url
-    """
-    print(f'fetching feed from {url}')
-    async with session.get(url) as response:
-        if response.status != 200:
-            response.raise_for_status()
-        response_body = await response.read()
-        return response_body
+from ts_config import mta_settings
 
-async def fetch_all(session, urls):
-    """Sets up an asyncio http request for each feed
-    """
-    results = await asyncio.gather(
-        *[asyncio.create_task(fetch_http(session, url)) for url in urls]
-    )
-    return results
-'''
+STATUS_MESSAGES = ['approaching', 'stopped at', 'in transit to']
 
-class Train:
-    """Analogous to GTFS trip_id
-
-    next_stop = analogous to GTFS trip_update.stop_time_update[0].stop_id
-    next_stop_arrival = analogous to GTFS trip_update.stop_time_update[0].arrival
-    """
-    #next_stop = None
-    #next_stop_arrival = None
-
-    def __init__(self, trip_id, route_id):# branch_id = None):
-        self.id_ = trip_id
-        self.route = route_id
-        #self.branch = branch_id
-
-class Feeds:
+class RealtimeHandler:
     """Gets a new realtime GTFS feed
     """
-    async def get_feed(self):
-        """Get all feeds concurrently with asyncio via fetch_all()
-        """
-        # TODO make session continue past one request
-        async with aiohttp.ClientSession() as session:
-            async with session.get(self.url) as response:
-                if response.status != 200:
-                    response.raise_for_status()
-                response_body = await response.read()
-
-        gtfs_feed = gtfs_realtime_pb2.FeedMessage()
-        gtfs_feed.ParseFromString(response_body)
-
-        return gtfs_feed
-
+    '''
     def trains_by_route(self, route_id):
         """Gets all the trains running on a given route
         """
-        #feed_id = self.which_feed[route_id]
         for entity in self.data_.entity:
             if entity.HasField('vehicle'):
                 if entity.vehicle.trip.route_id is route_id:
-                    #_status = STATUS_MESSAGES[entity.vehicle.current_status]
-                    _status = entity.vehicle.current_status
-                    _name = self.transit_system.stops_info[entity.vehicle.stop_id].name
+                    _status = STATUS_MESSAGES[entity.vehicle.current_status]
+                    #_name = self.transit_system.stops_info[entity.vehicle.stop_id].name
                     print(f'Train is {_status} {_name}')
 
     def next_arrivals(self, route_id, stop):
@@ -91,28 +48,81 @@ class Feeds:
                                 arrivals.append(stop_time_update.arrival.time)
         return arrivals
 
-
     def timestamp(self):
         """Gets the feed timestamp from the header
         """
         return self.data_.header.timestamp
 
     def feed_size(self):
-        """Gets the size of all feeds put together
+        """Gets the size of the feed
         """
         print(len(str(self.data_)))
+    '''
 
-    def get_feed_with_responses(self):
-        response = requests.get(self.url)
+    def get_static(self):
+        static_json = static_data_path+'/static.json'
+        with open(static_json, 'r') as static_json_file:
+            self.static_data = json.loads(static_json_file)
+
+    def get_feed(self):
+        response = requests.get(self.gtfs_settings.realtime_url)
         feed_message = gtfs_realtime_pb2.FeedMessage()
         feed_message.ParseFromString(response.content)
-        return feed_message
+        self.realtime_data = feed_message
 
-    def __init__(self, ts):
-        self.transit_system = ts
-        #self.session = session
-        #self.which_feed = ts.gtfs_settings.which_feed
-        #self.feed_ids = ts.gtfs_settings.feed_ids
-        self.url = ts.gtfs_settings.gtfs_realtime_url
-        #self.data_ = asyncio.run(self.get_feed())
-        self.data_ = get_feed_with_responses()
+
+    def parse_feed(self):
+        self.parsed_data = self.static_data
+
+        for entity in self.realtime_data.entity:
+            if entity.HasField('trip_update'):
+                # TODO
+                # update self.parsed_data
+                pass
+
+        for entity in self.realtime_data.entity:
+            if entity.HasField('vehicle'):
+                # TODO
+                # update self.parsed_data
+                pass
+
+
+
+    def to_json(self, attempt=0):
+        json_path = self.gtfs_settings.realtime_json_path
+
+        try:
+            with open(json_path+'/realtime.json', 'w') as out_file:
+                json.dump(self.parsed_data, out_file)
+
+        except OSError:
+            if attempt != 0:
+                exit(f'Unable to write to {json_path}/realtime.json')
+            print(f'{json_path}/realtime.json does not exist, attempting to create it')
+
+            try:
+                os.makedirs(json_path)
+            except PermissionError:
+                exit(f'Do not have permission to write to {json_path}/realtime.json')
+
+            self.to_json(attempt=attempt+1)
+
+    def __init__(self, gtfs_settings, name=''):
+        self.name = name
+        self.gtfs_settings = gtfs_settings
+        self.realtime_data = None
+        self.static_data = self.data_parsed = {}
+
+
+def main():
+    """Creates new RealtimeHandler, which calls get_feed()
+    """
+    realtime_handler = RealtimeHandler(mta_settings, name='MTA')
+    realtime_handler.get_static()
+    realtime_handler.get_feed()
+    realtime_handler.parse_feed()
+    realtime_handler.to_json()
+    pass
+
+if __name__ == '__main__':
+    main()
