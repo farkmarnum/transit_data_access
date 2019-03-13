@@ -5,7 +5,7 @@ import logging
 import static
 import realtime
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.DEBUG)
 
 def main():
     """ Runs static.py and then realtime.py

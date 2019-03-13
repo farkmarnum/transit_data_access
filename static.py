@@ -20,6 +20,7 @@ import pprint as pp
 from ts_config import MTA_SETTINGS, LIST_OF_FILES
 from misc import NestedDict, trip_to_shape
 
+logging.basicConfig(level=logging.DEBUG)
 
 class StaticHandler:
     """Construction functions for TransitSystem"""
@@ -31,9 +32,9 @@ class StaticHandler:
         'stop_sequence',
         'stop_id',
         'stop_name',
+        'parent_station',
         #'stop_lat',
         #'stop_lon',
-        'parent_station'
     ]
 
     _rswn_sort_by = [
@@ -83,44 +84,6 @@ class StaticHandler:
         rswn_csv = self._locate_csv('route_stops_with_names')
         composite.to_csv(rswn_csv, index=False)
 
-
-    def _load_time_between_stops(self): # TODO NOT WORKINGS
-        """Parses stop_times.csv to populate self.static_data['stops'] with time between stops info
-        """
-        logging.debug("Loading stop info and time between stops")
-        with open(self._locate_csv('stop_times'), 'r') as stop_times_infile:
-            stop_times_csv = csv.DictReader(stop_times_infile)
-            branch_id = None
-            prev_row = {'trip_id': None}
-            for row in stop_times_csv:
-
-                if prev_row['trip_id'] == row['trip_id']:
-                    arrival = row['arrival_time'].split(':')
-                    departure = prev_row['departure_time'].split(':')
-                    arrival = datetime.timedelta(hours=int(arrival[0]), minutes=int(arrival[1]), seconds=int(arrival[2]))
-                    departure = datetime.timedelta(hours=int(departure[0]), minutes=int(departure[1]), seconds=int(departure[2]))
-                    travel_time = int((arrival-departure).total_seconds())
-
-                    if branch_id:
-                        stop_id = row['stop_id']
-                        self.static_data['stops'][stop_id]['travel_time'][branch_id] = travel_time
-                    else:
-                        logging.debug('no existing branch_id found for %s',row['trip_id'])
-
-                else:
-                    shape_id = trip_to_shape(row['trip_id'])
-                    route_id = shape_id.split('.')[0]
-
-                    try:
-                        branch_id = self.static_data['routes'][route_id]['shape_to_branch'][shape_id]
-                    except KeyError:
-                        logging.debug('shape_id %s not found in static_data[\'routes\'][\'%s\'][\'shape_to_branch\']', shape_id, route_id)
-                        branch_id = None
-
-                prev_row = row
-
-
-
     def has_static_data(self):
         """Checks if static_data_path is populated with the csv files in LIST_OF_FILES
         Returns a bool
@@ -130,12 +93,12 @@ class StaticHandler:
             all_files_are_loaded *= os.path.isfile(self._locate_csv(file_))
         return all_files_are_loaded
 
-    def update_(self):
+    def update_(self, force=False):
         """Downloads new static GTFS data, checks if different than existing data,
         unzips, and then generates additional csv files:
 
-        _download_new_schedule_data() downloads the zip to {data_path}/tmp/static_data.zip
-        _unzip_new_schedule_data() unzips it to {data_path}/tmp/static_data
+        downloads the zip to {data_path}/tmp/static_data.zip
+        unzips it to {data_path}/tmp/static_data
             if successful, it then deletes {data_path}/static/GTFS/ and moves the new data there
         _merge_trips_and_stops combines trips, stops, and stop_times to make route_stops_with_names
         _load_time_between_stops calculates time b/w each pair of adjacent stops using stop_times
@@ -152,7 +115,7 @@ class StaticHandler:
         try:
             _new_data = requests.get(url, allow_redirects=True)
         except requests.exceptions.ConnectionError:
-            exit(f'\nERROR:\nFailed to connect to {url}\n')
+            exit(f'\nERROR:\nFailed to connect to {url}')
 
         open(zip_path, 'wb').write(_new_data.content)
 
@@ -162,7 +125,7 @@ class StaticHandler:
         logging.debug('removing %s', zip_path)
         os.remove(zip_path)
 
-        if self.has_static_data():
+        if self.has_static_data() and not force:
             if not filecmp.dircmp(end_path, tmp_path).diff_files:
                 logging.debug('No difference found b/w existing static/GTFS/raw and new downloaded data')
                 logging.debug('Deleting %s and exiting update_ts() early', tmp_path)
@@ -175,9 +138,9 @@ class StaticHandler:
         logging.debug('Moving new data from %s to %s', tmp_path, end_path)
         os.rename(tmp_path, end_path)
 
-
         self._merge_trips_and_stops()
         return True
+
 
     def to_json(self, attempt=0):
         json_path = self.gtfs_settings.static_json_path
@@ -200,6 +163,43 @@ class StaticHandler:
 
             self.to_json(attempt=attempt+1)
 
+    def _load_time_between_stops(self): # TODO NOT WORKINGS
+        """Parses stop_times.csv to populate self.static_data['stops'] with time between stops info
+        """
+        logging.debug("Loading stop info and time between stops")
+        with open(self._locate_csv('stop_times'), 'r') as stop_times_infile:
+            stop_times_csv = csv.DictReader(stop_times_infile)
+            branch_id = None
+            prev_row = {'trip_id': None}
+            for row in stop_times_csv:
+
+                if prev_row['trip_id'] == row['trip_id']:
+                    arrival = row['arrival_time'].split(':')
+                    departure = prev_row['departure_time'].split(':')
+                    arrival = datetime.timedelta(hours=int(arrival[0]), minutes=int(arrival[1]), seconds=int(arrival[2]))
+                    departure = datetime.timedelta(hours=int(departure[0]), minutes=int(departure[1]), seconds=int(departure[2]))
+                    travel_time = int((arrival-departure).total_seconds())
+
+                    if branch_id:
+                        stop_id = row['stop_id']
+                        self.static_data['stops'][stop_id]['travel_time'][branch_id] = travel_time
+                    else:
+                        #logging.debug('no existing branch_id found for %s',row['trip_id'])
+                        pass
+
+                else:
+                    shape_id = trip_to_shape(row['trip_id'])
+                    route_id = shape_id.split('.')[0]
+
+                    try:
+                        branch_id = self.static_data['shape_to_branch'][shape_id]
+                    except KeyError:
+                        #logging.debug('shape_id %s not found in static_data[\'routes\'][\'%s\'][\'shape_to_branch\']', shape_id, route_id)
+                        #logging.debug(self.static_data['routes'][route_id]['shape_to_branch'])
+                        print('STATIC ERROR: %s NOT FOUND', branch_id)
+                        branch_id = None
+
+                prev_row = row
 
     def build(self, force=False):
         """Builds JSON from the GTFS (with improvements)
@@ -217,7 +217,8 @@ class StaticHandler:
         ts = {
             'name': self.name,
             'routes': {},
-            'stops': NestedDict()
+            'stops': NestedDict(),
+            'shape_to_branch': {}
         }
         # Load info for each stop (not including parent stops)
         with open(self._locate_csv('stops'), mode='r') as stops_file:
@@ -255,8 +256,10 @@ class StaticHandler:
                     'color': color,
                     'text_color': text_color,
                     'shapes': defaultdict(list),
-                    'branches': defaultdict(list),
-                    'shape_to_branch': {}
+                    'branches': {
+                        'N': defaultdict(list),
+                        'S': defaultdict(list)
+                    }
                 }
 
         # Load route>shape>stop tree
@@ -272,28 +275,28 @@ class StaticHandler:
             br_count['N'] = br_count['S'] = 0 # how many branches in each direction
 
             for shape_id, shape_stop_list in route['shapes'].items():
-                for branch_id, branch_stop_list in route['branches'].items():
+                for i in range(len(shape_id)):
+                    if shape_id[i-1] == '.' and shape_id[i] != '.':  # the N or S follows the dot(s)
+                        direction = shape_id[i]
+                        break
+                else:
+                    raise Exception(f'Error: cannot determine direction from shape id {shape_id}')
+
+                for branch_id, branch_stop_list in route['branches'][direction].items():
 
                     if set(shape_stop_list).issubset(set(branch_stop_list)):
-                        route['shape_to_branch'][shape_id] = branch_id
+                        ts['shape_to_branch'][shape_id] = branch_id
                         break
 
                     if set(branch_stop_list).issubset(set(shape_stop_list)):
-                        route['shape_to_branch'][shape_id] = branch_id
-                        route['branches'][branch_id] = shape_stop_list
+                        ts['shape_to_branch'][shape_id] = branch_id
                         break
 
                 else: # no branches contained this shape (or were contained in it)
-                    for i in range(len(shape_id)):
-                        if shape_id[i-1] == '.' and shape_id[i] != '.':  # the N or S follows the dot(s)
-                            direction = shape_id[i]
-                            break
-                    else:
-                        raise Exception(f'Error: cannot determine direction from shape id {shape_id}')
                     new_branch_id = f'{route_id}{direction}_{br_count[direction]}'
 
-                    route['branches'][new_branch_id] = shape_stop_list
-                    route['shape_to_branch'][shape_id] = new_branch_id
+                    route['branches'][direction][new_branch_id] = shape_stop_list
+                    ts['shape_to_branch'][shape_id] = new_branch_id
                     br_count[direction] += 1
 
         ts['last_updated'] = int(time.time())
@@ -302,7 +305,6 @@ class StaticHandler:
         self._load_time_between_stops()
         self.to_json()
         logging.debug("New static build written to JSON")
-
 
 
     def __init__(self, gtfs_settings, name=''):
@@ -314,12 +316,15 @@ class StaticHandler:
 def main():
     """Creates new StaticHandler, which calls update_() and build()
     """
-    #time_before = time.time()
+    time_before = time.time()
     static_handler = StaticHandler(MTA_SETTINGS, name='MTA')
-    static_handler.update_()
+    #static_handler.update_(force=True)
     static_handler.build(force=True)
-    #time_after = time.time()
-    #print(f'static.py took {time_after-time_before} seconds')
+    time_after = time.time()
+    logging.debug('static.py completed -- took %s seconds',time_after-time_before)
+    for route_id, route in static_handler.static_data['routes'].items():
+        print(f"{route_id} has {len(route['branches']['N'].items())} N-bound routes")
+        print(f"{route_id} has {len(route['branches']['S'].items())} S-bound routes")
 
 
 if __name__ == '__main__':

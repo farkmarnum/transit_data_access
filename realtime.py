@@ -12,6 +12,7 @@ from google.transit import gtfs_realtime_pb2
 from ts_config import MTA_SETTINGS
 from misc import NestedDict, trip_to_shape
 
+logging.basicConfig(level=logging.DEBUG)
 
 class RealtimeHandler:
     """Gets a new realtime GTFS feed
@@ -33,15 +34,19 @@ class RealtimeHandler:
     def entity_info(self, entity_body):
         """ pulls route_id, trip_id, and shape_id from entity
         """
-        route_id = entity_body.trip.route_id
         trip_id = entity_body.trip.trip_id
         shape_id = trip_to_shape(trip_id)
+
+        if 'X' in shape_id: # TODO figure this out...
+            shape_id = shape_id.split('X')[0]+'R'
+
         try:
-            branch_id = self.static_data['routes'][route_id]['shape_to_branch'][shape_id]
+            branch_id = self.static_data['shape_to_branch'][shape_id]
         except KeyError:
-            logging.debug('shape_id %s not found in static_data[\'routes\'][\'%s\'][\'shape_to_branch\']', shape_id, route_id)
+            route_id = entity_body.trip.route_id
+            logging.debug('REALTIME ERROR: shape_id %s NOT FOUND (parsed from trip_id %s)', shape_id, trip_id)
             branch_id = None
-        return [route_id, trip_id, shape_id, branch_id]
+        return [trip_id, branch_id]
 
     def parse_feed(self):
         """ Walks through self.realtime_data and creates self.parsed_data
@@ -53,7 +58,7 @@ class RealtimeHandler:
 
         for entity in self.realtime_data.entity:
             if entity.HasField('trip_update'):
-                _, trip_id, _, branch_id = self.entity_info(entity.trip_update)
+                trip_id, branch_id = self.entity_info(entity.trip_update)
                 if not branch_id:
                     continue
 
@@ -69,7 +74,7 @@ class RealtimeHandler:
                         self.parsed_data['trains'][branch_id][trip_id]['arrival_time'] = arrival
 
             elif entity.HasField('vehicle'):
-                _, trip_id, _, branch_id = self.entity_info(entity.vehicle)
+                trip_id, branch_id = self.entity_info(entity.vehicle)
                 if not branch_id:
                     continue
 
@@ -114,9 +119,6 @@ class RealtimeHandler:
         self.realtime_data = None
         self.static_data = self.parsed_data = {}
 
-#def time_test(name_, last_time):
-#    print(f'{name_}: {time.time()-last_time}')
-#    return time.time()
 
 def main():
     """Creates new RealtimeHandler, which calls get_feed()
@@ -132,7 +134,7 @@ def main():
     #last_time = time_test('parse_feed', last_time)
     realtime_handler.to_json()
     #last_time = time_test('to_json', last_time)
-    pp.pprint(realtime_handler.parsed_data['stops'])
+    #pp.pprint(realtime_handler.parsed_data['stops'])
 
 if __name__ == '__main__':
     main()
