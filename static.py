@@ -318,13 +318,10 @@ def main():
     """
     time_before = time.time()
     static_handler = StaticHandler(MTA_SETTINGS, name='MTA')
-    #static_handler.update_(force=True)
-    static_handler.build(force=True)
+    static_handler.update_()
+    static_handler.build()
     time_after = time.time()
     logging.debug('static.py completed -- took %s seconds',time_after-time_before)
-    for route_id, route in static_handler.static_data['routes'].items():
-        print(f"{route_id} has {len(route['branches']['N'].items())} N-bound routes")
-        print(f"{route_id} has {len(route['branches']['S'].items())} S-bound routes")
 
 
 if __name__ == '__main__':
