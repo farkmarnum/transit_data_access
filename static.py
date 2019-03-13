@@ -2,8 +2,6 @@
 """Classes and methods for static GTFS data
 """
 import logging
-logging.basicConfig(level=logging.DEBUG)
-
 import os
 import shutil
 import types
@@ -95,8 +93,8 @@ class StaticHandler:
         rswn_csv = self._locate_csv('route_stops_with_names')
         composite.to_csv(rswn_csv, index=False)
 
-    def _load_stop_info(self):
-        """Parses stops.csv and stop_times.csv to populate self.data_['stops'] with info
+    def _load_time_between_stops(self):
+        """Parses stop_times.csv to populate self.data_['stops'] with time between stops info
         """
         # TODO
         logging.debug("Loading stop info and time between stops (TODO)")
@@ -178,19 +176,23 @@ class StaticHandler:
             try:
                 os.makedirs(json_path)
             except PermissionError:
-                exit(f'Do not have permission to write to {json_path}/static.json')
+                exit(f'ERROR: Do not have permission to write to {json_path}/static.json')
+            except FileExistsError:
+                exit(f'ERROR: The file {json_path}/static.json already exists \
+and you do not have permission to overwrite')
+
 
             self.to_json(attempt=attempt+1)
 
 
-    def build(self,force=False):
+    def build(self, force=False):
         """Builds JSON from the GTFS (with improvements)
 
         Generates the routes>shapes>stops|branches>stops tree
         Merges shapes into branches
         """
         json_path = self.gtfs_settings.static_json_path
-        if os.path.isfile(json_path) and force==False:
+        if os.path.isfile(json_path) and force == False:
             logging.debug('%s already exists, build() is unneccessary', json_path)
             logging.debug('use force=True to force a build')
             return false
@@ -198,8 +200,23 @@ class StaticHandler:
         # Initialize
         ts = {
             'name': self.name,
-            'routes': {}
+            'routes': {},
+            'stops': {}
         }
+        # Load info for each stop
+        with open(self._locate_csv('stops'), mode='r') as stops_file:
+            stops_csv_reader = csv.DictReader(stops_file)
+            for row in stops_csv_reader:
+                ts['stops'][row['stop_id']] = {
+                    'info': {
+                        'name': row['stop_name'],
+                        'lat': row['stop_lat'],
+                        'lon': row['stop_lon'],
+                        'parent_station': row['parent_station'],
+                        'direction': row['stop_id'][:-1]
+                    },
+                    'arrivals': defaultdict(list)
+                }
 
         # Load info for each route
         with open(self._locate_csv('routes'), mode='r') as route_file:
@@ -222,7 +239,6 @@ class StaticHandler:
                     'shapes': defaultdict(list),
                     'branches': defaultdict(list),
                     'shape_to_branch': {}
-                    #'all_stops': {}
                 }
 
         # Load route>shape>stop tree
@@ -265,7 +281,10 @@ class StaticHandler:
         ts['last_updated'] = int(time.time())
 
         self.data_ = ts
+        self._load_time_between_stops()
         self.to_json()
+        logging.debug("New static build written to JSON")
+
 
 
     def __init__(self, gtfs_settings, name=''):
@@ -278,9 +297,12 @@ class StaticHandler:
 def main():
     """Creates new StaticHandler, which calls update_() and build()
     """
+    time_before = time.time()
     static_handler = StaticHandler(mta_settings, name='MTA')
     static_handler.update_()
     static_handler.build(force=True)
+    time_after = time.time()
+    print(f'static.py took {time_after-time_before} seconds')
 
 
 if __name__ == '__main__':
