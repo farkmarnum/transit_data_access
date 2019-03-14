@@ -1,4 +1,3 @@
-#!/usr/bin/python3
 """Classes and methods for static GTFS data
 """
 import logging
@@ -10,6 +9,7 @@ from google.transit import gtfs_realtime_pb2
 
 from ts_config import MTA_SETTINGS
 import misc
+from misc import logger
 
 class RealtimeHandler:
     """Gets a new realtime GTFS feed
@@ -29,28 +29,33 @@ class RealtimeHandler:
         response = requests.get(self.gtfs_settings.realtime_url, allow_redirects=True)
         feed_message = gtfs_realtime_pb2.FeedMessage()
         feed_message.ParseFromString(response.content)
-        new_timestamp = feed_message.header.timestamp
+        new_feed_timestamp = feed_message.header.timestamp
+        #print(new_feed_timestamp)
 
         latest_timestamp_file = self.gtfs_settings.realtime_data_path+'/latest_feed_timestamp.txt'
         try:
             with open(latest_timestamp_file, 'r+') as latest_timestamp_infile:
-                latest_feed_timestamp = int(latest_timestamp_infile.read())
+                latest_feed_timestamp = float(latest_timestamp_infile.read())
                 if latest_feed_timestamp:
-                    if new_timestamp <= latest_feed_timestamp:
-                        logging.info('We already have the most up-to-date realtime GTFS feed')
-                        logging.debug('Current realtime feed\'s timestamp is %s secs old', time.time()-latest_feed_timestamp)
+                    if new_feed_timestamp <= latest_feed_timestamp:
+                        logger.debug('We already have the most up-to-date realtime GTFS feed')
+                        logger.debug('Current realtime feed\'s timestamp is %s secs old', time.time()-latest_feed_timestamp)
+                        if new_feed_timestamp < latest_feed_timestamp:
+                            logger.info('We\'ve received an older feed...')
+                            logger.debug('This timestamp is %s secs old', time.time()-new_feed_timestamp)
                         return False
 
+            logger.info('Loading new realtime GTFS. Recent by %s seconds', new_feed_timestamp-latest_feed_timestamp)
+
         except FileNotFoundError:
-            logging.info('%s/latest_feed_timestamp.txt does not exist, attempting to create it', self.gtfs_settings.realtime_data_path)
-            os.makedirs(self.gtfs_settings.realtime_data_path)
+            logger.info('%s/latest_feed_timestamp.txt does not exist, attempting to create it', self.gtfs_settings.realtime_data_path)
+            os.makedirs(self.gtfs_settings.realtime_data_path, exist_ok=True)
+            logger.info('Now, loading new realtime GTFS.')
 
-
-        logging.info('Loading new realtime GTFS')
-        logging.debug('New timestamp is %s secs old', time.time()-new_timestamp)
+        logger.info('This timestamp is %s secs old', time.time()-new_feed_timestamp)
         self.realtime_data = feed_message
         with open(latest_timestamp_file, 'w') as latest_response:
-            latest_response.write(str(new_timestamp))
+            latest_response.write(str(new_feed_timestamp))
         return True
 
 
@@ -111,19 +116,19 @@ class RealtimeHandler:
         try:
             with open(json_path+'/realtime.json', 'w') as out_file:
                 json.dump(self.parsed_data, out_file)
-                logging.info('Wrote realtime parsed data to %s/realtime.json', json_path)
+                logger.debug('Wrote realtime parsed data to %s/realtime.json', json_path)
 
         except OSError:
             if attempt != 0:
-                logging.error('Unable to write to %s/realtime.json\n', json_path)
+                logger.error('Unable to write to %s/realtime.json\n', json_path)
                 exit()
 
-            logging.info('%s/realtime.json does not exist, attempting to create it', json_path)
+            logger.info('%s/realtime.json does not exist, attempting to create it', json_path)
             try:
                 os.makedirs(json_path, exist_ok=True)
 
             except PermissionError:
-                logging.error('Do not have permission to write to %s/realtime.json\n', json_path)
+                logger.error('Do not have permission to write to %s/realtime.json\n', json_path)
                 exit()
 
             self.to_json(attempt=attempt+1)

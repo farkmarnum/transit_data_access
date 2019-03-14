@@ -2,11 +2,27 @@
 Also sets the logging level
 """
 import time
+import os
 import logging
 
+LOG_PATH = 'logs'
+LOG_FILE_NAME = 'gtfs_parser.log'
 LOG_FORMAT = '%(asctime)s.%(msecs)03d %(levelname)s %(message)s'
 LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
-logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt=LOG_DATE_FORMAT)
+
+if not os.path.exists(LOG_PATH):
+    os.makedirs(LOG_PATH)
+
+logging.basicConfig(
+    format=LOG_FORMAT,
+    datefmt=LOG_DATE_FORMAT,
+    handlers=[
+        #logging.FileHandler(f'{LOG_PATH}/{LOG_FILE_NAME}'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger('gtfs_parser')
+logger.setLevel(logging.INFO)
 
 
 def trip_to_shape(trip_id):
@@ -15,12 +31,14 @@ def trip_to_shape(trip_id):
     """
     return trip_id.split('_').pop()
 
+
 class NestedDict(dict):
     """A dict that automatically creates new dicts within itself as needed"""
     def __getitem__(self, key):
         if key in self:
             return self.get(key)
         return self.setdefault(key, NestedDict())
+
 
 class TimeLogger():
     """ Convenient little way to log how long something takes
@@ -37,4 +55,4 @@ class TimeLogger():
         self.start_time = time.time()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        logging.info('%s completed, took %s seconds\n', self.message_text, time.time()-self.start_time)
+        logger.debug('%s completed, took %s seconds\n', self.message_text, time.time()-self.start_time)
