@@ -17,8 +17,8 @@ logging.basicConfig(
     format=LOG_FORMAT,
     datefmt=LOG_DATE_FORMAT,
     handlers=[
-        #logging.FileHandler(f'{LOG_PATH}/{LOG_FILE_NAME}'),
-        logging.StreamHandler()
+        logging.FileHandler(f'{LOG_PATH}/{LOG_FILE_NAME}'),
+        #logging.StreamHandler()
     ]
 )
 logger = logging.getLogger('gtfs_parser')

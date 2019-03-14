@@ -41,7 +41,7 @@ class RealtimeHandler:
                         logger.debug('We already have the most up-to-date realtime GTFS feed')
                         logger.debug('Current realtime feed\'s timestamp is %s secs old', time.time()-latest_feed_timestamp)
                         if new_feed_timestamp < latest_feed_timestamp:
-                            logger.info('We\'ve received an older feed...')
+                            logger.debug('We\'ve received an older feed...')
                             logger.debug('This timestamp is %s secs old', time.time()-new_feed_timestamp)
                         return False
 
@@ -52,7 +52,7 @@ class RealtimeHandler:
             os.makedirs(self.gtfs_settings.realtime_data_path, exist_ok=True)
             logger.info('Now, loading new realtime GTFS.')
 
-        logger.info('This timestamp is %s secs old', time.time()-new_feed_timestamp)
+        logger.debug('This timestamp is %s secs old', time.time()-new_feed_timestamp)
         self.realtime_data = feed_message
         with open(latest_timestamp_file, 'w') as latest_response:
             latest_response.write(str(new_feed_timestamp))
