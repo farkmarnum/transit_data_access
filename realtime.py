@@ -32,13 +32,18 @@ class RealtimeHandler:
         new_timestamp = feed_message.header.timestamp
 
         latest_timestamp_file = self.gtfs_settings.realtime_data_path+'/latest_feed_timestamp.txt'
-        with open(latest_timestamp_file, 'r+') as latest_timestamp_infile:
-            latest_feed_timestamp = int(latest_timestamp_infile.read())
-            if latest_feed_timestamp:
-                if new_timestamp <= latest_feed_timestamp:
-                    logging.info('We already have the most up-to-date realtime GTFS feed')
-                    logging.debug('Current realtime feed\'s timestamp is %s secs old', time.time()-latest_feed_timestamp)
-                    return False
+        try:
+            with open(latest_timestamp_file, 'r+') as latest_timestamp_infile:
+                latest_feed_timestamp = int(latest_timestamp_infile.read())
+                if latest_feed_timestamp:
+                    if new_timestamp <= latest_feed_timestamp:
+                        logging.info('We already have the most up-to-date realtime GTFS feed')
+                        logging.debug('Current realtime feed\'s timestamp is %s secs old', time.time()-latest_feed_timestamp)
+                        return False
+
+        except FileNotFoundError:
+            logging.info('%s/latest_feed_timestamp.txt does not exist, attempting to create it', self.gtfs_settings.realtime_data_path)
+            os.makedirs(self.gtfs_settings.realtime_data_path)
 
 
         logging.info('Loading new realtime GTFS')
