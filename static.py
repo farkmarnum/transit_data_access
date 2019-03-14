@@ -1,104 +1,23 @@
 #!/usr/bin/python3
 """Classes and methods for static GTFS data
 """
+import logging
 import os
 import shutil
-import types
 import time
 import csv
 import zipfile
-import logging
-#import sys
-#import pickle
+from collections import defaultdict
+import json
+import filecmp
+import datetime
 import requests
-import graphviz
 import pandas as pd
 
-LIST_OF_FILES = [
-    'agency.txt',
-    'calendar_dates.txt',
-    'calendar.txt',
-    'route_stops_with_names.txt',
-    'routes.txt',
-    'shapes.txt',
-    'stop_times.txt',
-    'stops.txt',
-    'transfers.txt',
-    'trips.txt'
-]
+import misc
+from ts_config import MTA_SETTINGS, LIST_OF_FILES
 
-STATUS_MESSAGES = ['approaching', 'stopped at', 'in transit to']
-
-def _locate_csv(name, gtfs_settings):
-    """Generates the path/filname for the csv given the name & gtfs_settings
-    """
-    return '%s/%s.txt' % (gtfs_settings.static_data_path, name)
-
-
-class Stop:
-    """Analogous to GTFS 'stop_id'.
-
-    Usage: Stop(stop_id)
-    id = stop_id, '201S' for example
-    """
-
-    def display(self):
-        """Prints self._id"""
-        print('            '+self.id_)
-
-    def __init__(self, stop_id):
-        self.id_ = stop_id
-        self.upcoming_trains = {}
-        self.routes_that_stop_here = {}
-
-class Shape:
-    """Analogous to GTFS 'shape_id'.
-
-    Usage: Shape(parent_route, shape_id)
-    id = shape_id, '2..S08R' for example
-    """
-    def display(self):
-        """Prints self._id and then calls display() for each Stop in self.stops"""
-        print('        '+self.id_)
-        for _, stop in self.stops.items():
-            stop.display()
-
-    def add_stop(self, stop_id):
-        """Creates a new Stop object
-        Then, adds it (w/ stop_id) as a new entry in the self.stops dict.
-        """
-        self.stops.update({stop_id:Stop(stop_id)})
-
-    def __init__(self, parent_route, shape_id):
-        self.route = parent_route
-        self.id_ = shape_id
-        self.stops = {}
-
-
-class Route:
-    """Analogous to GTFS 'route_id'.
-    """
-
-    def display(self):
-        """Prints self.route_info['id_'] and then calls display() for each Shape in self.shapes"""
-        print('    '+self.route_info['id_'])
-        for _, shape in self.shapes.items():
-            shape.display()
-
-    def add_shape(self, shape_id):
-        """Creates a new Shape object
-        Then, adds it (w/ shape_id) as a new entry in the self.shapes dict.
-        """
-        self.shapes.update({shape_id:Shape(self, shape_id)})
-
-    def __init__(self, transit_system, route_info):
-        self.transit_system = transit_system
-        self.route_info = route_info
-        self.shapes = {}
-        self.branches = {}
-
-
-class TransitSystem:
+class StaticHandler:
     """Construction functions for TransitSystem"""
 
     _has_parent_station_column = True
@@ -108,9 +27,9 @@ class TransitSystem:
         'stop_sequence',
         'stop_id',
         'stop_name',
+        'parent_station',
         #'stop_lat',
         #'stop_lon',
-        'parent_station'
     ]
 
     _rswn_sort_by = [
@@ -118,6 +37,11 @@ class TransitSystem:
         'shape_id',
         'stop_sequence'
     ]
+
+    def _locate_csv(self, name):
+        """Generates the path/filname for the csv given the name & gtfs_settings
+        """
+        return '%s/%s.txt' % (self.gtfs_settings.static_data_path, name)
 
     def _parse_stop_id(self, row):
         """ Converts a stop_id like '123N' to its parent station '123' if there is one
@@ -128,14 +52,14 @@ class TransitSystem:
         return row['stop_id']
 
     def _merge_trips_and_stops(self):
-        """Combines trips.csv stops.csv and stop_times.csv into one csv
+        """Combines trips.csv stops.csv and stop_times.csv into route_stops_with_names.csv
         Keeps the columns in _rswn_list_of_columns
         """
-        logging.debug("Cross referencing route, stop, and trip information...")
+        logging.info("Cross referencing route, stop, and trip information...")
 
-        trips_csv = _locate_csv('trips', self.gtfs_settings)
-        stops_csv = _locate_csv('stops', self.gtfs_settings)
-        stop_times_csv = _locate_csv('stop_times', self.gtfs_settings)
+        trips_csv = self._locate_csv('trips')
+        stops_csv = self._locate_csv('stops')
+        stop_times_csv = self._locate_csv('stop_times')
 
         trips = pd.read_csv(trips_csv, dtype=str)
         stops = pd.read_csv(stops_csv, dtype=str)
@@ -152,224 +76,256 @@ class TransitSystem:
         composite = composite[self._rswn_list_of_columns]
         composite = composite.drop_duplicates().sort_values(by=self._rswn_sort_by)
 
-        rswn_csv = _locate_csv('route_stops_with_names', self.gtfs_settings)
+        rswn_csv = self._locate_csv('route_stops_with_names')
         composite.to_csv(rswn_csv, index=False)
+        logging.info('%s created\n', rswn_csv)
 
-    def _load_travel_time_for_stops(self):
-        """Parses stop_times.csv and generates a csv of time_between_stops
-        """
-        # TODO
-        logging.debug("Calculating travel time between each stop...")
-
-    def _download_new_schedule_data(self, url, to_):
-        """Gets static GTFS data using requests.get()
-        """
-        if not os.path.exists(to_):
-            os.makedirs(to_)
-            logging.debug('Creating %s', to_)
-
-        logging.debug('Downloading GTFS static data from %s', url)
-        try:
-            _new_data = requests.get(url, allow_redirects=True)
-            open(f'{to_}/schedule_data.zip', 'wb').write(_new_data.content)
-        except requests.exceptions.ConnectionError:
-            exit(f'\nERROR:\nFailed to connect to {url}\n')
-
-    def _unzip_new_schedule_data(self, temp_dir, to_):
-        """Unzips a GTFS zip to to_
-        """
-        _old_data = None
-        if os.path.exists(to_):
-            _old_data = f'{to_}_OLD'
-            logging.debug('Moving %s to %s', to_, _old_data)
-            os.rename(to_, _old_data)
-
-        os.makedirs(to_)
-
-        logging.debug('Unzipping schedule_data.zip to %s', to_)
-
-        with zipfile.ZipFile(f'{temp_dir}/schedule_data.zip', "r") as zip_ref:
-            zip_ref.extractall(to_)
-
-        logging.debug('Deleting %s', temp_dir)
-        shutil.rmtree(temp_dir)
-        if _old_data:
-            logging.debug('Deleting %s', _old_data)
-            shutil.rmtree(_old_data)
-
-    def update_ts(self):
-        """Downloads new static GTFS data, unzips, and generates additional csv files
-        """
-        url = self.gtfs_settings.gtfs_static_url
-        path = self.gtfs_settings.static_data_path
-
-        if not os.path.exists('/tmp'):
-            os.mkdir('/tmp')
-        temp_dir = f'/tmp/gtfs_parser-{int(time.time()*10)}'
-
-        self._download_new_schedule_data(url=url, to_=temp_dir)
-        self._unzip_new_schedule_data(temp_dir=temp_dir, to_=path)
-        self._merge_trips_and_stops()
-        self._load_travel_time_for_stops()
-
-    def is_loaded(self):
+    def has_static_data(self):
         """Checks if static_data_path is populated with the csv files in LIST_OF_FILES
         Returns a bool
         """
         all_files_are_loaded = True
         for file_ in LIST_OF_FILES:
-            file_full = f'{self.gtfs_settings.static_data_path}/{file_}'
-            all_files_are_loaded *= os.path.isfile(file_full)
+            all_files_are_loaded *= os.path.isfile(self._locate_csv(file_))
         return all_files_are_loaded
 
-    def _load_stops_info(self):
-        """Loads info about each stop from stops.csv into self.stops_info
-        """
-        with open(_locate_csv('stops', self.gtfs_settings), mode='r') as infile:
-            reader = csv.DictReader(infile)
-            for row in reader:
-                _stop_name = types.SimpleNamespace(
-                    name=row['stop_name'],
-                    lat=row['stop_lat'],
-                    lon=row['stop_lon']
-                )
-                self.stops_info[row['stop_id']] = _stop_name
+    def update_(self, force=False):
+        """Downloads new static GTFS data, checks if different than existing data,
+        unzips, and then generates additional csv files:
 
-    def _add_route(self, route_info):
-        """Creates a new Route object
-        Then, adds it (w/ route_id) as a new entry in the self.routes dict.
+        downloads the zip to {data_path}/tmp/static_data.zip
+        unzips it to {data_path}/tmp/static_data
+            if successful, it then deletes {data_path}/static/GTFS/ and moves the new data there
+        _merge_trips_and_stops combines trips, stops, and stop_times to make route_stops_with_names
+        _load_time_between_stops calculates time b/w each pair of adjacent stops using stop_times
         """
-        route_id = route_info['id_']
-        logging.debug('Adding route: %s', route_id)
-        self.routes.update({route_id:Route(self, route_info)})
+        url = self.gtfs_settings.static_url
+        end_path = self.gtfs_settings.static_data_path
+        tmp_path = self.gtfs_settings.static_tmp_path
+        zip_path = tmp_path+'/static_data.zip'
 
-    def _load_all_routes(self):
-        """Parses route.csv and creates a new Route for each route_id
-        Also, populates route_info with information for each route_id
+        os.makedirs(tmp_path, exist_ok=True)
+        os.makedirs(end_path, exist_ok=True)
+
+        logging.info('Downloading GTFS static data from %s', url)
+        logging.info('Downloading to %s', zip_path)
+        try:
+            _new_data = requests.get(url, allow_redirects=True)
+        except requests.exceptions.ConnectionError:
+            logging.error('Failed to connect to %s\n', url)
+            exit()
+
+        open(zip_path, 'wb').write(_new_data.content)
+
+        logging.info('Extracting zip to %s', tmp_path)
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(tmp_path)
+
+        logging.info('removing %s', zip_path)
+        os.remove(zip_path)
+
+        if self.has_static_data() and not force:
+            if not filecmp.dircmp(end_path, tmp_path).diff_files:
+                logging.info('No difference found b/w existing static/GTFS/raw and new downloaded data')
+                logging.info('Deleting %s and exiting update_ts() early', tmp_path)
+                logging.info('use force=True to force an update')
+                shutil.rmtree(tmp_path)
+                return False
+
+        logging.info('Deleting %s to make room for new static data', end_path)
+        shutil.rmtree(end_path)
+
+        logging.info('Moving new data from %s to %s\n', tmp_path, end_path)
+        os.rename(tmp_path, end_path)
+
+        self._merge_trips_and_stops()
+        return True
+
+
+    def to_json(self, attempt=0):
+        """ Stores self.static_data in self.gtfs_settings.static_json_path+'/static.json'
         """
-        with open(_locate_csv('routes', self.gtfs_settings), mode='r') as infile:
-            csv_reader = csv.DictReader(infile)
-            for row in csv_reader:
-                route_info = {}
-                route_info['id_'] = row['route_id']
+        json_path = self.gtfs_settings.static_json_path
 
-                if row['route_color'].strip():
-                    route_info['color'] = '#'+row['route_color']
+        try:
+            with open(json_path+'/static.json', 'w') as out_file:
+                json.dump(self.static_data, out_file)
+
+        except OSError:
+            if attempt != 0:
+                logging.error('Unable to write to %s/static.json', json_path)
+                exit()
+            logging.info('%s/static.json does not exist, attempting to create it', json_path)
+
+            try:
+                os.makedirs(json_path)
+            except PermissionError:
+                logging.error('Don\'t have permission to write to %s/static.json', json_path)
+                exit()
+            except FileExistsError:
+                logging.error('The file %s/static.json exists, no permission to overwrite', json_path)
+                exit()
+
+            self.to_json(attempt=attempt+1)
+
+    def _load_time_between_stops(self):
+        """Parses stop_times.csv to populate self.static_data['stops'] with time between stops info
+        """
+        logging.info("Loading stop info and time between stops")
+        branch_id = departure = arrival = prev_trip = None
+        seen = defaultdict(dict)
+
+        with open(self._locate_csv('stop_times'), 'r') as stop_times_infile:
+            stop_times_csv = csv.DictReader(stop_times_infile)
+            for row in stop_times_csv:
+                trip_id = row['trip_id']
+                shape_id = misc.trip_to_shape(trip_id)
+                stop_id = row['stop_id']
+                if not shape_id in seen or not stop_id in seen[shape_id]:
+                    seen[shape_id][stop_id] = True
                 else:
-                    route_info['color'] = 'lightgrey'
+                    continue
+
+
+                arrival = row['arrival_time'].split(':')
+                arrival = datetime.timedelta(hours=int(arrival[0]), minutes=int(arrival[1]), seconds=int(arrival[2]))
+
+                if prev_trip == trip_id:
+                    travel_time = int((arrival-departure).total_seconds())
+                    if branch_id:
+                        self.static_data['stops'][stop_id]['travel_time'][branch_id] = travel_time
+
+                else:
+                    try:
+                        branch_id = self.static_data['shape_to_branch'][shape_id]
+                    except KeyError:
+                        logging.warning('In _load_time_between_stops(), branch_id %s NOT FOUND', branch_id)
+                        branch_id = None
+
+                prev_trip = trip_id
+                departure = arrival
+
+
+    def build(self, force=False):
+        """Builds JSON from the GTFS (with improvements)
+
+        Generates the routes>shapes>stops|branches>stops tree
+        Merges shapes into branches
+        """
+        json_path = self.gtfs_settings.static_json_path
+        if os.path.isfile(f'{json_path}/static.json') and not force:
+            logging.info('%s already exists, build() is unneccessary', json_path)
+            logging.info('use force=True to force a build')
+            return
+
+        # Initialize
+        transit_system = {
+            'name': self.name,
+            'routes': {},
+            'stops': misc.NestedDict(),
+            'shape_to_branch': {}
+        }
+        # Load info for each stop (not including parent stops)
+        with open(self._locate_csv('stops'), mode='r') as stops_file:
+            stops_csv_reader = csv.DictReader(stops_file)
+            for row in stops_csv_reader:
+                if row['parent_station']:
+                    transit_system['stops'][row['stop_id']] = {
+                        'info': {
+                            'name': row['stop_name'],
+                            'lat': row['stop_lat'],
+                            'lon': row['stop_lon'],
+                            'parent_station': row['parent_station'],
+                            'direction': row['stop_id'][-1]
+                        },
+                        'arrivals': misc.NestedDict(),
+                        'travel_time': misc.NestedDict()
+                    }
+
+        # Load info for each route
+        with open(self._locate_csv('routes'), mode='r') as route_file:
+            route_csv_reader = csv.DictReader(route_file)
+            for row in route_csv_reader:
+                if row['route_color'].strip():
+                    color = row['route_color']
+                else:
+                    color = 'lightgrey'
 
                 if row['route_text_color'].strip():
-                    route_info['text_color'] = '#'+row['route_text_color']
+                    text_color = row['route_text_color']
                 else:
-                    route_info['text_color'] = 'black'
+                    text_color = 'black'
 
-                route_info['long_name'] = row['route_id']+': '+row['route_long_name']
-                route_info['desc'] = row['route_desc']
+                transit_system['routes'][row['route_id']] = {
+                    'desc': row['route_desc'],
+                    'color': color,
+                    'text_color': text_color,
+                    'shapes': defaultdict(list),
+                    'branches': {
+                        'N': defaultdict(list),
+                        'S': defaultdict(list)
+                    }
+                }
 
-                self._add_route(route_info)
+        # Load route>shape>stop tree
+        with open(self._locate_csv('route_stops_with_names'), mode='r') as rswn_file:
+            rwsn_csv_reader = csv.DictReader(rswn_file)
+            for row in rwsn_csv_reader:
+                route = transit_system['routes'][row['route_id']]
+                route['shapes'][row['shape_id']].append(row['stop_id'])
 
-    def _build_routes_shapes_stops(self):
-        """For each route, creates Shape objects for each shape, and Stop objects for each of those
-        """
-        with open(_locate_csv('route_stops_with_names', self.gtfs_settings), mode='r') as rswn:
-            csv_reader = csv.DictReader(rswn)
-            current_route_id = current_shape_id = None
-            for line in csv_reader:
-                new_route_id = line['route_id']
-                if new_route_id == current_route_id:
-                    new_shape_id = line['shape_id']
-                    if new_shape_id == current_shape_id:
-                        stop_id = self._parse_stop_id(line)
-                        shape.add_stop(stop_id)
-                    else:
-                        current_shape_id = new_shape_id
-                        route.add_shape(current_shape_id)
-                        shape = route.shapes[current_shape_id]
+        # Merge shapes into branches
+        for route_id, route in transit_system['routes'].items():
+            br_count = {}
+            br_count['N'] = br_count['S'] = 0 # how many branches in each direction
+
+            for shape_id, shape_stop_list in route['shapes'].items():
+                for i in range(len(shape_id)):
+                    if shape_id[i-1] == '.' and shape_id[i] != '.':  # the N or S follows the dot(s)
+                        direction = shape_id[i]
+                        break
                 else:
-                    current_route_id = new_route_id
-                    route = self.routes[current_route_id]
+                    raise Exception(f'Error: cannot determine direction from shape id {shape_id}')
 
-    def _build_branches(self):
-        """Analyzes all the Shapes in each Route and generates the Branches
-        """
+                for branch_id, branch_stop_list in route['branches'][direction].items():
 
-    def build(self):
-        """Loads stop_info and route_info, generates the Routes>Shapes>Stops|Branches>Stops tree
-        """
-        logging.debug("Loading stop info...")
-        self._load_stops_info()
-        logging.debug("Done.\nLoading Routes and route info...")
-        self._load_all_routes()
-        logging.debug("Done.\nLoading GTFS static data into Route Shape and Stop objects...")
-        self._build_routes_shapes_stops()
-        logging.debug("Done.\nGenerating Branches...")
-        self._build_branches()
+                    if set(shape_stop_list).issubset(set(branch_stop_list)):
+                        transit_system['shape_to_branch'][shape_id] = branch_id
+                        break
 
-    def display(self):
-        """Prints self.name and then calls display() for each Route in self.routes
-        """
-        print(self.name)
-        for _, route in self.routes.items():
-            route.display()
+                    if set(branch_stop_list).issubset(set(shape_stop_list)):
+                        transit_system['shape_to_branch'][shape_id] = branch_id
+                        break
 
-    def map_each_route(self, route_desc_filter=None):
-        """ Maps each route's stop network using graphviz
-        """
-        _stop_networks = {}
-        _r = graphviz.Graph()
-        logging.debug('Mapping the network of stops for: ')
-        for route_id, route in self.routes.items():
-            logging.debug(route_id)
-            if route_desc_filter is None or route.route_info.desc in route_desc_filter:
-                _stop_networks[route_id] = graphviz.Graph(name='cluster_'+route_id)
-                _stop_networks[route_id].graph_attr['label'] = route_id
-                _stop_networks[route_id].graph_attr['fontsize'] = '36'
-                _stop_networks[route_id].graph_attr['pencolor'] = '#bbbbbb'
+                else: # no branches contained this shape (or were contained in it)
+                    new_branch_id = f'{route_id}{direction}_{br_count[direction]}'
 
-        list_of_edge_str = []
-        list_of_nodes = []
-        with open(_locate_csv('route_stops_with_names', self.gtfs_settings), mode='r') as infile:
-            csv_reader = csv.DictReader(infile)
-            prev_stop = ''
-            prev_shape = ''
-            for row in csv_reader:
-                stop_id = self._parse_stop_id(row)
-                route_id = row['route_id']
-                this_stop = stop_id + route_id
-                if this_stop not in list_of_nodes:
-                    list_of_nodes.append(this_stop)
-                    route = self.routes[route_id]
-                    _stop_networks[route_id].node(
-                        this_stop,
-                        label=self.stops_info[stop_id].name,
-                        style='filled',
-                        fontsize='14',
-                        fillcolor=route.route_info.color,
-                        fontcolor=route.route_info.text_color
-                    )
+                    route['branches'][direction][new_branch_id] = shape_stop_list
+                    transit_system['shape_to_branch'][shape_id] = new_branch_id
+                    br_count[direction] += 1
 
-                this_shape = row['shape_id']
-                if this_shape == prev_shape:
-                    edge_str = this_stop+' > '+prev_stop
-                    if edge_str not in list_of_edge_str:
-                        list_of_edge_str.append(this_stop+' > '+prev_stop)
-                        list_of_edge_str.append(prev_stop+' > '+this_stop)
-                        _stop_networks[route_id].edge(prev_stop, this_stop)
-                prev_stop = this_stop
-                prev_shape = this_shape
+        transit_system['last_updated'] = int(time.time())
 
-        format_ = 'pdf'
-        outfile = f'{self.name}_routes_graph'
-        logging.debug('\nWriting network graph to %s.%s', outfile, format_)
-        for route_id, route in self.routes.items():
-            _r.subgraph(_stop_networks[route_id])
-        graph_dir = '/var/www/html/route_viz'
-        _r.render(filename=outfile, directory=graph_dir, cleanup=True, format=format_)
+        self.static_data = transit_system
+        self._load_time_between_stops()
+        self.to_json()
+        logging.info("New static build written to JSON")
 
 
-    def __init__(self, name, gtfs_settings):
-        self.name = name
+    def __init__(self, gtfs_settings, name=''):
         self.gtfs_settings = gtfs_settings
-        self.routes = {}
-        self.stops_info = {}
-        self.routes_info = {}
+        self.name = name
+        self.static_data = None
+
+
+def main(force=False):
+    """Creates new StaticHandler, then calls update_() and build()
+    """
+    with misc.TimeLogger('static.py') as _tl:
+        static_handler = StaticHandler(MTA_SETTINGS, name='MTA')
+        static_handler.update_(force)
+        static_handler.build(force)
+
+
+if __name__ == '__main__':
+    main()
