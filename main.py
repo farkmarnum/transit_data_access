@@ -2,10 +2,14 @@
 """Example usage of gtfs_parser methods
 """
 import logging
+
 import static
 import realtime
 
-logging.basicConfig(level=logging.DEBUG)
+def scheduler():
+    """ Schedules static.py and realtime.py
+    """
+    pass
 
 def main():
     """ Runs static.py and then realtime.py

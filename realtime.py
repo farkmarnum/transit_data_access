@@ -5,14 +5,11 @@ import logging
 import time
 import os
 import json
-import pprint as pp
 import requests
 from google.transit import gtfs_realtime_pb2
 
 from ts_config import MTA_SETTINGS
-from misc import NestedDict, trip_to_shape
-
-logging.basicConfig(level=logging.DEBUG)
+import misc
 
 class RealtimeHandler:
     """Gets a new realtime GTFS feed
@@ -22,29 +19,47 @@ class RealtimeHandler:
         static_json = self.gtfs_settings.static_json_path+'/static.json'
         with open(static_json, mode='r') as static_json_file:
             self.static_data = json.loads(static_json_file.read())
-        self.static_data['trains'] = NestedDict()
+        self.static_data['trains'] = misc.NestedDict()
 
-    def get_feed(self):
-        """Loads a new realtime feed into self.realtime_data"""
-        response = requests.get(self.gtfs_settings.realtime_url)
+    def check_feed(self):
+        """Gets a new realtime GTFS feed and checks if its timestamp is more recent
+        than previous feeds' timestamps. This is done by storing the most recent timestamp seen in
+        self.gtfs_settings.realtime_data_path+'/latest_feed_timestamp.txt'
+        """
+        response = requests.get(self.gtfs_settings.realtime_url, allow_redirects=True)
         feed_message = gtfs_realtime_pb2.FeedMessage()
         feed_message.ParseFromString(response.content)
+        new_timestamp = feed_message.header.timestamp
+
+        latest_timestamp_file = self.gtfs_settings.realtime_data_path+'/latest_feed_timestamp.txt'
+        with open(latest_timestamp_file, 'r+') as latest_timestamp_infile:
+            latest_feed_timestamp = int(latest_timestamp_infile.read())
+            if latest_feed_timestamp:
+                if new_timestamp <= latest_feed_timestamp:
+                    logging.info('We already have the most up-to-date realtime GTFS feed')
+                    logging.debug('Current realtime feed\'s timestamp is %s secs old', time.time()-latest_feed_timestamp)
+                    return False
+
+
+        logging.info('Loading new realtime GTFS')
+        logging.debug('New timestamp is %s secs old', time.time()-new_timestamp)
         self.realtime_data = feed_message
+        with open(latest_timestamp_file, 'w') as latest_response:
+            latest_response.write(str(new_timestamp))
+        return True
+
 
     def entity_info(self, entity_body):
         """ pulls route_id, trip_id, and shape_id from entity
         """
         trip_id = entity_body.trip.trip_id
-        shape_id = trip_to_shape(trip_id)
-
-        if 'X' in shape_id: # TODO figure this out...
-            shape_id = shape_id.split('X')[0]+'R'
+        shape_id = misc.trip_to_shape(trip_id)
+        #if 'X' in shape_id: # TODO figure this out...
+        #    shape_id = shape_id.split('X')[0]+'R'
 
         try:
             branch_id = self.static_data['shape_to_branch'][shape_id]
         except KeyError:
-            route_id = entity_body.trip.route_id
-            logging.debug('REALTIME ERROR: shape_id %s NOT FOUND (parsed from trip_id %s)', shape_id, trip_id)
             branch_id = None
         return [trip_id, branch_id]
 
@@ -53,7 +68,7 @@ class RealtimeHandler:
         Uses self.static_data as a starting point
         """
         self.parsed_data = self.static_data
-        for route, route_data in self.parsed_data['routes'].items():
+        for _, route_data in self.parsed_data['routes'].items():
             route_data.pop('shapes')
 
         for entity in self.realtime_data.entity:
@@ -91,27 +106,22 @@ class RealtimeHandler:
         try:
             with open(json_path+'/realtime.json', 'w') as out_file:
                 json.dump(self.parsed_data, out_file)
+                logging.info('Wrote realtime parsed data to %s/realtime.json', json_path)
 
         except OSError:
             if attempt != 0:
-                exit(f'Unable to write to {json_path}/realtime.json')
-            print(f'{json_path}/realtime.json does not exist, attempting to create it')
+                logging.error('Unable to write to %s/realtime.json\n', json_path)
+                exit()
 
+            logging.info('%s/realtime.json does not exist, attempting to create it', json_path)
             try:
-                os.makedirs(json_path)
+                os.makedirs(json_path, exist_ok=True)
+
             except PermissionError:
-                exit(f'Do not have permission to write to {json_path}/realtime.json')
+                logging.error('Do not have permission to write to %s/realtime.json\n', json_path)
+                exit()
 
             self.to_json(attempt=attempt+1)
-
-    def get_example_feed(self):
-        """Simulate a new realtime feed with an example file"""
-        with open(f'{self.gtfs_settings.realtime_json_path}/gtfs_realtime_example', mode='rb') as example_file:
-            response = example_file.read()
-            feed_message = gtfs_realtime_pb2.FeedMessage()
-            feed_message.ParseFromString(response)
-            self.realtime_data = feed_message
-
 
     def __init__(self, gtfs_settings, name=''):
         self.name = name
@@ -121,20 +131,15 @@ class RealtimeHandler:
 
 
 def main():
-    """Creates new RealtimeHandler, which calls get_feed()
+    """Creates new RealtimeHandler, then calls get_static() and check_feed()
     """
-    #last_time = time.time()
-    realtime_handler = RealtimeHandler(MTA_SETTINGS, name='MTA')
-    #last_time = time_test('RealtimeHandler', last_time)
-    realtime_handler.get_static()
-    #last_time = time_test('get_static', last_time)
-    realtime_handler.get_feed()
-    #last_time = time_test('get_feed', last_time)
-    realtime_handler.parse_feed()
-    #last_time = time_test('parse_feed', last_time)
-    realtime_handler.to_json()
-    #last_time = time_test('to_json', last_time)
-    #pp.pprint(realtime_handler.parsed_data['stops'])
+    with misc.TimeLogger('realtime.py') as _tl:
+        realtime_handler = RealtimeHandler(MTA_SETTINGS, name='MTA')
+        realtime_handler.get_static()
+        feed_is_new = realtime_handler.check_feed()
+        if feed_is_new:
+            realtime_handler.parse_feed()
+            realtime_handler.to_json()
 
 if __name__ == '__main__':
     main()
