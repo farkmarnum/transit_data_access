@@ -2,8 +2,8 @@
 """Configuration information for specific transit systems
 """
 import types
+from misc import DATA_PATH
 
-DATA_PATH = '/data/GTFS'
 MTA_API_KEY = 'f775a76bd1960c98831b3c2b06c19bb5'
 
 LIST_OF_FILES = [

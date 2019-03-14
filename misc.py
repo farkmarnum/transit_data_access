@@ -5,6 +5,9 @@ import time
 import os
 import logging
 
+DATA_PATH = '/data/GTFS'
+PROJECT_PATH = '~/dev/GTFS'
+
 LOG_PATH = 'logs'
 LOG_FILE_NAME = 'gtfs_parser.log'
 LOG_FORMAT = '%(asctime)s.%(msecs)03d %(levelname)s %(message)s'
