@@ -10,6 +10,8 @@ PACKAGE_NAME = 'gtfs_parser'
 DATA_PATH = '/data/GTFS'
 LOG_PATH = f'/var/log/{PACKAGE_NAME}'
 REALTIME_FREQ = 3 # realtime GTFS feed will be checked every {REALTIME_FREQ} seconds
+SERVER_IP = '127.0.0.1'
+SERVER_PORT = 64299
 
 # LOG SETUP
 if not os.path.exists(LOG_PATH):

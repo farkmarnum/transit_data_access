@@ -156,10 +156,13 @@ def main():
     with misc.TimeLogger('realtime.py') as _tl:
         realtime_handler = RealtimeHandler(MTA_SETTINGS, name='MTA')
         realtime_handler.get_static()
+
         feed_is_new = realtime_handler.check_feed()
         if feed_is_new:
             realtime_handler.parse_feed()
             realtime_handler.to_json()
+
+        return feed_is_new
 
 if __name__ == '__main__':
     main()
