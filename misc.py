@@ -1,33 +1,44 @@
-"""Miscellaneous modules and classes for the gtfs_parser package
-Also sets the logging level
+"""Miscellaneous modules and classes for the package
+Also sets up logging
 """
 import time
 import os
 import logging
 
+# CONSTANTS
+PACKAGE_NAME = 'gtfs_parser'
 DATA_PATH = '/data/GTFS'
-PROJECT_PATH = '~/dev/GTFS'
+LOG_PATH = f'/var/log/{PACKAGE_NAME}'
+REALTIME_FREQ = 3 # realtime GTFS feed will be checked every {REALTIME_FREQ} seconds
 
-LOG_PATH = 'logs'
-LOG_FILE_NAME = 'gtfs_parser.log'
-LOG_FORMAT = '%(asctime)s.%(msecs)03d %(levelname)s %(message)s'
-LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
-
+# LOG SETUP
 if not os.path.exists(LOG_PATH):
-    os.makedirs(LOG_PATH)
+    try:
+        print(f'Creating log path: {LOG_PATH}')
+        os.makedirs(LOG_PATH)
+    except PermissionError:
+        print(f'Don\'t have permission to create log path: {LOG_PATH}')
+        exit()
 
-logging.basicConfig(
-    format=LOG_FORMAT,
-    datefmt=LOG_DATE_FORMAT,
-    handlers=[
-        logging.FileHandler(f'{LOG_PATH}/{LOG_FILE_NAME}'),
-        #logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger('gtfs_parser')
-logger.setLevel(logging.INFO)
+log_file_1 = 'GTFS.log'
+log_file_2 = 'server.log'
+log_format = '%(asctime)s.%(msecs)03d %(levelname)s %(message)s'
+log_date_format = '%Y-%m-%d %H:%M:%S'
+log_formatter = logging.Formatter(fmt=log_format, datefmt=log_date_format)
 
+GTFS_logger = logging.getLogger('GTFS')
+GTFS_logger.setLevel(logging.INFO)
+GTFS_file_handler = logging.FileHandler(f'{LOG_PATH}/{log_file_1}')
+GTFS_file_handler.setFormatter(log_formatter)
+GTFS_logger.addHandler(GTFS_file_handler)
 
+server_logger = logging.getLogger('server')
+server_logger.setLevel(logging.DEBUG)
+server_file_handler = logging.FileHandler(f'{LOG_PATH}/{log_file_2}')
+server_file_handler.setFormatter(log_formatter)
+server_logger.addHandler(server_file_handler)
+
+# PACKAGE METHODS AND CLASSES
 def trip_to_shape(trip_id):
     """Takes a trip_id in form '092200_6..N03R' and returns what's after the last underscore
     This should be the shape_id ('6..N03R')
@@ -58,4 +69,4 @@ class TimeLogger():
         self.start_time = time.time()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        logger.debug('%s completed, took %s seconds\n', self.message_text, time.time()-self.start_time)
+       GTFS_logger.debug('%s completed, took %s seconds\n', self.message_text, time.time()-self.start_time)

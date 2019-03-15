@@ -1,4 +1,3 @@
-#!/usr/bin/python3
 """Configuration information for specific transit systems
 """
 import types
