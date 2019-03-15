@@ -5,6 +5,7 @@ import time
 import os
 import json
 import requests
+import gzip
 from google.transit import gtfs_realtime_pb2
 
 from ts_config import MTA_SETTINGS
@@ -117,11 +118,15 @@ class RealtimeHandler:
         """dumps self.parsed_data to realtime.json
         """
         json_path = self.gtfs_settings.realtime_json_path
+        json_str = json.dumps(self.parsed_data)
 
         try:
-            with open(json_path+'/realtime.json', 'w') as out_file:
-                json.dump(self.parsed_data, out_file)
+            with open(json_path+'/realtime.json', 'w') as json_file:
+                json_file.write(json_str)
                 GTFS_logger.debug('Wrote realtime parsed data to %s/realtime.json', json_path)
+
+            with gzip.open(json_path+'/realtime.json.gz', 'wb') as gzip_file:
+                gzip_file.write(json_str.encode('utf-8'))
 
         except OSError:
             if attempt != 0:
