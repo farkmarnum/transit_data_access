@@ -9,7 +9,7 @@ import requests
 import misc
 from misc import client_logger
 
-CLIENT_PATH = '/Users/markfarnum/dev/gtfs_parser/run_client/client_data'
+CLIENT_PATH = 'client_data'
 
 server_url = f'http://{misc.DB_SERVER_IP}:{misc.DB_SERVER_PORT}/static/realtime.json'
 json_local = CLIENT_PATH+'/realtime.json'
