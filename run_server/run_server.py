@@ -21,9 +21,11 @@ schedule_logger.setLevel(logging.WARNING)
 GTFS_logger = misc.GTFS_logger
 server_logger = misc.server_logger
 
-def realtime_parse_and_update_server(tcp_server):
-    realtime_feed_is_new = realtime_parse.main()
-    if realtime_feed_is_new:
+def realtime_parse_and_update_server(server_):
+    new_feed = realtime_parse.main()
+    if new_feed:
+        print(f'telling {server_} to push!')
+        server_.realtime_feed_is_new = True
         server_logger.info('Server sending new realtime.json to web servers')
 
 def schedule_runner():
@@ -41,10 +43,11 @@ def main():
     if os.path.exists(latest_timestamp_file):
         os.remove(latest_timestamp_file)
 
-    #server_ = server_setup.FileServer()
-    #misc.run_threaded(server_.event_loop)
+    json_server = server_setup.JSONServer()
+    misc.run_threaded(json_server.listen_loop)
+    misc.run_threaded(json_server.update_loop)
 
-    schedule.every(misc.REALTIME_FREQ).seconds.do(misc.run_threaded, realtime_parse_and_update_server, file_server=server_)
+    schedule.every(misc.REALTIME_FREQ).seconds.do(misc.run_threaded, realtime_parse_and_update_server, server_=json_server)
     schedule.every().day.at("03:30").do(misc.run_threaded, static_parse.main)
 
     GTFS_logger.info('Running static.main() once before scheduler')

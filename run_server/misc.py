@@ -6,15 +6,17 @@ import os
 import logging
 import threading
 
+
 # CONSTANTS
 PACKAGE_NAME = 'gtfs_parser'
 DATA_PATH = '/data/GTFS'
 LOG_PATH = f'/var/log/{PACKAGE_NAME}'
 LOG_LEVEL = logging.INFO
-REALTIME_FREQ = 3 # realtime GTFS feed will be checked every {REALTIME_FREQ} seconds
+REALTIME_FREQ = 3 # realtime GTFS feed will be checked every REALTIME_FREQ seconds
 SERVER_IP = '127.0.0.1'
 SERVER_PORT = 64299
 
+####################################################################################
 # LOG SETUP
 if not os.path.exists(LOG_PATH):
     try:
@@ -24,27 +26,34 @@ if not os.path.exists(LOG_PATH):
         print(f'Don\'t have permission to create log path: {LOG_PATH}')
         exit()
 
-log_file_1 = 'GTFS.log'
-log_file_2 = 'server.log'
-log_format = '%(asctime)s.%(msecs)03d %(levelname)s %(message)s'
-log_date_format = '%Y-%m-%d %H:%M:%S'
-log_formatter = logging.Formatter(fmt=log_format, datefmt=log_date_format)
+try:
+    log_file_1 = 'GTFS.log'
+    log_file_2 = 'server.log'
+    log_format = '%(asctime)s.%(msecs)03d %(levelname)s %(message)s'
+    log_date_format = '%Y-%m-%d %H:%M:%S'
+    log_formatter = logging.Formatter(fmt=log_format, datefmt=log_date_format)
 
-GTFS_logger = logging.getLogger('GTFS')
-GTFS_logger.setLevel(LOG_LEVEL)
-GTFS_file_handler = logging.FileHandler(f'{LOG_PATH}/{log_file_1}')
-GTFS_file_handler.setFormatter(log_formatter)
-GTFS_logger.addHandler(GTFS_file_handler)
+    GTFS_logger = logging.getLogger('GTFS')
+    GTFS_logger.setLevel(LOG_LEVEL)
+    GTFS_file_handler = logging.FileHandler(f'{LOG_PATH}/{log_file_1}')
+    GTFS_file_handler.setFormatter(log_formatter)
+    GTFS_logger.addHandler(GTFS_file_handler)
 
-server_logger = logging.getLogger('server')
-server_logger.setLevel(LOG_LEVEL)
-server_file_handler = logging.FileHandler(f'{LOG_PATH}/{log_file_2}')
-server_file_handler.setFormatter(log_formatter)
-server_logger.addHandler(server_file_handler)
+    server_logger = logging.getLogger('server')
+    server_logger.setLevel(LOG_LEVEL)
+    server_file_handler = logging.FileHandler(f'{LOG_PATH}/{log_file_2}')
+    server_file_handler.setFormatter(log_formatter)
+    server_logger.addHandler(server_file_handler)
+
+except PermissionError:
+    print(f'Don\'t have permission to write to log files in: {LOG_PATH}')
+    exit()
+
+####################################################################################
+
 
 # PACKAGE METHODS AND CLASSES
 def run_threaded(job_func, **kwargs):
-    print(f'running {job_func} now in a thread')
     job_thread = threading.Thread(target=job_func,kwargs=kwargs)
     job_thread.start()
 
@@ -54,14 +63,12 @@ def trip_to_shape(trip_id):
     """
     return trip_id.split('_').pop()
 
-
 class NestedDict(dict):
     """A dict that automatically creates new dicts within itself as needed"""
     def __getitem__(self, key):
         if key in self:
             return self.get(key)
         return self.setdefault(key, NestedDict())
-
 
 class TimeLogger():
     """ Convenient little way to log how long something takes

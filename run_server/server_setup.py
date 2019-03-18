@@ -1,93 +1,65 @@
 """ sets up server
 1) bind to a port a start listening for incoming connections
 2) when a new connection is made with a client (from one of my web servers), keep it open
-    2a) SSL or something to make it secure?
 3) maintain a record of all current connections (self.clients)
-4) run(): every time realtime.json.gz changes, send it to all the connected clients
+4) update_loop(): every time realtime.json.gz changes, send it to all the connected clients
     4a) make sure files are sent and received fully & correctly
 """
-import sys
 import socket
-import selectors
-import types
 import time
 
 import misc
+from ts_config import MTA_SETTINGS
 
 server_logger = misc.server_logger
 
-_HOST = misc.SERVER_IP
-_PORT = misc.SERVER_PORT
-_IPv4 = socket.AF_INET
-_TCP = socket.SOCK_STREAM
+class JSONServer():
+    """ A simple server that accepts connections and periodically sends new JSON files
+    """
+    def send_json(self, conn, send_file):
+        """ Sends send_file to conn
+        """
+        with open(send_file, 'rb') as file_:
+            chunk = file_.read(1024)
+            while chunk:
+                conn.sendall(chunk)
+                chunk = file_.read(1024)
 
-
-class FileServer():
-
-    def accept_wrapper(self, sock):
-        if sock not in self.clients:
-            print(f'adding {sock} to clients')
-            clients.append(sock)
-            conn, addr = sock.accept()  # Should be ready to read
-            server_logger.info("accepted connection from %s", addr)
-            conn.setblocking(False)
-            sel.register(conn, selectors.EVENT_READ | selectors.EVENT_WRITE, data='connected')
-        else:
-            print(f'{sock} already in clients')
-
-    def service_connection(self, sock, data):
-        #recv_data = sock.recv(1024)  # Should be ready to read
-        #if recv_data:
-        print('sending data to client')
-        #else:
-        #    print('closing connection to', data.addr)
-        #    sel.unregister(sock)
-        #    sock.close()
-
-    def event_loop(self):
-        print('running event loop')
-        try:
+    def listen_loop(self):
+        """ Listens for new connections and adds them to self.clients
+        """
+        server_logger.info('Beginning listen loop')
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind((misc.SERVER_IP, misc.SERVER_PORT))
+            sock.listen()
             while True:
-                events = self.sel.select(timeout=None)
-                if events:
-                    print('event!')
+                conn, addr = sock.accept()
+                if conn not in self.clients:
+                    print(f'adding {conn} @ {addr} to clients')
+                    self.clients.append((conn, addr))
+                time.sleep(2)
 
-                for key, mask in events:
-                    if key.data is None:
-                        self.accept_wrapper(key.fileobj)
+    def update_loop(self):
+        """ Waits for self.realtime_feed_is_new to be changed to True, then iterates throgh self.clients, calling send_json() for each
+        """
+        server_logger.info('Beginning update loop')
+        while True:
+            if self.realtime_feed_is_new:
+                print('time to push a new json!')
+                for client in self.clients:
+                    (conn, addr) = client
+                    try:
+                        self.send_json(conn, self.json_file)
+                        print(f'sent to {addr}')
+                    except ConnectionError as err:
+                        print(f'ConnectionError {err} when attempting to send to {addr}, removing from clients list')
+                        self.clients.remove(client)
 
-                if self.realtime_feed_is_new:
-                    server_logger.info('Pushing new realtime.json.gz')
-                    data = b'test'
-                    for client in self.clients:
-                        #self.service_connection(client, data)
-                        print(f'sending {str(data)} to {client}')
-                    self.realtime_feed_is_new = False
-                time.sleep(0.5)
+                self.realtime_feed_is_new = False
 
-        except KeyboardInterrupt:
-            print("caught keyboard interrupt, exiting")
-        finally:
-            self.sel.close()
+            time.sleep(1)
 
     def __init__(self):
-        server_logger.info('\n~~~~~~~~~~~~ BEGINNING SERVER ~~~~~~~~~~~~\n')
-        self.realtime_feed_is_new = False
         self.clients = []
-        self.sel = selectors.DefaultSelector()
-
-        lsock = socket.socket(_IPv4, _TCP)
-        lsock.bind((_HOST, _PORT))
-        lsock.listen()
-        lsock.setblocking(False)
-        server_logger.info("listening on %s:%s", _HOST, str(_PORT))
-
-        self.sel = selectors.DefaultSelector()
-        self.sel.register(lsock, selectors.EVENT_READ | selectors.EVENT_WRITE, data=None)
-
-
-
-
-
-
-#
+        self.json_file = f'{MTA_SETTINGS.realtime_json_path}/realtime.json.gz'
+        self.realtime_feed_is_new = False
