@@ -117,7 +117,8 @@ class StaticHandler:
             GTFS_logger.error('Failed to connect to %s\n', url)
             exit()
 
-        open(zip_path, 'wb').write(_new_data.content)
+        with open(zip_path, 'wb') as zip_outfile:
+            zip_outfile.write(_new_data.content)
 
         GTFS_logger.info('Extracting zip to %s', tmp_path)
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
