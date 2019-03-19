@@ -8,13 +8,18 @@ import threading
 
 
 # CONSTANTS
-PACKAGE_NAME = 'gtfs_parser'
-DATA_PATH = '/data/GTFS'
-LOG_PATH = f'/var/log/{PACKAGE_NAME}'
+PACKAGE_NAME = 'transit_data_access'
+DATA_PATH = f'/data/{PACKAGE_NAME}/db_server'
+LOG_PATH = f'/var/log/{PACKAGE_NAME}/db_server'
 LOG_LEVEL = logging.INFO
 REALTIME_FREQ = 3 # realtime GTFS feed will be checked every REALTIME_FREQ seconds
-DB_SERVER_IP = '127.0.0.1'
-DB_SERVER_PORT = 64299
+
+SERVER_CONF = []
+with open('server.conf') as conf_file:
+    for line in conf_file:
+        line = line.split('#')[0] # removes comments
+        line = line.strip().split('=') # converts a line in the form 'a = b' to [a, b]
+        SERVER_CONF[line[0]] = line[1]
 
 ####################################################################################
 # LOG SETUP
@@ -27,18 +32,17 @@ if not os.path.exists(LOG_PATH):
         exit()
 
 try:
-    log_file_1 = 'GTFS.log'
-    log_file_2 = 'server.log'
-    log_file_3 = 'client.log'
+    log_file_1 = 'parser.log'
+    log_file_2 = 'db-server.log'
     log_format = '%(asctime)s.%(msecs)03d %(levelname)s %(message)s'
     log_date_format = '%Y-%m-%d %H:%M:%S'
     log_formatter = logging.Formatter(fmt=log_format, datefmt=log_date_format)
 
-    GTFS_logger = logging.getLogger('GTFS')
-    GTFS_logger.setLevel(LOG_LEVEL)
-    GTFS_file_handler = logging.FileHandler(f'{LOG_PATH}/{log_file_1}')
-    GTFS_file_handler.setFormatter(log_formatter)
-    GTFS_logger.addHandler(GTFS_file_handler)
+    parser_logger = logging.getLogger('parser')
+    parser_logger.setLevel(LOG_LEVEL)
+    parser_file_handler = logging.FileHandler(f'{LOG_PATH}/{log_file_1}')
+    parser_file_handler.setFormatter(log_formatter)
+    parser_logger.addHandler(parser_file_handler)
 
     server_logger = logging.getLogger('server')
     server_logger.setLevel(LOG_LEVEL)
@@ -46,11 +50,6 @@ try:
     server_file_handler.setFormatter(log_formatter)
     server_logger.addHandler(server_file_handler)
 
-    client_logger = logging.getLogger('client')
-    client_logger.setLevel(LOG_LEVEL)
-    client_file_handler = logging.FileHandler(f'{LOG_PATH}/{log_file_3}')
-    client_file_handler.setFormatter(log_formatter)
-    client_logger.addHandler(client_file_handler)
 
 except PermissionError:
     print(f'Don\'t have permission to write to log files in: {LOG_PATH}')
@@ -92,4 +91,4 @@ class TimeLogger():
         self.start_time = time.time()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-       GTFS_logger.debug('%s completed, took %s seconds\n', self.message_text, time.time()-self.start_time)
+       parser_logger.debug('%s completed, took %s seconds\n', self.message_text, time.time()-self.start_time)

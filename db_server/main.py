@@ -7,9 +7,8 @@ import logging
 import time
 import schedule
 
-import ts_config
+import transit_system_config
 import misc
-from misc import GTFS_logger
 import static_parse
 import realtime_parse
 import server_setup
@@ -18,19 +17,20 @@ import server_setup
 schedule_logger = logging.getLogger('schedule')
 schedule_logger.setLevel(logging.WARNING)
 
+parser_logger = misc.parser_logger
 
 def schedule_runner():
-    GTFS_logger.info('Starting scheduler')
+    parser_logger.info('Starting scheduler')
     while True:
         schedule.run_pending()
         time.sleep(1)
 
 def main():
     print(f'Logging in {misc.LOG_PATH}')
-    GTFS_logger.info('\n~~~~~~~~~~~~ BEGINNING gtfs_parser/run_server ~~~~~~~~~~~~\n')
+    parser_logger.info('\n~~~~~~~~~~~~ BEGINNING transit_data_access Database Server processes... ~~~~~~~~~~~~\n')
 
     # Reset the timestamp file that stores the realtime feed timestamp for comparisons
-    latest_timestamp_file = ts_config.MTA_SETTINGS.realtime_data_path+'/latest_feed_timestamp.txt'
+    latest_timestamp_file = transit_system_config.MTA_SETTINGS.realtime_data_path+'/latest_feed_timestamp.txt'
     if os.path.exists(latest_timestamp_file):
         os.remove(latest_timestamp_file)
 
@@ -39,7 +39,7 @@ def main():
     schedule.every().day.at("03:30").do(misc.run_threaded, static_parse.main)
 
     # Check if there's a new static feed
-    GTFS_logger.info('Running static.main() once before scheduler')
+    parser_logger.info('Running static.main() once before scheduler begind')
     static_parse.main()
 
     # Start the server
@@ -47,6 +47,7 @@ def main():
 
     # Start the scheduler
     misc.run_threaded(schedule_runner)
+    parser_logger.info('Scheduler begun.')
 
 if __name__ == "__main__":
     main()

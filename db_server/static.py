@@ -14,9 +14,9 @@ import requests
 import pandas as pd
 
 import misc
-from ts_config import MTA_SETTINGS, LIST_OF_FILES
+from transit_system_config import MTA_SETTINGS, LIST_OF_FILES
 
-GTFS_logger = misc.GTFS_logger
+parser_logger = misc.parser_logger
 
 
 class StaticHandler:
@@ -57,7 +57,7 @@ class StaticHandler:
         """Combines trips.csv stops.csv and stop_times.csv into route_stops_with_names.csv
         Keeps the columns in _rswn_list_of_columns
         """
-        GTFS_logger.info("Cross referencing route, stop, and trip information...")
+        parser_logger.info("Cross referencing route, stop, and trip information...")
 
         trips_csv = self._locate_csv('trips')
         stops_csv = self._locate_csv('stops')
@@ -80,7 +80,7 @@ class StaticHandler:
 
         rswn_csv = self._locate_csv('route_stops_with_names')
         composite.to_csv(rswn_csv, index=False)
-        GTFS_logger.info('%s created\n', rswn_csv)
+        parser_logger.info('%s created\n', rswn_csv)
 
     def has_static_data(self):
         """Checks if static_data_path is populated with the csv files in LIST_OF_FILES
@@ -109,36 +109,36 @@ class StaticHandler:
         os.makedirs(tmp_path, exist_ok=True)
         os.makedirs(end_path, exist_ok=True)
 
-        GTFS_logger.info('Downloading GTFS static data from %s', url)
-        GTFS_logger.info('Downloading to %s', zip_path)
+        parser_logger.info('Downloading GTFS static data from %s', url)
+        parser_logger.info('Downloading to %s', zip_path)
         try:
             _new_data = requests.get(url, allow_redirects=True)
         except requests.exceptions.ConnectionError:
-            GTFS_logger.error('Failed to connect to %s\n', url)
+            parser_logger.error('Failed to connect to %s\n', url)
             exit()
 
         with open(zip_path, 'wb') as zip_outfile:
             zip_outfile.write(_new_data.content)
 
-        GTFS_logger.info('Extracting zip to %s', tmp_path)
+        parser_logger.info('Extracting zip to %s', tmp_path)
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(tmp_path)
 
-        GTFS_logger.info('removing %s', zip_path)
+        parser_logger.info('removing %s', zip_path)
         os.remove(zip_path)
 
         if self.has_static_data() and not force:
             if not filecmp.dircmp(end_path, tmp_path).diff_files:
-                GTFS_logger.info('No difference found b/w existing static/GTFS/raw and new downloaded data')
-                GTFS_logger.info('Deleting %s and exiting update_ts() early', tmp_path)
-                GTFS_logger.info('use force=True to force an update')
+                parser_logger.info('No difference found b/w existing static/GTFS/raw and new downloaded data')
+                parser_logger.info('Deleting %s and exiting update_ts() early', tmp_path)
+                parser_logger.info('use force=True to force an update')
                 shutil.rmtree(tmp_path)
                 return False
 
-        GTFS_logger.info('Deleting %s to make room for new static data', end_path)
+        parser_logger.info('Deleting %s to make room for new static data', end_path)
         shutil.rmtree(end_path)
 
-        GTFS_logger.info('Moving new data from %s to %s\n', tmp_path, end_path)
+        parser_logger.info('Moving new data from %s to %s\n', tmp_path, end_path)
         os.rename(tmp_path, end_path)
 
         self._merge_trips_and_stops()
@@ -156,17 +156,17 @@ class StaticHandler:
 
         except OSError:
             if attempt != 0:
-                GTFS_logger.error('Unable to write to %s/static.json', json_path)
+                parser_logger.error('Unable to write to %s/static.json', json_path)
                 exit()
-            GTFS_logger.info('%s/static.json does not exist, attempting to create it', json_path)
+            parser_logger.info('%s/static.json does not exist, attempting to create it', json_path)
 
             try:
                 os.makedirs(json_path)
             except PermissionError:
-                GTFS_logger.error('Don\'t have permission to write to %s/static.json', json_path)
+                parser_logger.error('Don\'t have permission to write to %s/static.json', json_path)
                 exit()
             except FileExistsError:
-                GTFS_logger.error('The file %s/static.json exists, no permission to overwrite', json_path)
+                parser_logger.error('The file %s/static.json exists, no permission to overwrite', json_path)
                 exit()
 
             self.to_json(attempt=attempt+1)
@@ -174,7 +174,7 @@ class StaticHandler:
     def _load_time_between_stops(self):
         """Parses stop_times.csv to populate self.static_data['stops'] with time between stops info
         """
-        GTFS_logger.info("Loading stop info and time between stops")
+        parser_logger.info("Loading stop info and time between stops")
         branch_id = departure = arrival = prev_trip = None
         seen = defaultdict(dict)
 
@@ -202,7 +202,7 @@ class StaticHandler:
                     try:
                         branch_id = self.static_data['shape_to_branch'][shape_id]
                     except KeyError:
-                        GTFS_logger.warning('In _load_time_between_stops(), branch_id %s NOT FOUND', branch_id)
+                        parser_logger.warning('In _load_time_between_stops(), branch_id %s NOT FOUND', branch_id)
                         branch_id = None
 
                 prev_trip = trip_id
@@ -217,8 +217,8 @@ class StaticHandler:
         """
         json_path = self.gtfs_settings.static_json_path
         if os.path.isfile(f'{json_path}/static.json') and not force:
-            GTFS_logger.info('%s already exists, build() is unneccessary', json_path)
-            GTFS_logger.info('use force=True to force a build')
+            parser_logger.info('%s already exists, build() is unneccessary', json_path)
+            parser_logger.info('use force=True to force a build')
             return
 
         # Initialize
@@ -312,7 +312,7 @@ class StaticHandler:
         self.static_data = transit_system
         self._load_time_between_stops()
         self.to_json()
-        GTFS_logger.info("New static build written to JSON")
+        parser_logger.info("New static build written to JSON")
 
 
     def __init__(self, gtfs_settings, name=''):

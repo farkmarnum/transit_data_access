@@ -1,4 +1,5 @@
-""" This script will set up a connection with the main server and receive new realtime.json.gz periodically
+""" TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
+This script will set up a connection with the main server and receive new realtime.json.gz periodically
 """
 import os
 import time
@@ -9,9 +10,12 @@ import requests
 import misc
 from misc import client_logger
 
-CLIENT_PATH = 'client_data'
+CLIENT_PATH = 'data'
 
-server_url = f'http://{misc.DB_SERVER_IP}:{misc.DB_SERVER_PORT}/static/realtime.json'
+IP = SERVER_CONF['DB_SERVER_IP']
+PORT = int(SERVER_CONF['DB_SERVER_PORT'])
+
+server_url = f'http://{IP}:{PORT}/static/realtime.json'
 json_local = CLIENT_PATH+'/realtime.json'
 
 
