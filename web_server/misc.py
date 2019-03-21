@@ -10,14 +10,9 @@ PACKAGE_NAME = 'transit_data_access'
 DATA_PATH = f'/data/{PACKAGE_NAME}/web_server'
 LOG_PATH = f'/var/log/{PACKAGE_NAME}/web_server'
 LOG_LEVEL = logging.INFO
-REALTIME_FREQ = 3 # realtime GTFS feed will be checked every REALTIME_FREQ seconds
 
-SERVER_CONF = []
-with open('server.conf') as conf_file:
-    for line in conf_file:
-        line = line.split('#')[0] # removes comments
-        line = line.strip().split('=') # converts a line in the form 'a = b' to [a, b]
-        SERVER_CONF[line[0]] = line[1]
+IP = '127.0.0.1'
+PORT = 64299
 
 ####################################################################################
 # LOG SETUP
