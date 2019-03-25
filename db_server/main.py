@@ -103,7 +103,11 @@ def main():
     parser_logger.info('Scheduler begun.')
 
     while not KILL_SERVER:
-        eventlet.greenthread.sleep(5)
+        try:
+            eventlet.greenthread.sleep(1)
+        except KeyboardInterrupt:
+            print('KeyboardInterrupt, exiting')
+            exit()
 
 if __name__ == "__main__":
     main()

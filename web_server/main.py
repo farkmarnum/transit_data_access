@@ -34,18 +34,22 @@ def hello_world():
 @web_socket.on('connect', namespace=web_socket_namespace)
 def connect(sid, environ):
     web_server_logger.info('Client connected: %s', sid)
-
+    try:
+        with open(json_local_fname, 'r') as json_local:
+            json = json_local.read()
+    except FileNotFoundError:
+        web_server_logger.info('%s does not exist, cannot send JSON to client', misc.DATA_PATH)
+    else:
+        web_socket.emit('json_push', json, namespace=web_socket_namespace, room=sid)
 
 def web_server_init():
     """ Initializes the websocket server within a greenthread
     """
     socket_app = socketio.WSGIApp(web_socket, flask_app)
-    eventlet.greenthread.spawn(
-        eventlet.wsgi.server(
-            eventlet.listen((misc.WEB_IP, misc.WEB_PORT)),
-            socket_app,
-            log=web_server_logger
-        )
+    eventlet.wsgi.server(
+        eventlet.listen((misc.WEB_IP, misc.WEB_PORT)),
+        socket_app,
+        log=web_server_logger
     )
 
 
@@ -73,14 +77,25 @@ def on_db_message(json):
         with open(json_local_fname, 'w') as json_local:
             json_local.write(json)
 
-    web_socket.emit('json_push', json, namespace=db_socket_namespace)
+    web_socket.emit('json_push', json, namespace=web_socket_namespace)
 
 
-def connect_to_db_server():
+def connect_to_db_server(attempt=0):
     """ sets up websocket connection to db server and listens in a greenthread
     """
-    db_socket.connect(f'http://{misc.DB_IP}:{misc.DB_PORT}', namespaces=[db_socket_namespace])
-    eventlet.greenthread.spawn(db_socket.wait)
+    try:
+        db_socket.connect(f'http://{misc.DB_IP}:{misc.DB_PORT}', namespaces=[db_socket_namespace])
+    except socketio.exceptions.ConnectionError:
+        if attempt < 5:
+            web_server_logger.warning('failed to connect to http://%s:%s',misc.DB_IP,misc.DB_PORT)
+            eventlet.greenthread.sleep(2)
+            connect_to_db_server(attempt=attempt+1)
+        else:
+            web_server_logger.error('failed to connect to db server 5 times, exiting')
+            print('failed to connect to db server 5 times')
+            exit()
+    else:
+        eventlet.greenthread.spawn(db_socket.wait)
 
 ###################################################################################################
 
@@ -89,13 +104,16 @@ def main():
     print(f'Logging in {misc.LOG_PATH}')
 
     connect_to_db_server()
-
     eventlet.greenthread.sleep(1)
 
-    web_server_init()
+    eventlet.greenthread.spawn(web_server_init)
 
     while not KILL_SERVER:
-        eventlet.greenthread.sleep(5)
+        try:
+            eventlet.greenthread.sleep(1)
+        except KeyboardInterrupt:
+            print('KeyboardInterrupt, exiting')
+            exit()
 
 
 if __name__ == "__main__":

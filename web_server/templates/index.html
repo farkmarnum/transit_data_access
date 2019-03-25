@@ -7,12 +7,31 @@
   </head>
   <body>
     <p>This site will receive new JSON every ~15 seconds!</p>
-    <div id='json_display'>
+    <div id='data_display'>
     </div>
     <script type="text/javascript">
       var socket = io.connect('http://' + document.domain + ':' + location.port + '/socketio');
       socket.on('json_push', function(json) {
-          document.getElementById('json_display').innerHTML = json
+        var date = new Date();
+        var current_timestamp = parseInt(date.getTime()/1000);
+        new_html = '';
+        realtime_data = JSON.parse(json);
+        Object.entries(realtime_data['stops']).forEach(
+          ([stop_id, stop]) => {
+            new_html += 'Stop: ' + stop['info']['name'] + ', ' + stop['info']['direction'] + '-bound<br>';
+            Object.entries(stop['arrivals']).forEach(
+              ([branch_id, arrivals]) => {
+                new_html += '&nbsp;&nbsp;Branch:' + branch_id + '<br>'
+                for (var i = 0; i < arrivals.length; i++) {
+                  arrival_delta = parseInt(arrivals[i])-current_timestamp
+                  new_html += '&nbsp;&nbsp;&nbsp;&nbsp;Arrival:' + arrival_delta + '<br>'
+                }
+                new_html += '<br>'
+              }
+            );
+          }
+        );
+        document.getElementById('data_display').innerHTML = new_html
       });
     </script>
   </body>
