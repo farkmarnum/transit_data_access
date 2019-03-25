@@ -12,6 +12,7 @@
     <script type="text/javascript">
       var socket = io.connect('https://' + document.domain + ':' + location.port + '/socketio');
       socket.on('json_push', function(json) {
+        console.log('new data!')
         var date = new Date();
         var current_timestamp = parseInt(date.getTime()/1000);
         new_html = '';

@@ -47,7 +47,7 @@ def web_server_init():
     """
     socket_app = socketio.WSGIApp(web_socket, flask_app)
     eventlet.wsgi.server(
-        eventlet.listen((misc.WEB_IP, misc.WEB_PORT)),
+        eventlet.listen((misc.WEB_SERVER_IP, misc.WEB_SERVER_PORT)),
         socket_app,
         log=web_server_logger
     )
@@ -84,10 +84,10 @@ def connect_to_db_server(attempt=0):
     """ sets up websocket connection to db server and listens in a greenthread
     """
     try:
-        db_socket.connect(f'http://{misc.DB_IP}:{misc.DB_PORT}', namespaces=[db_socket_namespace])
+        db_socket.connect(f'http://{misc.DB_SERVER_IP}:{misc.DB_SERVER_WEBSOCKET_PORT}', namespaces=[db_socket_namespace])
     except socketio.exceptions.ConnectionError:
         if attempt < 5:
-            web_server_logger.warning('failed to connect to http://%s:%s',misc.DB_IP,misc.DB_PORT)
+            web_server_logger.warning('failed to connect to http://%s:%s',misc.DB_SERVER_IP,misc.DB_SERVER_WEBSOCKET_PORT)
             eventlet.greenthread.sleep(2)
             connect_to_db_server(attempt=attempt+1)
         else:
