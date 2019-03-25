@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <title>Transit Data Access</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.2.0/socket.io.js" charset="utf-8"></script>
+  </head>
+  <body>
+    <p>This site will receive new JSON every ~15 seconds!</p>
+    <div id='json_display'>
+    </div>
+    <script type="text/javascript">
+      var socket = io.connect('http://' + document.domain + ':' + location.port + '/socketio');
+      socket.on('json_push', function(json) {
+          document.getElementById('json_display').innerHTML = json
+      });
+    </script>
+  </body>
+</html>

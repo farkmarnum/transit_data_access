@@ -3,8 +3,11 @@ Also sets up logging
 """
 import time
 import os
+import types
 import logging
-import threading
+import multiprocessing
+from flask import Flask, render_template
+from flask_socketio import SocketIO
 
 
 # CONSTANTS
@@ -15,7 +18,7 @@ LOG_LEVEL = logging.INFO
 REALTIME_FREQ = 3 # realtime GTFS feed will be checked every REALTIME_FREQ seconds
 
 IP = '127.0.0.1'
-PORT = 64299
+PORT = 65432
 
 ####################################################################################
 # LOG SETUP
@@ -53,11 +56,7 @@ except PermissionError:
 
 ####################################################################################
 
-
 # PACKAGE METHODS AND CLASSES
-def run_threaded(job_func, **kwargs):
-    job_thread = threading.Thread(target=job_func,kwargs=kwargs)
-    job_thread.start()
 
 def trip_to_shape(trip_id):
     """Takes a trip_id in form '092200_6..N03R' and returns what's after the last underscore

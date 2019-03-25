@@ -1,5 +1,6 @@
 """Classes and methods for static GTFS data
 """
+from profilehooks import profile
 import logging
 import os
 import shutil
@@ -8,6 +9,7 @@ import csv
 import zipfile
 from collections import defaultdict
 import json
+import eventlet
 import filecmp
 import datetime
 import requests
@@ -144,7 +146,6 @@ class StaticHandler:
         self._merge_trips_and_stops()
         return True
 
-
     def to_json(self, attempt=0):
         """ Stores self.static_data in self.gtfs_settings.static_json_path+'/static.json'
         """
@@ -207,7 +208,6 @@ class StaticHandler:
 
                 prev_trip = trip_id
                 departure = arrival
-
 
     def build(self, force=False):
         """Builds JSON from the GTFS (with improvements)

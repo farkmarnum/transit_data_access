@@ -4,8 +4,9 @@ import logging
 import time
 import os
 import json
+import eventlet
 import requests
-import gzip
+#import gzip
 from google.transit import gtfs_realtime_pb2
 
 from transit_system_config import MTA_SETTINGS
@@ -54,7 +55,7 @@ class RealtimeHandler:
             parser_logger.info('Loading new realtime GTFS. Recent by %s seconds', new_feed_timestamp-latest_feed_timestamp)
 
         except FileNotFoundError:
-            parser_logger.info('%s/latest_feed_timestamp.txt does not exist, attempting to create it', self.gtfs_settings.realtime_data_path)
+            parser_logger.info('%s/latest_feed_timestamp.txt does not exist, will create it', self.gtfs_settings.realtime_data_path)
             os.makedirs(self.gtfs_settings.realtime_data_path, exist_ok=True)
             parser_logger.info('Now, loading new realtime GTFS.')
 
@@ -89,6 +90,7 @@ class RealtimeHandler:
 
         for entity in self.realtime_data.entity:
             if entity.HasField('trip_update'):
+                eventlet.greenthread.sleep(0) # yield time to other server processes if necessary
                 trip_id, branch_id = self.entity_info(entity.trip_update)
                 if not branch_id:
                     continue
@@ -125,8 +127,8 @@ class RealtimeHandler:
                 json_file.write(json_str)
                 parser_logger.debug('Wrote realtime parsed data to %s/realtime.json', json_path)
 
-            with gzip.open(json_path+'/realtime.json.gz', 'wb') as gzip_file:
-                gzip_file.write(json_str.encode('utf-8'))
+            #with gzip.open(json_path+'/realtime.json.gz', 'wb') as gzip_file:
+            #    gzip_file.write(json_str.encode('utf-8'))
 
         except OSError:
             if attempt != 0:
