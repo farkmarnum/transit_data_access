@@ -10,7 +10,7 @@
     <div id='data_display'>
     </div>
     <script type="text/javascript">
-      var socket = io.connect('http://' + document.domain + ':' + location.port + '/socketio');
+      var socket = io.connect('https://' + document.domain + ':' + location.port + '/socketio');
       socket.on('json_push', function(json) {
         var date = new Date();
         var current_timestamp = parseInt(date.getTime()/1000);

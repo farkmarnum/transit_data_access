@@ -11,11 +11,11 @@ DATA_PATH = f'/data/{PACKAGE_NAME}/web_server'
 LOG_PATH = f'/var/log/{PACKAGE_NAME}/web_server'
 LOG_LEVEL = logging.INFO
 
-DB_IP = '127.0.0.1'
+DB_IP = '127.0.0.1' # this would be changed to the IP of the db server if separate
 DB_PORT = 65432
 
-WEB_IP = '127.0.0.1'
-WEB_PORT = 443 # HTTPS
+WEB_IP = '127.0.0.1' # this stays as localhost since NGINX is passing requests to localhost
+WEB_PORT = 8000
 
 ####################################################################################
 # LOG SETUP

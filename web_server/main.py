@@ -77,7 +77,7 @@ def on_db_message(json):
         with open(json_local_fname, 'w') as json_local:
             json_local.write(json)
 
-    web_socket.emit('json_push', json, namespace=web_socket_namespace)
+    web_socket.emit('json_push', json, namespace=db_socket_namespace)
 
 
 def connect_to_db_server(attempt=0):
