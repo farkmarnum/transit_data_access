@@ -20,6 +20,8 @@ REALTIME_FREQ = 3 # realtime GTFS feed will be checked every REALTIME_FREQ secon
 IP = '127.0.0.1'
 PORT = 65432
 
+TIMEOUT = 3.5
+
 ####################################################################################
 # LOG SETUP
 if not os.path.exists(LOG_PATH):
@@ -58,11 +60,51 @@ except PermissionError:
 
 # PACKAGE METHODS AND CLASSES
 
-def trip_to_shape(trip_id):
-    """Takes a trip_id in form '092200_6..N03R' and returns what's after the last underscore
+
+def trip_to_shape(trip_id, trip_to_shape_long_dict=None):
+    """Takes a trip_id in form '092200_6..N03R' or 'AFA18GEN-1037-Sunday-00_000600_1..S03R', and returns what's after the last underscore.
     This should be the shape_id ('6..N03R')
+
+    UNFORTUNATELY the MTA sucks and in most of the realtime feeds the trip.trip_id is in the form '092234_6..N' (with no shape indication)
+    If that's the case, the trip_to_shape_long_dict is used, which is in the form: dict[trip_shape_trunc][trip_start_time] = shape_id
     """
-    return trip_id.split('_').pop()
+    if trip_id[-1] not in 'NS': # if this is a good trip_id with shape information in it
+
+        shape_id = trip_id.split('_').pop()
+        if 'X' in shape_id: # I have no idea why a small subset of the shape_ids are like this... but they are. thanks MTA
+            shape_id = shape_id.split('X')[0]+'R'
+        return shape_id
+
+    else: # this is a baaaaaad trip_id. bad MTA, bad!
+
+        if trip_to_shape_long_dict:
+            start_time, truncated_shape_id = trip_id.split('_')[-2:] # '092234', '6..N'
+            start_time = int(start_time)
+
+            try:
+                shape_id = trip_to_shape_long_dict[truncated_shape_id][start_time]
+                if 'X' in shape_id: # I have no idea why a few of the 'shape_id's are like this... but they are. thanks MTA
+                    shape_id = shape_id.split('X')[0]+'R'
+                return shape_id
+
+            except KeyError:
+                try:
+                    adj_start_time = min(
+                        trip_to_shape_long_dict[truncated_shape_id].keys(),
+                        key=lambda x: min(
+                            abs(x-start_time),
+                            abs(x-(start_time+100*60*24))
+                        )
+                    )
+                    parser_logger.debug('trip_to_shape(): couldn\'t find a shape_id for %s with start_time=%s, next best is %s which gives %s', truncated_shape_id, start_time, adj_start_time, trip_to_shape_long_dict[truncated_shape_id][adj_start_time])
+                    return trip_to_shape_long_dict[truncated_shape_id][adj_start_time]
+
+                except ValueError:
+                        print('couldn\'t find a value...')
+                        exit()
+
+        else: # trip_to_shape_long_dict was not provided
+            return None
 
 class NestedDict(dict):
     """A dict that automatically creates new dicts within itself as needed"""
@@ -86,4 +128,4 @@ class TimeLogger():
         self.start_time = time.time()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-       parser_logger.debug('%s completed, took %s seconds\n', self.message_text, time.time()-self.start_time)
+       parser_logger.debug('%s completed, took %s seconds', self.message_text, time.time()-self.start_time)

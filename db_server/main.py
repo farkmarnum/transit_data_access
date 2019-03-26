@@ -21,7 +21,7 @@ eventlet.monkey_patch()
 schedule_logger = logging.getLogger('schedule')
 schedule_logger.setLevel(logging.WARNING)
 
-json_filename = f'{transit_system_config.MTA_SETTINGS.realtime_json_path}/realtime.json'
+json_filename = f'{transit_system_config.MTA_SETTINGS.realtime_json_path}/realtime.json.gz'
 
 KILL_SERVER = False
 
@@ -38,7 +38,7 @@ def connect(sid, environ):
 
 @sio.on('client_response', namespace=socket_namespace)
 def client_response(sid, data):
-    server_logger.info('Client response: %s', data)
+    server_logger.info('Client %s sent: %s', sid, data)
 
 @sio.on('disconnect', namespace=socket_namespace)
 def disconnect(sid):
@@ -57,17 +57,20 @@ def socketio_push(json):
 realtime_in_progress = False
 
 def realtime_parse_and_push():
+    parser_logger.debug('Running realtime_parse_and_push')
     global realtime_in_progress
     if realtime_in_progress:
-        print('whoa there, realtime.main is already running!')
-        exit()
+        parser_logger.info('realtime.main is already running! Will not call it again until it\'s complete')
+        return
     realtime_in_progress = True
 
     realtime_is_new = realtime.main()
     if realtime_is_new:
-        with open(json_filename, 'r') as json_file:
+        with open(json_filename, 'rb') as json_file:
             json = json_file.read()
             socketio_push(json)
+    else:
+        parser_logger.debug('No new realtime...')
 
     realtime_in_progress = False
 

@@ -3,6 +3,7 @@
 from profilehooks import profile
 import logging
 import os
+import sys
 import shutil
 import time
 import csv
@@ -20,6 +21,7 @@ from transit_system_config import MTA_SETTINGS, LIST_OF_FILES
 
 parser_logger = misc.parser_logger
 
+eventlet.monkey_patch()
 
 class StaticHandler:
     """Construction functions for TransitSystem"""
@@ -56,8 +58,10 @@ class StaticHandler:
         return row['stop_id']
 
     def _merge_trips_and_stops(self):
-        """Combines trips.csv stops.csv and stop_times.csv into route_stops_with_names.csv
+        """Combines trips.csv stops.csv and stop_times.csv into _locate_csv('route_stops_with_names')
         Keeps the columns in _rswn_list_of_columns
+
+        Also, compiles a csv of truncated_trip_id, shape_id and writes it to _locate_csv('trip_id_to_shape')
         """
         parser_logger.info("Cross referencing route, stop, and trip information...")
 
@@ -71,9 +75,18 @@ class StaticHandler:
 
         stop_times['stop_sequence'] = stop_times['stop_sequence'].astype(int)
 
-        parse_shape_from_trip = lambda trip_id: trip_id.str.replace(r'.*_(.*?$)', r'\1', regex=True)
+        parser_logger.info("Loaded trips, stops, and stop_times into DataFrames")
 
-        trips['shape_id'] = trips['shape_id'].fillna(parse_shape_from_trip(trips['trip_id']))
+        x_to_r = lambda str_: str_.replace(r'(.*?_.*?_.*\..*?)X.*', r'\1R', regex=True) # convert the weird shape_ids with 'X' in them to be <everything up to the X> + 'R'
+        slice_shape_from_trip = lambda str_: str_.replace(r'.*_(.*?$)', r'\1', regex=True) # slice what's after the last '_'
+
+        trips['shape_id'] = trips['shape_id'].fillna(
+            slice_shape_from_trip(
+                x_to_r(
+                    trips['trip_id'].str
+                )
+            )
+        ) # for any rows with empty 'shape_id', take the trip_id value, fix the 'X' if necessary, then slice to get shape_id
 
         composite = pd.merge(trips, stop_times, how='inner', on='trip_id')
         composite = pd.merge(composite, stops, how='inner', on='stop_id')
@@ -82,7 +95,26 @@ class StaticHandler:
 
         rswn_csv = self._locate_csv('route_stops_with_names')
         composite.to_csv(rswn_csv, index=False)
-        parser_logger.info('%s created\n', rswn_csv)
+        parser_logger.info('%s created', rswn_csv)
+
+        trip_id_to_shape = trips[['trip_id', 'shape_id']].copy()
+
+        _, trip_id_to_shape['trip_start_time'], trip_id_to_shape['trip_shape_trunc'] = trip_id_to_shape['trip_id'].str.split('_').str
+
+        trip_id_to_shape['trip_shape_trunc'] = trip_id_to_shape['trip_shape_trunc'].replace(r'(.*\.[NS]).*$', r'\1', regex=True)
+        trip_id_to_shape = trip_id_to_shape[['trip_shape_trunc','trip_start_time','shape_id']].drop_duplicates()
+        trip_id_to_shape = trip_id_to_shape.sort_values(['trip_shape_trunc','trip_start_time'])
+
+        dict_ = defaultdict(dict)
+        for _, row in trip_id_to_shape.iterrows():
+            dict_[row.trip_shape_trunc][int(row.trip_start_time)] = row.shape_id
+
+
+        tits_fname = f'{self.gtfs_settings.static_data_path}/trip_id_to_shape.json' # get your mind out of the gutter! 'tits' is clearly an abbreviation for trip_id_to_shape
+        with open(tits_fname, 'w') as tits_file:
+            json.dump(dict_, tits_file)
+
+        parser_logger.info('%s created', tits_fname)
 
     def has_static_data(self):
         """Checks if static_data_path is populated with the csv files in LIST_OF_FILES
@@ -108,16 +140,25 @@ class StaticHandler:
         tmp_path = self.gtfs_settings.static_tmp_path
         zip_path = tmp_path+'/static_data.zip'
 
-        os.makedirs(tmp_path, exist_ok=True)
-        os.makedirs(end_path, exist_ok=True)
 
-        parser_logger.info('Downloading GTFS static data from %s', url)
-        parser_logger.info('Downloading to %s', zip_path)
         try:
-            _new_data = requests.get(url, allow_redirects=True)
-        except requests.exceptions.ConnectionError:
-            parser_logger.error('Failed to connect to %s\n', url)
+            os.makedirs(tmp_path, exist_ok=True)
+            os.makedirs(end_path, exist_ok=True)
+        except PermissionError:
+            parser_logger.error('Don\'t have permission to write to %s or %s', end_path, tmp_path)
             exit()
+
+        parser_logger.info('Downloading GTFS static data from %s to %s', url, zip_path)
+        with eventlet.Timeout(misc.TIMEOUT):
+            try:
+                _new_data = requests.get(url, allow_redirects=True)
+            except (requests.exceptions.ConnectionError, eventlet.Timeout) as err:
+                parser_logger.error('%s: Failed to connect to %s\n', err, url)
+                if self.has_static_data():
+                    return False
+                else:
+                    print('Can\'t connect to', url, 'and don\'t have any existing static data')
+
 
         with open(zip_path, 'wb') as zip_outfile:
             zip_outfile.write(_new_data.content)
@@ -140,7 +181,7 @@ class StaticHandler:
         parser_logger.info('Deleting %s to make room for new static data', end_path)
         shutil.rmtree(end_path)
 
-        parser_logger.info('Moving new data from %s to %s\n', tmp_path, end_path)
+        parser_logger.info('Moving new data from %s to %s', tmp_path, end_path)
         os.rename(tmp_path, end_path)
 
         self._merge_trips_and_stops()
@@ -195,9 +236,10 @@ class StaticHandler:
                 arrival = datetime.timedelta(hours=int(arrival[0]), minutes=int(arrival[1]), seconds=int(arrival[2]))
 
                 if prev_trip == trip_id:
+                    route_id = shape_id.split('.')[0]
                     travel_time = int((arrival-departure).total_seconds())
                     if branch_id:
-                        self.static_data['stops'][stop_id]['travel_time'][branch_id] = travel_time
+                        self.static_data['stops'][stop_id]['travel_time'][route_id][branch_id] = travel_time
 
                 else:
                     try:
@@ -241,7 +283,6 @@ class StaticHandler:
                             'parent_station': row['parent_station'],
                             'direction': row['stop_id'][-1]
                         },
-                        'arrivals': misc.NestedDict(),
                         'travel_time': misc.NestedDict()
                     }
 
@@ -307,7 +348,7 @@ class StaticHandler:
                     transit_system['shape_to_branch'][shape_id] = new_branch_id
                     br_count[direction] += 1
 
-        transit_system['last_updated'] = int(time.time())
+        transit_system['static_timestamp'] = int(time.time())
 
         self.static_data = transit_system
         self._load_time_between_stops()
@@ -331,4 +372,11 @@ def main(force=False):
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        assert(sys.argv[1] in ('force'))
+    except AssertionError:
+        print('Usage: static.py force or static.py')
+    except IndexError:
+        main()
+    else:
+        main(force=True)

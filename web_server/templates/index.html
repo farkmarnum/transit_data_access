@@ -4,32 +4,54 @@
     <meta charset="utf-8">
     <title>Transit Data Access</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.2.0/socket.io.js" charset="utf-8"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/1.0.10/pako.min.js" charset="utf-8"></script>
   </head>
   <body>
-    <p>This site will receive new JSON every ~15 seconds!</p>
+    <p>MTA train times. Data last updated: <span id='data_timestamp'></span></p>
     <div id='data_display'>
     </div>
     <script type="text/javascript">
       var socket = io.connect('https://' + document.domain + ':' + location.port + '/socketio');
-      socket.on('json_push', function(json) {
-        console.log('new data!')
+      socket.on('json_push', function(data) {
+        var compressed = new Uint8Array();
+        compressed = data
+        try {
+          realtime_data = JSON.parse(pako.inflate(compressed, { to: 'string' }));
+
+          realtime_timestamp = new Date(realtime_data.realtime_timestamp*1000).toLocaleTimeString("en-US")
+          document.getElementById('data_timestamp').innerHTML = realtime_timestamp
+
+        } catch (err) {
+          console.log(err);
+          return
+        }
         var date = new Date();
         var current_timestamp = parseInt(date.getTime()/1000);
         new_html = '';
-        realtime_data = JSON.parse(json);
+
         Object.entries(realtime_data['stops']).forEach(
           ([stop_id, stop]) => {
             new_html += 'Stop: ' + stop['info']['name'] + ', ' + stop['info']['direction'] + '-bound<br>';
-            Object.entries(stop['arrivals']).forEach(
-              ([branch_id, arrivals]) => {
-                new_html += '&nbsp;&nbsp;Branch:' + branch_id + '<br>'
-                for (var i = 0; i < arrivals.length; i++) {
-                  arrival_delta = parseInt(arrivals[i])-current_timestamp
-                  new_html += '&nbsp;&nbsp;&nbsp;&nbsp;Arrival:' + arrival_delta + '<br>'
+            //console.log(stop['arrivals'])
+            if('arrivals' in stop) {
+              Object.entries(stop['arrivals']).forEach(
+                ([route_id, branches]) => {
+                  new_html += '&nbsp;&nbsp;Route: ' + route_id + '<br>'
+                  Object.entries(branches).forEach(
+                    ([branch_id, arrivals]) => {
+                      new_html += '&nbsp;&nbsp;&nbsp;&nbsp;Branch: ' + branch_id + '<br>'
+                      for (var i = 0; i < arrivals.length && i < 2; i++) {
+                        arrival_delta = parseInt(arrivals[i])-current_timestamp
+                        new_html += '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Arrival: ' + parseInt(arrival_delta/60) + ':' + arrival_delta%60 + '<br>'
+                      }
+                    }
+                  );
+                  new_html += '<br>'
                 }
-                new_html += '<br>'
-              }
-            );
+              );
+            } else {
+              new_html += '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;No arrivals<br><br>'
+            }
           }
         );
         document.getElementById('data_display').innerHTML = new_html
