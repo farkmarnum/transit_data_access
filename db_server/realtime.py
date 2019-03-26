@@ -63,8 +63,8 @@ class RealtimeHandler:
 
             try:
                 feed_message.ParseFromString(all_bytes)
-            except RuntimeWarning:
-                parser_logger.warning('RuntimeWarning when attempting: feed_message.ParseFromString(response.content)')
+            except (RuntimeWarning, SystemError) as err:
+                parser_logger.warning('%s when attempting: feed_message.ParseFromString(response.content)', err)
                 return False
             except protobuf_message.DecodeError:
                 parser_logger.error('DecodeError when attempting: feed_message.ParseFromString(response.content)')
