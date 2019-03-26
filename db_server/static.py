@@ -122,7 +122,7 @@ class StaticHandler:
         """
         all_files_are_loaded = True
         for file_ in LIST_OF_FILES:
-            all_files_are_loaded *= os.path.isfile(self._locate_csv(file_))
+            all_files_are_loaded *= os.path.isfile(f'{self.gtfs_settings.static_data_path}/{file_}')
         return all_files_are_loaded
 
     def update_(self, force=False):

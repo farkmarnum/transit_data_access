@@ -99,9 +99,9 @@ def trip_to_shape(trip_id, trip_to_shape_long_dict=None):
                     parser_logger.debug('trip_to_shape(): couldn\'t find a shape_id for %s with start_time=%s, next best is %s which gives %s', truncated_shape_id, start_time, adj_start_time, trip_to_shape_long_dict[truncated_shape_id][adj_start_time])
                     return trip_to_shape_long_dict[truncated_shape_id][adj_start_time]
 
-                except ValueError:
-                        print('couldn\'t find a value...')
-                        exit()
+                except (ValueError, KeyError):
+                        parser_logger.info('couldn\'t find a shape_id for %s', truncated_shape_id)
+                        return None
 
         else: # trip_to_shape_long_dict was not provided
             return None

@@ -6,16 +6,17 @@ from misc import DATA_PATH
 MTA_API_KEY = 'f775a76bd1960c98831b3c2b06c19bb5'
 
 LIST_OF_FILES = [
-    'agency',
-    'calendar_dates',
-    'calendar',
-    'route_stops_with_names',
-    'routes',
-    'shapes',
-    'stop_times',
-    'stops',
-    'transfers',
-    'trips'
+    'agency.txt',
+    'calendar_dates.txt',
+    'calendar.txt',
+    'route_stops_with_names.txt',
+    'routes.txt',
+    'shapes.txt',
+    'stop_times.txt',
+    'stops.txt',
+    'transfers.txt',
+    'trips.txt'
+    'trip_id_to_shape.json'
 ]
 
 def _mta_get_url(feed_id):
