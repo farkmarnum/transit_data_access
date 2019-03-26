@@ -29,6 +29,10 @@
         var current_timestamp = parseInt(date.getTime()/1000);
         new_html = '';
 
+        function zero_pad(number, padding) {
+          ("0".repeat(padding) + number).slice(-padding)
+        }
+
         Object.entries(realtime_data['stops']).forEach(
           ([stop_id, stop]) => {
             new_html += 'Stop: ' + stop['info']['name'] + ', ' + stop['info']['direction'] + '-bound<br>';
@@ -42,7 +46,7 @@
                       new_html += '&nbsp;&nbsp;&nbsp;&nbsp;Branch: ' + branch_id + '<br>'
                       for (var i = 0; i < arrivals.length && i < 2; i++) {
                         arrival_delta = parseInt(arrivals[i])-current_timestamp
-                        new_html += '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Arrival: ' + parseInt(arrival_delta/60) + ':' + arrival_delta%60 + '<br>'
+                        new_html += '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Arrival: ' + zero_pad(parseInt(arrival_delta/60), 2) + ':' + zero_pad(arrival_delta%60, 2) + '<br>'
                       }
                     }
                   );

@@ -39,7 +39,7 @@ class RealtimeHandler:
                 return response
             except (OSError, urllib_error.URLError, eventlet.Timeout) as err:
                 parser_logger.error('%s: unable to connect to %s', err, url)
-                return b''
+                return False
 
     def check_feed(self):
         """Gets a new realtime GTFS feed and checks if its timestamp is more recent
@@ -49,13 +49,12 @@ class RealtimeHandler:
         request_pool = eventlet.GreenPool(20)
         response_list = request_pool.imap(self.eventlet_fetch, self.gtfs_settings.realtime_urls)
 
-        all_bytes = b''.join(response_list)
-
-        if all_bytes == b'':
-            parser_logger.info('Unable to receive all feeds')
-            return False
-        else:
+        try:
+            all_bytes = b''.join(response_list)
             parser_logger.debug('realtime.py: received all feeds')
+        except TypeError:
+            parser_logger.info('Unable to receive all feeds, exiting check_feed & returning False')
+            return False
 
         feed_message = gtfs_realtime_pb2.FeedMessage()
 
