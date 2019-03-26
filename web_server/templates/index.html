@@ -3,16 +3,27 @@
   <head>
     <meta charset="utf-8">
     <title>Transit Data Access</title>
+    <link rel="stylesheet" href="/static/main.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.2.0/socket.io.js" charset="utf-8"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/1.0.10/pako.min.js" charset="utf-8"></script>
   </head>
   <body>
-    <p>MTA train times. Data last updated: <span id='data_timestamp'></span></p>
-    <div id='data_display'>
+    <p>MTA train times. Data last updated: <span id='data_timestamp' class='flash_on_update'></span></p>
+    <div id='data_display' class='flash_on_update'>
     </div>
     <script type="text/javascript">
+      function zero_pad(number, padding) {
+        return ("0".repeat(padding) + number).slice(-padding)
+      }
+
       var socket = io.connect('https://' + document.domain + ':' + location.port + '/socketio');
+
       socket.on('json_push', function(data) {
+        document.getElementsByClassName('flash_on_update').style.background_color = 'yellow';
+        window.setTimeout ( function() {
+            document.getElementsByClassName('flash_on_update').style.background_color = 'white';
+        }, 500);
+
         var compressed = new Uint8Array();
         compressed = data
         try {
@@ -25,13 +36,10 @@
           console.log(err);
           return
         }
+
         var date = new Date();
         var current_timestamp = parseInt(date.getTime()/1000);
         new_html = '';
-
-        function zero_pad(number, padding) {
-          ("0".repeat(padding) + number).slice(-padding)
-        }
 
         Object.entries(realtime_data['stops']).forEach(
           ([stop_id, stop]) => {

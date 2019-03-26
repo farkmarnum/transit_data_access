@@ -1,0 +1,5 @@
+
+.flash_on_update {
+  background-color: white;
+  transition: background-color .5s ease;
+}

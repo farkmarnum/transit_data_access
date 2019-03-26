@@ -32,6 +32,7 @@ def hello_world():
     web_server_logger.info('new http connection')
     return render_template('index.html')
 
+
 @web_socket.on('connect', namespace=web_socket_namespace)
 def connect(sid, environ):
     web_server_logger.info('Client connected: %s', sid)
