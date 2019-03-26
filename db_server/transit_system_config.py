@@ -15,7 +15,7 @@ LIST_OF_FILES = [
     'stop_times.txt',
     'stops.txt',
     'transfers.txt',
-    'trips.txt'
+    'trips.txt',
     'trip_id_to_shape.json'
 ]
 

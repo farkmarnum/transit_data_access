@@ -155,9 +155,11 @@ class StaticHandler:
             except (requests.exceptions.ConnectionError, eventlet.Timeout) as err:
                 parser_logger.error('%s: Failed to connect to %s\n', err, url)
                 if self.has_static_data():
+                    print('Can\'t connect to', url, 'but do have existing static data (err=',err)
                     return False
                 else:
-                    print('Can\'t connect to', url, 'and don\'t have any existing static data')
+                    print('Can\'t connect to', url, 'and don\'t have existing static data (err=',err)
+                    return False
 
 
         with open(zip_path, 'wb') as zip_outfile:
