@@ -6,6 +6,7 @@
     <link rel="stylesheet" href="/static/main.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.2.0/socket.io.js" charset="utf-8"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/1.0.10/pako.min.js" charset="utf-8"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js" charset="utf-8"></script>
   </head>
   <body>
     <p>MTA train times. Data last updated: <span id='data_timestamp' class='flash_on_update'></span></p>
@@ -19,10 +20,10 @@
       var socket = io.connect('https://' + document.domain + ':' + location.port + '/socketio');
 
       socket.on('json_push', function(data) {
-        document.getElementsByClassName('flash_on_update').style.background_color = 'yellow';
-        window.setTimeout ( function() {
-            document.getElementsByClassName('flash_on_update').style.background_color = 'white';
-        }, 500);
+        $(document).ready(function() {
+          $('.flash_on_update').css('background_color', 'yellow');
+          window.setTimeout( function() { $('.flash_on_update').css('background_color','white') }, 500)
+        };
 
         var compressed = new Uint8Array();
         compressed = data
