@@ -130,7 +130,7 @@ class RealtimeHandler:
             branch_id = self.static_data['shape_to_branch'][shape_id]
         except KeyError:
             if shape_id:
-                parser_logger.debug('entity_info(): couldn\'t find a branch_id for shape_id', shape_id, 'route_id', route_id, 'trip_id', trip_id)
+                parser_logger.debug('entity_info(): couldn\'t find a branch_id for shape_id %s route_id %s trip_id %s', shape_id, route_id, trip_id)
             branch_id = None
 
         return [trip_id, branch_id, route_id]
