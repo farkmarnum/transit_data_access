@@ -149,17 +149,16 @@ class StaticHandler:
             exit()
 
         parser_logger.info('Downloading GTFS static data from %s to %s', url, zip_path)
-        with eventlet.Timeout(misc.TIMEOUT):
-            try:
-                _new_data = requests.get(url, allow_redirects=True)
-            except (requests.exceptions.ConnectionError, eventlet.Timeout) as err:
-                parser_logger.error('%s: Failed to connect to %s\n', err, url)
-                if self.has_static_data():
-                    print('Can\'t connect to', url, 'but do have existing static data (err=',err)
-                    return False
-                else:
-                    print('Can\'t connect to', url, 'and don\'t have existing static data (err=',err)
-                    return False
+        try:
+            _new_data = requests.get(url, allow_redirects=True, timeout=5)
+        except requests.exceptions.RequestException as err:
+            parser_logger.error('%s: Failed to connect to %s\n', err, url)
+            if self.has_static_data():
+                print('Can\'t connect to', url, 'but do have existing static data (err=',err)
+                return False
+            else:
+                print('Can\'t connect to', url, 'and don\'t have existing static data (err=',err)
+                return False
 
 
         with open(zip_path, 'wb') as zip_outfile:

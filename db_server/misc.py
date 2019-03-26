@@ -100,7 +100,7 @@ def trip_to_shape(trip_id, trip_to_shape_long_dict=None):
                     return trip_to_shape_long_dict[truncated_shape_id][adj_start_time]
 
                 except (ValueError, KeyError):
-                        parser_logger.info('couldn\'t find a shape_id for %s', truncated_shape_id)
+                        parser_logger.debug('couldn\'t find a shape_id for %s', truncated_shape_id)
                         return None
 
         else: # trip_to_shape_long_dict was not provided
