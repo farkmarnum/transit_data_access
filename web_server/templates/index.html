@@ -17,25 +17,29 @@
         return ("0".repeat(padding) + number).slice(-padding)
       }
 
-      var socket = io.connect('https://' + document.domain + ':' + location.port + '/socketio');
-
-      socket.on('json_push', function(data) {
+      function flash_background() {
         $(document).ready(function() {
           $('.flash_on_update').css('background_color', 'yellow');
           window.setTimeout(
             function() {
               $('.flash_on_update').css('background_color','white')
-            }, 500
+            },
+            500
           )
-        )};
+        })
+      }
+
+      var socket = io.connect('https://' + document.domain + ':' + location.port + '/socketio');
+
+      socket.on('json_push', function(data) {
+        flash_background();
 
         var compressed = new Uint8Array();
-        compressed = data
+        compressed = data;
         try {
           realtime_data = JSON.parse(pako.inflate(compressed, { to: 'string' }));
-
-          realtime_timestamp = new Date(realtime_data.realtime_timestamp*1000).toLocaleTimeString("en-US")
-          document.getElementById('data_timestamp').innerHTML = realtime_timestamp
+          realtime_timestamp = new Date(realtime_data.realtime_timestamp*1000).toLocaleTimeString("en-US");
+          document.getElementById('data_timestamp').innerHTML = realtime_timestamp;
 
         } catch (err) {
           console.log(err);
@@ -70,8 +74,8 @@
               new_html += '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;No arrivals<br><br>'
             }
           }
-        );
-        document.getElementById('data_display').innerHTML = new_html
+        )
+        document.getElementById('data_display').innerHTML = new_html;
       });
     </script>
   </body>
