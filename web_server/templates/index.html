@@ -22,8 +22,12 @@
       socket.on('json_push', function(data) {
         $(document).ready(function() {
           $('.flash_on_update').css('background_color', 'yellow');
-          window.setTimeout( function() { $('.flash_on_update').css('background_color','white') }, 500)
-        };
+          window.setTimeout(
+            function() {
+              $('.flash_on_update').css('background_color','white')
+            }, 500
+          )
+        )};
 
         var compressed = new Uint8Array();
         compressed = data
