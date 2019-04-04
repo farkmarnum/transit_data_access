@@ -11,6 +11,7 @@ from eventlet.green.urllib import request
 from eventlet.green.urllib import error as urllib_error
 import warnings
 import pprint as pp
+import pyhash
 
 import gzip
 from google.transit import gtfs_realtime_pb2
@@ -24,6 +25,11 @@ parser_logger = misc.parser_logger
 eventlet.monkey_patch()
 
 DEP, ARR = 0, 1
+
+hasher = pyhash.super_fast_hash()
+
+def tuple_hash(tup):
+    return hasher(str(tup))
 
 def add_sorted(list_, element):
     index = bisect.bisect_left(list_, element)
@@ -300,30 +306,10 @@ class RealtimeHandler:
 
         for arrival, departures in self.realtime_graph.items():
             for departure, edge_time in departures.items():
-                try:
-                    arrival_number = hashes[hash(arrival)]
-                except KeyError:
-                    arrival_number = i
-                    hashes[hash(arrival)] = arrival_number
-                    i = i+1
-
-                try:
-                    departure_number = hashes[hash(departure)]
-                except KeyError:
-                    departure_number = i
-                    hashes[hash(departure)] = departure_number
-                    i = i+1
-
-                self.realtime_graph_hashed[arrival_number][departure_number] = edge_time
+                self.realtime_graph_hashed[tuple_hash(arrival)][tuple_hash(departure)] = edge_time
 
         for vertex, info in self.realtime_vertices_info.items():
-            try:
-                vertex_number = hashes[hash(vertex)]
-            except KeyError:
-                vertex_number = i
-                hashes[hash(vertex)] = vertex_number
-                i = i+1
-            self.realtime_vertices_info_hashed[vertex_number] = info
+            self.realtime_vertices_info_hashed[tuple_hash(vertex)] = info
 
 
         #pp.pprint(self.realtime_graph_hashed)
