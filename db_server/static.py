@@ -275,17 +275,17 @@ class StaticHandler:
         with open(self._locate_csv('stops'), mode='r') as stops_file:
             stops_csv_reader = csv.DictReader(stops_file)
             for row in stops_csv_reader:
-                if row['parent_station']:
-                    transit_system['stops'][row['stop_id']] = {
-                        'info': {
-                            'name': row['stop_name'],
-                            'lat': row['stop_lat'],
-                            'lon': row['stop_lon'],
-                            'parent_station': row['parent_station'],
-                            'direction': row['stop_id'][-1]
-                        },
-                        'travel_time': misc.NestedDict()
-                    }
+                #if row['parent_station']:
+                transit_system['stops'][row['stop_id']] = {
+                    'info': {
+                        'name': row['stop_name'],
+                        'lat': row['stop_lat'],
+                        'lon': row['stop_lon'],
+                        'parent_station': row['parent_station'],
+                        'direction': row['stop_id'][-1]
+                    },
+                    'travel_time': misc.NestedDict()
+                }
 
         # Load info for each route
         with open(self._locate_csv('routes'), mode='r') as route_file:
