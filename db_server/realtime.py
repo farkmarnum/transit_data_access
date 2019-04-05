@@ -3,9 +3,11 @@
 import logging
 import time
 import os
-from collections import defaultdict
+import base64
+from collections import defaultdict, OrderedDict
 import bisect
 import json
+import bson
 import eventlet
 from eventlet.green.urllib import request
 from eventlet.green.urllib import error as urllib_error
@@ -28,12 +30,73 @@ DEP, ARR = 0, 1
 
 hasher = pyhash.super_fast_hash()
 
-def tuple_hash(tup):
-    return hasher(str(tup))
+def small_hash(input_):
+    hash_int = hasher(str(input_))
+    hash_bytes = hash_int.to_bytes((hash_int.bit_length() + 7) // 8, 'big')
+    hash_base85 = base64.b85encode(hash_bytes)
+    hash_str = hash_base85.decode('utf-8')
+    return hash_str
+
 
 def add_sorted(list_, element):
     index = bisect.bisect_left(list_, element)
     list_.insert(index, element)
+
+
+class Station():
+    def add_departure(self, branch_id, departure_vertex_id, time_):
+        bisect.insort( self.departures_by_branch[branch_id], (time_, departure_vertex_id) )
+
+    def add_arrival(self, branch_id, arrival_vertex_id, time_):
+        bisect.insort( self.arrivals_by_branch[branch_id], (time_, arrival_vertex_id) )
+
+    def __init__(self, station_id, parent_station=None):
+        self.id_ = station_id
+        self.departures_by_branch = defaultdict(list)
+        self.arrivals_by_branch = defaultdict(list)
+        self.parent_station = parent_station
+
+class TransitVertex():
+
+    def add_info(self, station_id, route_id, branch_id):
+        self.station_id, self.route_id, self.branch_id = station_id, route_id, branch_id
+
+    def add_prev_station(self, prev_station):
+        self.prev_station = prev_station
+
+    def add_next_station(self, next_station):
+        self.next_station = next_station
+
+    def add_neighbor(self, tup):
+        (neighbor_id, weight) = tup
+        self.neighbors[neighbor_id] = weight
+
+    def add_transfer(self, tup):
+        (transfer_id, weight) = tup
+        self.transfers[transfer_id] = weight
+
+    def pack(self):
+        """ TODO: make pack() serialize the data in something like BSON
+        """
+        compact_list = [
+            self.station_id,
+            self.type_,
+            #self.route_id,
+            self.branch_id,
+            self.time_,
+            self.neighbors,
+            self.transfers
+        ]
+        return compact_list
+
+    def __init__(self, type_, time_, trip_id):
+        self.id_ = small_hash( (type_, time_, trip_id) )
+        self.type_ = type_
+        self.time_ = time_
+        #self.trip_id = trip_id
+        self.neighbors = {}
+        self.transfers = {}
+        self.prev_station = self.next_station = None
 
 
 class RealtimeHandler:
@@ -127,7 +190,6 @@ class RealtimeHandler:
 
         return True
 
-
     def entity_info(self, entity_body):
         """ pulls route_id, trip_id, and shape_id from entity
         """
@@ -155,9 +217,10 @@ class RealtimeHandler:
 
         Also creates self.realtime_graph, a directed graph of all trip stops
         """
-        self.realtime_graph = defaultdict(dict)
-        self.realtime_vertices_by_stop = defaultdict(lambda: defaultdict(list))
-        self.realtime_vertices_info = defaultdict(dict)
+
+        #self.realtime_graph = defaultdict(list)
+        self.vertices = {}
+        self.stations = {}
 
         self.parsed_data = self.static_data
         self.parsed_data['realtime_timestamp'] = self.realtime_data.header.timestamp
@@ -172,73 +235,50 @@ class RealtimeHandler:
                 if not branch_id:
                     continue
 
-                prev_departure_time = prev_station = None
+                prev_departure_time = prev_departure = prev_station = None
                 for stop_time_update in entity.trip_update.stop_time_update:
                     stop_id = stop_time_update.stop_id
                     try:
                         station_id = self.static_data['stops'][stop_id]['info']['parent_station']
                     except KeyError:
-                        #print(f'{stop_id} not found in stops.txt')
                         continue
 
                     if stop_time_update.arrival.time > time.time():
                         arrival_time = stop_time_update.arrival.time
-                        try:
-                            self.parsed_data['stops'][stop_id]['arrivals'][route_id][branch_id].append(arrival_time)
-                        except AttributeError: #if self...[branch_id] is not yet a list
-                            self.parsed_data['stops'][stop_id]['arrivals'][route_id][branch_id] = [arrival_time]
-                        except KeyError: #if self...['arrivals'] is not yet a NestedDict
-                            try:
-                                self.parsed_data['stops'][stop_id]['arrivals'] = misc.NestedDict()
-                                self.parsed_data['stops'][stop_id]['arrivals'][route_id][branch_id] = [arrival_time]
-                            except KeyError:
-                                parser_logger.debug('stop_id %s is not in stops.txt', stop_id)
+
+                        this_arrival = TransitVertex(ARR, arrival_time, trip_id)
+                        this_arrival.add_info(station_id, route_id, branch_id)
+
+                        self.vertices[this_arrival.id_] = this_arrival
 
                         try:
-                            self.parsed_data['trains'][route_id][branch_id][trip_id]['arrival_time'] = arrival_time
-                        except KeyError: #if self.parsed_data['trains'] is not yet a NestedDict
-                            self.parsed_data['trains'] = misc.NestedDict()
-                            self.parsed_data['trains'][route_id][branch_id][trip_id]['arrival_time'] = arrival_time
+                            station = self.stations[station_id]
+                            station.add_arrival(branch_id, this_arrival.id_, arrival_time)
+                        except KeyError:
+                            station = Station(station_id)
+                            station.add_arrival(branch_id, this_arrival.id_, arrival_time)
+                            self.stations[station_id] = station
 
-                        # GRAPH STUFF:
+                        if prev_departure:
+                            prev_departure.add_next_station( station_id )
+                            prev_departure.add_neighbor( (this_arrival.id_, arrival_time - prev_departure_time) )
 
-                        # create the current arrival vertex and add it to realtime_vertices_by_stop
-                        vertex_this_A = (ARR, arrival_time, trip_id, station_id)
-                        add_sorted(self.realtime_vertices_by_stop[station_id][branch_id], vertex_this_A)
+                            this_arrival.add_prev_station( prev_station )
 
-                        self.realtime_vertices_info[vertex_this_A] = {
-                            'type': ARR,
-                            'station_id': station_id,
-                            'prev_station': prev_station,
-                            'arrival_time': arrival_time
-                        }
 
-                        # if this isn't the first stop_time_update for this trip_id, add the edge of previous departure -> this arrival to realtime_graph
-                        if prev_departure_time:
-                            vertex_prev_D = (DEP, prev_departure_time, trip_id, prev_station)
-                            self.realtime_vertices_info[vertex_prev_D]['next_station'] = station_id
-
-                            self.realtime_graph[vertex_prev_D][vertex_this_A] = arrival_time - prev_departure_time
-
-                        # if this isn't the last stop_time_update for this trip_id, create the current departure vertex and add it to realtime_vertices_by_stop
-                        # and, add the edge of this arrival -> this departure to realtime_graph
-                        # and, load this departure_time into prev_departure_time to use with the next stop_time_update
                         departure_time = stop_time_update.departure.time
-
                         if departure_time:
-                            vertex_this_D = (DEP, departure_time, trip_id, station_id)
-                            add_sorted(self.realtime_vertices_by_stop[station_id][branch_id], vertex_this_D)
 
-                            self.realtime_vertices_info[vertex_this_D] = {
-                                'type': DEP,
-                                'station_id': station_id,
-                                'next_station': None,
-                                'departure_time': departure_time
-                            }
+                            this_departure = TransitVertex(DEP, departure_time, trip_id)
+                            this_departure.add_info(station_id, route_id, branch_id)
 
-                            self.realtime_graph[vertex_this_A][vertex_this_D] = departure_time - arrival_time # this is 0 for all MTA subway GTFS data
+                            self.vertices[this_departure.id_] = this_departure
+                            station.add_departure(branch_id, this_departure.id_, departure_time)
+
+                            this_arrival.add_neighbor( (this_departure.id_, departure_time - arrival_time) )
 
                             prev_departure_time = departure_time
+                            prev_departure = this_departure
                             prev_station = station_id
 
 
@@ -252,52 +292,54 @@ class RealtimeHandler:
                 self.parsed_data['trains'][route_id][branch_id][trip_id]['current_status'] = entity.vehicle.current_status
                 self.parsed_data['trains'][route_id][branch_id][trip_id]['last_detected_movement'] = entity.vehicle.timestamp
 
-        #pp.pprint(self.realtime_vertices_by_stop)
+
+        #self.realtime_graph_sorted = OrderedDict({
+        #    k: v for k, v in sorted(self.realtime_graph.items(), key=lambda kv: kv[1])
+        #})
+
+        """
+        self.packed_vertices = {
+            vertex.id_: vertex.pack() for _, vertex in self.vertices.items()
+        }
+
+        pp.pprint(self.packed_vertices)
+        """
+
 
     def add_transfer_edges(self):
-        for station_id, branches in self.realtime_vertices_by_stop.items():
-            for branch_id, vertices in branches.items():
-                split_index = bisect.bisect_right( vertices, (ARR, ) )
-                departures = vertices[:split_index]
-                arrivals = vertices[split_index:]
+        vertices = self.vertices
 
-                for arrival in arrivals:
-                    arrival_time = arrival[1]
-                    other_branches = dict(branches)
-                    other_branches.pop(branch_id)
+        for _, vertex in vertices.items():
+            if vertex.type_ == DEP:
+                continue
 
-                    if other_branches:
-                        for other_branch_id, other_vertices in other_branches.items():
-                            split_index = bisect.bisect_right( other_vertices, (ARR, ) )
-                            other_departures = other_vertices[:split_index]
+            station = self.stations[vertex.station_id]
+            # TODO method to get next allowable time based on transfer time between branches at stop and vertex.time_
 
-                            _index = bisect.bisect_left( other_departures, (DEP, arrival_time, ) )
-                            try:
-                                transfer_departure = other_departures[_index]
-                                transfer_departure_time = transfer_departure[1]
+            for _, list_of_departures_for_branch in station.departures_by_branch.items():
+                split_index = bisect.bisect_right( list_of_departures_for_branch, (vertex.time_, ) )
 
-                                prev_station = self.realtime_vertices_info[arrival]['prev_station']
-                                transfer_next_station = self.realtime_vertices_info[transfer_departure]['next_station']
+                try:
+                    next_departure_time, next_departure_id = list_of_departures_for_branch[split_index]
+                    next_departure = self.vertices[next_departure_id]
+                    if next_departure.next_station:
+                        if next_departure.next_station != vertex.prev_station:
+                            vertex.add_transfer( (next_departure_id, next_departure_time - vertex.time_) )
+                except IndexError:
+                    pass
 
-                                #print(prev_station,transfer_next_station)
-                                if transfer_next_station != prev_station and transfer_next_station: # if it's not taking you back to the previous stop or taking you nowhere
-                                    #print(arrival, transfer_departure, transfer_departure_time - arrival_time)
-                                    self.realtime_graph[arrival][transfer_departure] = transfer_departure_time - arrival_time
-                                    if transfer_departure_time < arrival_time:
-                                        print(transfer_departure_time, arrival_time)
+        self.packed_vertices = {
+            vertex.id_: vertex.pack() for _, vertex in self.vertices.items()
+        }
+        data = bson.BSON.encode(self.packed_vertices)
 
-                            except IndexError:
-                                #print('no upcoming departures')
-                                pass
+        with open('tmp.txt', 'w') as outfile:
+            outfile.write(data)
+        #pp.pprint(self.packed_vertices)
 
-                            except KeyError as e:
-                                print('key error:', self.realtime_vertices_info[arrival])
-                                print(e)
-                                exit()
+        exit()
 
-        #pp.pprint(self.realtime_graph)
-
-
+    """
     def hash_graph(self):
         self.realtime_graph_hashed = defaultdict(dict)
         self.realtime_vertices_info_hashed = defaultdict(dict)
@@ -311,14 +353,8 @@ class RealtimeHandler:
         for vertex, info in self.realtime_vertices_info.items():
             self.realtime_vertices_info_hashed[tuple_hash(vertex)] = info
 
-
-        #pp.pprint(self.realtime_graph_hashed)
-        #pp.pprint(self.realtime_vertices_info_hashed)
-
-        self.parsed_data['graph'] = {}
-
-        self.parsed_data['graph']['edges'] = self.realtime_graph_hashed
-        self.parsed_data['graph']['vertices'] = self.realtime_vertices_info_hashed
+        self.parsed_data['graph'] =
+    """
 
     def to_json(self, attempt=0):
         """dumps self.parsed_data to realtime.json
@@ -378,7 +414,7 @@ def main():
         if feed_is_new:
             realtime_handler.parse_feed()
             realtime_handler.add_transfer_edges()
-            realtime_handler.hash_graph()
+            #realtime_handler.hash_graph()
             realtime_handler.to_json()
 
         return feed_is_new
