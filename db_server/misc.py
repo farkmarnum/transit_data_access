@@ -20,7 +20,7 @@ REALTIME_FREQ = 3 # realtime GTFS feed will be checked every REALTIME_FREQ secon
 IP = '127.0.0.1'
 PORT = 65432
 
-TIMEOUT = 3.5
+TIMEOUT = 10
 
 ####################################################################################
 # LOG SETUP

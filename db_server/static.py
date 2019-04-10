@@ -254,9 +254,6 @@ class StaticHandler:
 
     def build(self, force=False):
         """Builds JSON from the GTFS (with improvements)
-
-        Generates the routes>shapes>stops|branches>stops tree
-        Merges shapes into branches
         """
         json_path = self.gtfs_settings.static_json_path
         if os.path.isfile(f'{json_path}/static.json') and not force:

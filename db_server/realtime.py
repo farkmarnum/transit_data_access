@@ -7,14 +7,19 @@ import base64
 from collections import defaultdict, OrderedDict
 import bisect
 import json
-import bson
 import eventlet
 from eventlet.green.urllib import request
 from eventlet.green.urllib import error as urllib_error
 import warnings
-import pprint as pp
-import pyhash
+import random
 
+import pprint as pp
+#import networkx as nx
+#import pygraphviz as pgv
+#import matplotlib.pyplot as plt
+from graphviz import Digraph
+
+import pyhash
 import gzip
 from google.transit import gtfs_realtime_pb2
 from google.protobuf import message as protobuf_message
@@ -42,24 +47,25 @@ def add_sorted(list_, element):
     index = bisect.bisect_left(list_, element)
     list_.insert(index, element)
 
-
 class Station():
-    def add_departure(self, branch_id, departure_vertex_id, time_):
-        bisect.insort( self.departures_by_branch[branch_id], (time_, departure_vertex_id) )
+    #def add_departure(self, branch_id, departure_vertex_id, time_):
+    #    bisect.insort( self.departures_by_branch[branch_id], (time_, departure_vertex_id) )
 
-    def add_arrival(self, branch_id, arrival_vertex_id, time_):
-        bisect.insort( self.arrivals_by_branch[branch_id], (time_, arrival_vertex_id) )
+    def add_vertex(self, branch_id, vertex_id, time_):
+        bisect.insort( self.vertices_by_branch[branch_id], (time_, vertex_id) )
+
+    def pack(self):
+        return self.vertices_by_branch
 
     def __init__(self, station_id, parent_station=None):
         self.id_ = station_id
-        self.departures_by_branch = defaultdict(list)
-        self.arrivals_by_branch = defaultdict(list)
+        self.vertices_by_branch = defaultdict(list)
         self.parent_station = parent_station
 
 class TransitVertex():
 
-    def add_info(self, station_id, route_id, branch_id):
-        self.station_id, self.route_id, self.branch_id = station_id, route_id, branch_id
+    def add_info(self, station_id, route_id, branch_id, stop_id):
+        self.station_id, self.route_id, self.branch_id, self.stop_id = station_id, route_id, branch_id, stop_id
 
     def add_prev_station(self, prev_station):
         self.prev_station = prev_station
@@ -67,41 +73,64 @@ class TransitVertex():
     def add_next_station(self, next_station):
         self.next_station = next_station
 
-    def add_neighbor(self, tup):
-        (neighbor_id, weight) = tup
-        self.neighbors[neighbor_id] = weight
+    def set_neighbor(self, neighbor_vertex):
+        self.neighbor = (neighbor_vertex.id_, neighbor_vertex.time_ - self.time_)
+        self.out_degree = self.out_degree + 1
+        neighbor_vertex.inc_in_degree()
 
-    def add_transfer(self, tup):
-        (transfer_id, weight) = tup
-        self.transfers[transfer_id] = weight
+    def add_transfer(self, transfer_vertex, time_before_departure):
+        self.transfers[transfer_vertex.id_] = ( time_before_departure, transfer_vertex.time_ - (self.time_ + time_before_departure) )
+        self.out_degree = self.out_degree + 1
+        transfer_vertex.inc_in_degree()
+
+    def inc_in_degree(self):
+        self.in_degree = self.in_degree + 1
+
+    def condense_neighbor(self, vertices):
+        neighbor_vertex_id, neighbor_vertex_weight = self.neighbor
+        self.condensed_neighbors[neighbor_vertex_id] = neighbor_vertex_weight
+
+        neighbor_vertex = vertices[neighbor_vertex_id]
+        new_neighbor_id, new_neighbor_weight = neighbor_vertex.neighbor
+        if new_neighbor_id:
+            self.neighbor = (new_neighbor_id, new_neighbor_weight + neighbor_vertex_weight)
+        else:
+            self.neighbor = (None, None)
+
+        neighbor_vertex.trivial = True
+
 
     def pack(self):
-        """ TODO: make pack() serialize the data in something like BSON
+        """ TODO: make pack() serialize the data in protobuf or similar?
         """
         compact_list = [
             self.station_id,
-            self.type_,
-            #self.route_id,
             self.branch_id,
             self.time_,
-            self.neighbors,
-            self.transfers
+            self.neighbor,
+            self.transfers,
+            self.condensed_neighbors
         ]
         return compact_list
 
-    def __init__(self, type_, time_, trip_id):
-        self.id_ = small_hash( (type_, time_, trip_id) )
-        self.type_ = type_
+    def __init__(self, time_, trip_id):
+        self.id_ = small_hash( (time_, trip_id) )
         self.time_ = time_
-        #self.trip_id = trip_id
-        self.neighbors = {}
+        self.in_degree = self.out_degree = 0
+        self.neighbor = (None, None)
         self.transfers = {}
+        self.condensed_neighbors = {}
         self.prev_station = self.next_station = None
+        self.trivial = False
+        #self.trip_id = trip_id
 
 
 class RealtimeHandler:
     """Gets a new realtime GTFS feed
     """
+
+    def stop_name(self, stop_id):
+        return self.static_data['stops'][stop_id]["info"]["name"]
 
     def get_static(self):
         """Loads the static.json file into self.static_data"""
@@ -110,14 +139,19 @@ class RealtimeHandler:
             self.static_data = json.loads(static_json_file.read())
         self.static_data['trains'] = misc.NestedDict()
 
-    def eventlet_fetch(self, url):
+    def eventlet_fetch(self, url, attempt=1):
+        max_attempts = 2
         with eventlet.Timeout(misc.TIMEOUT):
             try:
-                response = request.urlopen(url).read()
-                return response
+                with request.urlopen(url) as response:
+                    return response.read()
             except (OSError, urllib_error.URLError, eventlet.Timeout) as err:
-                parser_logger.error('%s: unable to connect to %s', err, url)
-                return False
+                if attempt < 2:
+                    parser_logger.info('%s: unable to connect to %s, RETRYING', err, url)
+                    self.eventlet_fetch(url, attempt + 1)
+                else:
+                    parser_logger.error('%s: unable to connect to %s, FAILED after %s attempts', err, url, attempt)
+                    return False
 
     def check_feed(self):
         """Gets a new realtime GTFS feed and checks if its timestamp is more recent
@@ -185,8 +219,8 @@ class RealtimeHandler:
         with open(latest_timestamp_file, 'w') as latest_response:
             latest_response.write(str(new_feed_timestamp))
 
-        with open(f'{self.gtfs_settings.realtime_data_path}/realtime', 'w') as realtime_raw_file:
-            realtime_raw_file.write(str(feed_message))
+        with open(f'{self.gtfs_settings.realtime_data_path}/realtime', 'wb') as realtime_raw_file:
+            realtime_raw_file.write(all_bytes)
 
         return True
 
@@ -217,8 +251,6 @@ class RealtimeHandler:
 
         Also creates self.realtime_graph, a directed graph of all trip stops
         """
-
-        #self.realtime_graph = defaultdict(list)
         self.vertices = {}
         self.stations = {}
 
@@ -229,13 +261,14 @@ class RealtimeHandler:
             route_data.pop('shapes')
 
         for entity in self.realtime_data.entity:
+            eventlet.greenthread.sleep(0) # yield time to other server processes if necessary
+
             if entity.HasField('trip_update'):
-                eventlet.greenthread.sleep(0) # yield time to other server processes if necessary
                 trip_id, branch_id, route_id = self.entity_info(entity.trip_update)
                 if not branch_id:
                     continue
 
-                prev_departure_time = prev_departure = prev_station = None
+                prev_vertex_time = prev_vertex = prev_station_id = None
                 for stop_time_update in entity.trip_update.stop_time_update:
                     stop_id = stop_time_update.stop_id
                     try:
@@ -244,43 +277,28 @@ class RealtimeHandler:
                         continue
 
                     if stop_time_update.arrival.time > time.time():
-                        arrival_time = stop_time_update.arrival.time
+                        vertex_time = stop_time_update.arrival.time
 
-                        this_arrival = TransitVertex(ARR, arrival_time, trip_id)
-                        this_arrival.add_info(station_id, route_id, branch_id)
+                        vertex = TransitVertex(vertex_time, trip_id)
+                        vertex.add_info(station_id, route_id, branch_id, stop_id)
 
-                        self.vertices[this_arrival.id_] = this_arrival
+                        self.vertices[vertex.id_] = vertex
 
                         try:
                             station = self.stations[station_id]
-                            station.add_arrival(branch_id, this_arrival.id_, arrival_time)
+                            station.add_vertex(branch_id, vertex.id_, vertex_time)
                         except KeyError:
                             station = Station(station_id)
-                            station.add_arrival(branch_id, this_arrival.id_, arrival_time)
+                            station.add_vertex(branch_id, vertex.id_, vertex_time)
                             self.stations[station_id] = station
 
-                        if prev_departure:
-                            prev_departure.add_next_station( station_id )
-                            prev_departure.add_neighbor( (this_arrival.id_, arrival_time - prev_departure_time) )
+                        if prev_vertex:
+                            prev_vertex.add_next_station( station_id )
+                            prev_vertex.set_neighbor( vertex )
 
-                            this_arrival.add_prev_station( prev_station )
+                            vertex.add_prev_station( prev_station_id )
 
-
-                        departure_time = stop_time_update.departure.time
-                        if departure_time:
-
-                            this_departure = TransitVertex(DEP, departure_time, trip_id)
-                            this_departure.add_info(station_id, route_id, branch_id)
-
-                            self.vertices[this_departure.id_] = this_departure
-                            station.add_departure(branch_id, this_departure.id_, departure_time)
-
-                            this_arrival.add_neighbor( (this_departure.id_, departure_time - arrival_time) )
-
-                            prev_departure_time = departure_time
-                            prev_departure = this_departure
-                            prev_station = station_id
-
+                        prev_station_id, prev_vertex, prev_vertex_time = station_id, vertex, vertex_time
 
 
             elif entity.HasField('vehicle'):
@@ -293,68 +311,124 @@ class RealtimeHandler:
                 self.parsed_data['trains'][route_id][branch_id][trip_id]['last_detected_movement'] = entity.vehicle.timestamp
 
 
-        #self.realtime_graph_sorted = OrderedDict({
-        #    k: v for k, v in sorted(self.realtime_graph.items(), key=lambda kv: kv[1])
-        #})
-
-        """
-        self.packed_vertices = {
-            vertex.id_: vertex.pack() for _, vertex in self.vertices.items()
-        }
-
-        pp.pprint(self.packed_vertices)
-        """
-
-
-    def add_transfer_edges(self):
+    def add_transfer_edges(self): # TODO: FIX THIS, it's not working
         vertices = self.vertices
 
         for _, vertex in vertices.items():
-            if vertex.type_ == DEP:
+
+            try:
+                station = self.stations[vertex.station_id]
+            except KeyError:
+                # (this vertex is the end of a trip)
                 continue
 
-            station = self.stations[vertex.station_id]
-            # TODO method to get next allowable time based on transfer time between branches at stop and vertex.time_
+            for branch_id, vertices_for_branch in station.vertices_by_branch.items():
+                # TODO method to get next allowable time based on transfer time between branches at stop and vertex.time_
+                if vertex.branch_id == branch_id:
+                    continue
 
-            for _, list_of_departures_for_branch in station.departures_by_branch.items():
-                split_index = bisect.bisect_right( list_of_departures_for_branch, (vertex.time_, ) )
+                split_index = bisect.bisect_right( vertices_for_branch, (vertex.time_, ) )
 
                 try:
-                    next_departure_time, next_departure_id = list_of_departures_for_branch[split_index]
-                    next_departure = self.vertices[next_departure_id]
-                    if next_departure.next_station:
-                        if next_departure.next_station != vertex.prev_station:
-                            vertex.add_transfer( (next_departure_id, next_departure_time - vertex.time_) )
+                    next_vertex_in_branch_time, next_vertex_in_branch_id = vertices_for_branch[split_index]
+
+                    wait_time = next_vertex_in_branch_time - vertex.time_
+
+                    transfer_vertex_id, _ = self.vertices[next_vertex_in_branch_id].neighbor
+                    try:
+                        transfer_vertex = self.vertices[ transfer_vertex_id ]
+                    except KeyError:
+                        continue
+
+                    if transfer_vertex.station_id not in [vertex.prev_station, vertex.next_station]: # (if the transfer_vertex is not headed to the current vertex's station or to the neighbor's next station)
+                        vertex.add_transfer( transfer_vertex, wait_time )
+
                 except IndexError:
+                    # there are no vertices for this branch after this vertex's time
                     pass
 
-        self.packed_vertices = {
-            vertex.id_: vertex.pack() for _, vertex in self.vertices.items()
-        }
-        data = bson.BSON.encode(self.packed_vertices)
+    def condense_trivial_vertices(self):
+        for _, vertex in self.vertices.items():
+            if vertex.trivial:
+                continue
 
-        with open('tmp.txt', 'w') as outfile:
-            outfile.write(data)
-        #pp.pprint(self.packed_vertices)
+            try:
+                neighbor_vertex = self.vertices[vertex.neighbor[0]]
+                while neighbor_vertex.in_degree == 1 and neighbor_vertex.out_degree <= 1:
+                    vertex.condense_neighbor(self.vertices)
+                    neighbor_vertex = self.vertices[vertex.neighbor[0]]
 
-        exit()
+            except KeyError:
+                pass
 
-    """
-    def hash_graph(self):
-        self.realtime_graph_hashed = defaultdict(dict)
-        self.realtime_vertices_info_hashed = defaultdict(dict)
-        hashes = {}
-        i = 0
+        self.compressed_vertices = {}
+        for vertex_id, vertex in self.vertices.items():
+            if not vertex.trivial:
+                self.compressed_vertices[vertex_id] = vertex
 
-        for arrival, departures in self.realtime_graph.items():
-            for departure, edge_time in departures.items():
-                self.realtime_graph_hashed[tuple_hash(arrival)][tuple_hash(departure)] = edge_time
 
-        for vertex, info in self.realtime_vertices_info.items():
-            self.realtime_vertices_info_hashed[tuple_hash(vertex)] = info
+    def pack_graph(self):
+            self.packed_vertices = {
+                vertex.id_: vertex.pack() for _, vertex in self.compressed_vertices.items()
+            }
 
-        self.parsed_data['graph'] =
-    """
+            self.packed_stations = {
+                station.id_: station.pack() for _, station in self.stations.items()
+            }
+
+            self.parsed_data['vertices'] = self.packed_vertices
+            self.parsed_data['stations'] = self.packed_stations
+
+    def viz(self):
+
+        dot = Digraph()
+
+        #random_vertex_id = random.choice( list( self.vertices.keys() ) )
+        #branch_ = self.vertices[random_vertex_id].branch_id
+        for vertex_id, vertex in self.compressed_vertices.items():
+            #if '4' not in vertex.branch_id:
+            #    continue
+
+            stop_info = self.static_data['stops'][vertex.station_id+'N']['info']
+            #x_ = int( (float(stop_info["lat"]) - 40.7590) * 2500 )
+            #y_ = int( (float(stop_info["lon"]) + 73.9845) * 2500 )
+            dot.node(vertex_id, f'{stop_info["name"]} {vertex.branch_id}')#, pos=f'{x_},{y_}!')
+
+            if vertex.neighbor[0]:
+                dot.edge(vertex_id, vertex.neighbor[0], str(vertex.neighbor[1]))
+
+            for transfer_vertex_id, tup in vertex.transfers.items():
+                time_before_departure, weight = tup
+                dot.edge(vertex_id, transfer_vertex_id, f'{time_before_departure}, {weight}')
+
+            #for c_n, weight in vertex.condensed_neighbors.items():
+            #    dot.edge(vertex_id, c_n, f'condensed: {weight}')
+
+        print('rendering...')
+        dot.render('neato', format='pdf')
+
+        V = E = 0
+        for _, vertex in self.compressed_vertices.items():
+            V = V + 1
+
+            if vertex.neighbor[0]:
+                E = E + 1
+
+            for transfer_id, _ in vertex.transfers.items():
+                E = E + 1
+
+        print(V, 'vertices, and', E, 'edges')
+
+        degrees = {}
+        for _, vertex in self.compressed_vertices.items():
+            #if vertex.in_degree == vertex.out_degree == 1:
+            degree_tup = (vertex.in_degree, vertex.out_degree)
+            try:
+                degrees[degree_tup] = degrees[degree_tup] + 1
+            except KeyError:
+                degrees[degree_tup] = 1
+
+        pp.pprint(degrees)
 
     def to_json(self, attempt=0):
         """dumps self.parsed_data to realtime.json
@@ -385,6 +459,15 @@ class RealtimeHandler:
 
             self.to_json(attempt=attempt+1)
 
+    def get_example_feed(self):
+        with open('/data/transit_data_access/db_server/MTA/realtime/raw/realtime', 'rb') as example_realtime_feed:
+            feed_message = gtfs_realtime_pb2.FeedMessage()
+            feed_message.ParseFromString(example_realtime_feed.read())
+
+        self.realtime_data = feed_message
+
+        return True
+
     def __init__(self, gtfs_settings, name=''):
         self.name = name
         self.gtfs_settings = gtfs_settings
@@ -411,11 +494,14 @@ def main():
         realtime_handler.get_static()
 
         feed_is_new = realtime_handler.check_feed()
+        #feed_is_new = realtime_handler.get_example_feed()
         if feed_is_new:
             realtime_handler.parse_feed()
             realtime_handler.add_transfer_edges()
-            #realtime_handler.hash_graph()
+            realtime_handler.condense_trivial_vertices()
+            realtime_handler.pack_graph()
             realtime_handler.to_json()
+            realtime_handler.viz()
 
         return feed_is_new
 
