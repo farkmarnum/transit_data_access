@@ -310,42 +310,47 @@ class RealtimeHandler:
                 self.parsed_data['trains'][route_id][branch_id][trip_id]['current_status'] = entity.vehicle.current_status
                 self.parsed_data['trains'][route_id][branch_id][trip_id]['last_detected_movement'] = entity.vehicle.timestamp
 
+    def add_tranfers_for_vertex_and_station(self, vertex, station, min_transfer_time=0):
+        for branch_id, vertices_for_branch in station.vertices_by_branch.items():
+            # TODO method to get next allowable time based on transfer time between branches at stop and vertex.time_
+            if vertex.branch_id == branch_id:
+                continue
+
+            split_index = bisect.bisect_right( vertices_for_branch, (vertex.time_ + min_transfer_time, ) )
+
+            try:
+                next_vertex_in_branch_time, next_vertex_in_branch_id = vertices_for_branch[split_index]
+
+                wait_time = next_vertex_in_branch_time - vertex.time_
+
+                transfer_vertex_id, _ = self.vertices[next_vertex_in_branch_id].neighbor
+                try:
+                    transfer_vertex = self.vertices[ transfer_vertex_id ]
+                except KeyError:
+                    continue
+
+                if transfer_vertex.station_id not in [vertex.prev_station, vertex.next_station]: # (if the transfer_vertex is not headed to the current vertex's station or to the neighbor's next station)
+                    vertex.add_transfer( transfer_vertex, wait_time )
+
+            except IndexError:
+                # there are no vertices for this branch after this vertex's time
+                pass
 
     def add_transfer_edges(self): # TODO: FIX THIS, it's not working
         vertices = self.vertices
 
         for _, vertex in vertices.items():
 
+            station = self.stations[vertex.station_id]
+            self.add_tranfers_for_vertex_and_station(vertex, station)
+
             try:
-                station = self.stations[vertex.station_id]
+                for transfer_station_id, min_transfer_time in self.static_data['transfers'][vertex.station_id].items():
+                    transfer_station = self.stations[transfer_station_id]
+                    self.add_tranfers_for_vertex_and_station(vertex, transfer_station, int(min_transfer_time))
             except KeyError:
-                # (this vertex is the end of a trip)
-                continue
-
-            for branch_id, vertices_for_branch in station.vertices_by_branch.items():
-                # TODO method to get next allowable time based on transfer time between branches at stop and vertex.time_
-                if vertex.branch_id == branch_id:
-                    continue
-
-                split_index = bisect.bisect_right( vertices_for_branch, (vertex.time_, ) )
-
-                try:
-                    next_vertex_in_branch_time, next_vertex_in_branch_id = vertices_for_branch[split_index]
-
-                    wait_time = next_vertex_in_branch_time - vertex.time_
-
-                    transfer_vertex_id, _ = self.vertices[next_vertex_in_branch_id].neighbor
-                    try:
-                        transfer_vertex = self.vertices[ transfer_vertex_id ]
-                    except KeyError:
-                        continue
-
-                    if transfer_vertex.station_id not in [vertex.prev_station, vertex.next_station]: # (if the transfer_vertex is not headed to the current vertex's station or to the neighbor's next station)
-                        vertex.add_transfer( transfer_vertex, wait_time )
-
-                except IndexError:
-                    # there are no vertices for this branch after this vertex's time
-                    pass
+                # (no additional transfer stations)
+                pass
 
     def condense_trivial_vertices(self):
         for _, vertex in self.vertices.items():
@@ -386,8 +391,8 @@ class RealtimeHandler:
         #random_vertex_id = random.choice( list( self.vertices.keys() ) )
         #branch_ = self.vertices[random_vertex_id].branch_id
         for vertex_id, vertex in self.compressed_vertices.items():
-            #if '4' not in vertex.branch_id:
-            #    continue
+            if '4' not in vertex.branch_id:
+                continue
 
             stop_info = self.static_data['stops'][vertex.station_id+'N']['info']
             #x_ = int( (float(stop_info["lat"]) - 40.7590) * 2500 )

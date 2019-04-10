@@ -266,13 +266,13 @@ class StaticHandler:
             'name': self.name,
             'routes': {},
             'stops': misc.NestedDict(),
+            'transfers': defaultdict(dict),
             'shape_to_branch': {}
         }
         # Load info for each stop (not including parent stops)
         with open(self._locate_csv('stops'), mode='r') as stops_file:
             stops_csv_reader = csv.DictReader(stops_file)
             for row in stops_csv_reader:
-                #if row['parent_station']:
                 transit_system['stops'][row['stop_id']] = {
                     'info': {
                         'name': row['stop_name'],
@@ -283,6 +283,12 @@ class StaticHandler:
                     },
                     'travel_time': misc.NestedDict()
                 }
+
+        with open(self._locate_csv('transfers'), mode='r') as transfers_file:
+            transfers_csv_reader = csv.DictReader(transfers_file)
+            for row in transfers_csv_reader:
+                if row['transfer_type'] == '2':
+                    transit_system['transfers'][row['from_stop_id']][row['to_stop_id']] = row['min_transfer_time']
 
         # Load info for each route
         with open(self._locate_csv('routes'), mode='r') as route_file:
