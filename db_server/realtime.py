@@ -623,7 +623,11 @@ def dijkstra(realtime_handler_obj, starting_station_id, ending_station_id):
     best_end_vertex = vertices[best_end_vertex_id]
     """
 
-    out_str = f'The shortest path from {stop_name(starting_station_id)} to {stop_name(best_end_vertex.station_id)} takes {misc.mins_and_secs(weights[best_end_vertex_id])}'
+    if weights[best_end_vertex_id] == float('infinity'):
+        print('No path found.')
+        return False
+
+    out_str = f'The shortest path from {stop_name(starting_station_id)} to {stop_name(best_end_vertex.station_id)} takes {misc.hr_min_sec(weights[best_end_vertex_id])}'
     print(out_str)
     print('-'*len(out_str),'\n')
 
@@ -633,10 +637,10 @@ def dijkstra(realtime_handler_obj, starting_station_id, ending_station_id):
     for path_item in full_path:
         is_transfer, station_id, route_id, travel_time, wait_time = path_item
         if is_transfer:
-            print('TRANSFER TO', route_id, '- wait time:', misc.mins_and_secs(wait_time))
-            print('    ride to', stop_name(station_id), 'which takes', misc.mins_and_secs(travel_time))
+            print('TRANSFER TO', route_id, '- wait time:', misc.hr_min_sec(wait_time))
+            print('    ride to', stop_name(station_id), 'which takes', misc.hr_min_sec(travel_time))
         else:
-            print('    ride to', stop_name(station_id), 'which takes', misc.mins_and_secs(travel_time))
+            print('    ride to', stop_name(station_id), 'which takes', misc.hr_min_sec(travel_time))
 
     print('\n')
 

@@ -60,25 +60,32 @@ except PermissionError:
 
 # PACKAGE METHODS AND CLASSES
 
-def mins_and_secs(total_seconds):
-    mins = int(total_seconds / 60)
+def hr_min_sec(total_seconds):
+    hrs = int(total_seconds / 3600)
+    mins = int( (total_seconds % 3600) / 60)
     secs = int(total_seconds % 60)
     suffix = ''
+    secbuff = ''
+    minbuff = ''
 
-    if secs < 10:
-        secs = '0' + str(secs)
+    if hrs < 1:
+        hrs = ''
     else:
-        secs = str(secs)
+        hrs = str(hrs) + ':'
+        if mins < 10:
+            minbuff = '0'
 
     if mins < 1:
         mins = ''
-        suffix = 'seconds'
+        suffix = ' seconds'
     else:
         mins = str(mins) + ':'
+        if secs < 10:
+            secbuff = '0'
 
-    out_str = mins + secs + suffix
+    secs = str(secs)
 
-    return out_str
+    return hrs + minbuff + mins + secbuff + secs + suffix
 
 def trip_to_shape(trip_id, trip_to_shape_long_dict=None):
     """Takes a trip_id in form '092200_6..N03R' or 'AFA18GEN-1037-Sunday-00_000600_1..S03R', and returns what's after the last underscore.
