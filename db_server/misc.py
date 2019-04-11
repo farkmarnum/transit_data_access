@@ -60,6 +60,25 @@ except PermissionError:
 
 # PACKAGE METHODS AND CLASSES
 
+def mins_and_secs(total_seconds):
+    mins = int(total_seconds / 60)
+    secs = int(total_seconds % 60)
+    suffix = ''
+
+    if secs < 10:
+        secs = '0' + str(secs)
+    else:
+        secs = str(secs)
+
+    if mins < 1:
+        mins = ''
+        suffix = 'seconds'
+    else:
+        mins = str(mins) + ':'
+
+    out_str = mins + secs + suffix
+
+    return out_str
 
 def trip_to_shape(trip_id, trip_to_shape_long_dict=None):
     """Takes a trip_id in form '092200_6..N03R' or 'AFA18GEN-1037-Sunday-00_000600_1..S03R', and returns what's after the last underscore.
@@ -73,6 +92,11 @@ def trip_to_shape(trip_id, trip_to_shape_long_dict=None):
         shape_id = trip_id.split('_').pop()
         if 'X' in shape_id: # I have no idea why a small subset of the shape_ids are like this... but they are. thanks MTA
             shape_id = shape_id.split('X')[0]+'R'
+
+        if shape_id == '1..S02R':
+            return '1..S03R'
+        elif shape_id == '1..N02R':
+            return '1..N03R'
         return shape_id
 
     else: # this is a baaaaaad trip_id. bad MTA, bad!
@@ -100,8 +124,8 @@ def trip_to_shape(trip_id, trip_to_shape_long_dict=None):
                     return trip_to_shape_long_dict[truncated_shape_id][adj_start_time]
 
                 except (ValueError, KeyError):
-                        parser_logger.debug('couldn\'t find a shape_id for %s', truncated_shape_id)
-                        return None
+                    parser_logger.debug('couldn\'t find a shape_id for %s', truncated_shape_id)
+                    return None
 
         else: # trip_to_shape_long_dict was not provided
             return None
@@ -128,4 +152,4 @@ class TimeLogger():
         self.start_time = time.time()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-       parser_logger.debug('%s completed, took %s seconds', self.message_text, time.time()-self.start_time)
+       parser_logger.info('%s completed, took %s seconds', self.message_text, time.time()-self.start_time)

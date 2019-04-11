@@ -3,7 +3,9 @@
 import logging
 import time
 import os
+import sys
 import base64
+import heapq
 from collections import defaultdict, OrderedDict
 import bisect
 import json
@@ -53,6 +55,7 @@ class Station():
 
     def add_vertex(self, branch_id, vertex_id, time_):
         bisect.insort( self.vertices_by_branch[branch_id], (time_, vertex_id) )
+        self.vertices.append(vertex_id)
 
     def pack(self):
         return self.vertices_by_branch
@@ -60,6 +63,7 @@ class Station():
     def __init__(self, station_id, parent_station=None):
         self.id_ = station_id
         self.vertices_by_branch = defaultdict(list)
+        self.vertices = []
         self.parent_station = parent_station
 
 class TransitVertex():
@@ -109,7 +113,7 @@ class TransitVertex():
             self.time_,
             self.neighbor,
             self.transfers,
-            self.condensed_neighbors
+            #self.condensed_neighbors
         ]
         return compact_list
 
@@ -130,7 +134,10 @@ class RealtimeHandler:
     """
 
     def stop_name(self, stop_id):
-        return self.static_data['stops'][stop_id]["info"]["name"]
+        try:
+            return self.static_data['stops'][stop_id]["info"]["name"]
+        except KeyError:
+            return self.static_data['stops'][stop_id + 'N']["info"]["name"]
 
     def get_static(self):
         """Loads the static.json file into self.static_data"""
@@ -233,7 +240,6 @@ class RealtimeHandler:
         if '6..N04' in trip_id or '6..S04' in trip_id: # i don't even know anymore...
             trip_id = trip_id.split('X')[0][:-2]
 
-
         shape_id = misc.trip_to_shape(trip_id, trip_to_shape_long_dict=self.trip_to_shape_long)
 
         try:
@@ -310,47 +316,33 @@ class RealtimeHandler:
                 self.parsed_data['trains'][route_id][branch_id][trip_id]['current_status'] = entity.vehicle.current_status
                 self.parsed_data['trains'][route_id][branch_id][trip_id]['last_detected_movement'] = entity.vehicle.timestamp
 
-    def add_tranfers_for_vertex_and_station(self, vertex, station, min_transfer_time=0):
-        for branch_id, vertices_for_branch in station.vertices_by_branch.items():
-            # TODO method to get next allowable time based on transfer time between branches at stop and vertex.time_
-            if vertex.branch_id == branch_id:
-                continue
-
-            split_index = bisect.bisect_right( vertices_for_branch, (vertex.time_ + min_transfer_time, ) )
-
-            try:
-                next_vertex_in_branch_time, next_vertex_in_branch_id = vertices_for_branch[split_index]
-
-                wait_time = next_vertex_in_branch_time - vertex.time_
-
-                transfer_vertex_id, _ = self.vertices[next_vertex_in_branch_id].neighbor
-                try:
-                    transfer_vertex = self.vertices[ transfer_vertex_id ]
-                except KeyError:
-                    continue
-
-                if transfer_vertex.station_id not in [vertex.prev_station, vertex.next_station]: # (if the transfer_vertex is not headed to the current vertex's station or to the neighbor's next station)
-                    vertex.add_transfer( transfer_vertex, wait_time )
-
-            except IndexError:
-                # there are no vertices for this branch after this vertex's time
-                pass
-
     def add_transfer_edges(self): # TODO: FIX THIS, it's not working
         vertices = self.vertices
 
         for _, vertex in vertices.items():
 
             station = self.stations[vertex.station_id]
-            self.add_tranfers_for_vertex_and_station(vertex, station)
+            add_tranfers_for_vertex_and_station(vertices, vertex, station)
 
             try:
                 for transfer_station_id, min_transfer_time in self.static_data['transfers'][vertex.station_id].items():
                     transfer_station = self.stations[transfer_station_id]
-                    self.add_tranfers_for_vertex_and_station(vertex, transfer_station, int(min_transfer_time))
+                    add_tranfers_for_vertex_and_station(vertices, vertex, transfer_station, int(min_transfer_time))
             except KeyError:
                 # (no additional transfer stations)
                 pass
+
+        V = E = 0
+        for _, vertex in self.vertices.items():
+            V = V + 1
+
+            if vertex.neighbor[0]:
+                E = E + 1
+
+            for transfer_id, _ in vertex.transfers.items():
+                E = E + 1
+
+        print('Generated a graph with', V, 'vertices, and', E, 'edges.\n')
 
     def condense_trivial_vertices(self):
         for _, vertex in self.vertices.items():
@@ -374,7 +366,7 @@ class RealtimeHandler:
 
     def pack_graph(self):
             self.packed_vertices = {
-                vertex.id_: vertex.pack() for _, vertex in self.compressed_vertices.items()
+                vertex.id_: vertex.pack() for _, vertex in self.vertices.items()
             }
 
             self.packed_stations = {
@@ -384,15 +376,16 @@ class RealtimeHandler:
             self.parsed_data['vertices'] = self.packed_vertices
             self.parsed_data['stations'] = self.packed_stations
 
+
     def viz(self):
 
         dot = Digraph()
 
         #random_vertex_id = random.choice( list( self.vertices.keys() ) )
         #branch_ = self.vertices[random_vertex_id].branch_id
-        for vertex_id, vertex in self.compressed_vertices.items():
-            if '4' not in vertex.branch_id:
-                continue
+        for vertex_id, vertex in self.vertices.items():
+            #if '4' not in vertex.branch_id:
+            #    continue
 
             stop_info = self.static_data['stops'][vertex.station_id+'N']['info']
             #x_ = int( (float(stop_info["lat"]) - 40.7590) * 2500 )
@@ -438,6 +431,9 @@ class RealtimeHandler:
     def to_json(self, attempt=0):
         """dumps self.parsed_data to realtime.json
         """
+        #self.parsed_data.pop('shape_to_branch')
+        #self.parsed_data.pop('transfers')
+
         json_path = self.gtfs_settings.realtime_json_path
         json_str = json.dumps(self.parsed_data)
 
@@ -464,7 +460,7 @@ class RealtimeHandler:
 
             self.to_json(attempt=attempt+1)
 
-    def get_example_feed(self):
+    def get_prev_feed(self):
         with open('/data/transit_data_access/db_server/MTA/realtime/raw/realtime', 'rb') as example_realtime_feed:
             feed_message = gtfs_realtime_pb2.FeedMessage()
             feed_message.ParseFromString(example_realtime_feed.read())
@@ -490,23 +486,190 @@ class RealtimeHandler:
                 for outer_k, outer_v in nested_dict_.items()
             }
 
+def add_tranfers_for_vertex_and_station(vertices, vertex, station, min_transfer_time=0):
+    for branch_id, vertices_for_branch in station.vertices_by_branch.items():
+        # TODO method to get next allowable time based on transfer time between branches at stop and vertex.time_
+        if vertex.branch_id == branch_id:
+            continue
+
+        split_index = bisect.bisect_right( vertices_for_branch, (vertex.time_ + min_transfer_time, ) )
+
+        try:
+            next_vertex_in_branch_time, next_vertex_in_branch_id = vertices_for_branch[split_index]
+
+            wait_time = next_vertex_in_branch_time - vertex.time_
+
+            transfer_vertex_id, _ = vertices[next_vertex_in_branch_id].neighbor
+            try:
+                transfer_vertex = vertices[ transfer_vertex_id ]
+            except KeyError:
+                continue
+
+            if transfer_vertex.station_id not in [vertex.prev_station, vertex.next_station]: # (if the transfer_vertex is not headed to the current vertex's station or to the neighbor's next station)
+            #if transfer_vertex.station_id != vertex.prev_station:
+                vertex.add_transfer( transfer_vertex, wait_time )
+
+        except IndexError:
+            # there are no vertices for this branch after this vertex's time
+            pass
+
+
+def dijkstra(realtime_handler_obj, starting_station_id, ending_station_id):
+    """ implements dijkstra's shortest-path algorithm
+    """
+    vertices, stations, stop_name = realtime_handler_obj.vertices, realtime_handler_obj.stations, realtime_handler_obj.stop_name
+
+    if starting_station_id not in stations:
+        print(f'{starting_station_id} not found')
+        return False
+
+    if ending_station_id not in stations:
+        print(f'{ending_station_id} not found')
+        return False
+
+    starting_station = stations[starting_station_id]
+    ending_station = stations[ending_station_id]
+
+    starting_vertex = TransitVertex(time.time(), 'unique')
+    starting_vertex.add_info(starting_station_id, None, None, None)
+    vertices[starting_vertex.id_] = starting_vertex
+    ending_vertices = ending_station.vertices
+
+    add_tranfers_for_vertex_and_station(vertices, starting_vertex, starting_station)
+
+    weights = {vertex_id: float('infinity') for vertex_id, _ in vertices.items()}
+    paths = {vertex_id: [] for vertex_id, _ in vertices.items()}
+
+    weights[starting_vertex.id_] = 0
+    paths[starting_vertex.id_] = [ (False, starting_station_id, None, 0) ]
+
+    queue = []
+    #orig_queue = []
+
+    for vertex_id, weight in weights.items():
+        heapq.heappush(queue, (weight, vertex_id))
+        #heapq.heappush(orig_queue, (weight, vertex_id))
+
+    best_end_vertex = best_end_vertex_id = None
+
+    removed = []
+
+    while len(queue) > 0:
+        entry = heapq.heappop(queue)
+        if entry in removed:
+            continue
+
+        current_weight, current_vertex_id = entry
+
+        vertex = vertices[current_vertex_id]
+
+        if current_vertex_id in ending_vertices:
+            best_end_vertex_id = current_vertex_id
+            best_end_vertex = vertices[best_end_vertex_id]
+            break
+
+        neighbor_nodes = {}
+        if vertex.neighbor[0]:
+            neighbor_nodes[vertex.neighbor[0]] = int(vertex.neighbor[1])
+
+        # TODO check for transfers not None?
+        for transfer_node_id, transfer_node_time in vertex.transfers.items():
+                neighbor_nodes[transfer_node_id] = int(transfer_node_time[0])+int(transfer_node_time[1])
+
+        for neighbor_id, neighbor_weight in neighbor_nodes.items():
+            new_weight = weights[current_vertex_id] + neighbor_weight
+
+            #if neighbor_id in ending_vertices:
+            #    print(neighbor_id, new_weight)
+
+            if new_weight < weights[neighbor_id]:
+                #try:
+                removed.append( (weights[neighbor_id], neighbor_id) )
+                heapq.heappush(queue, (new_weight, neighbor_id) )
+                #except ValueError:
+                #    pass
+
+                weights[neighbor_id] = new_weight
+
+                if neighbor_id in vertex.transfers.keys():
+                    is_transfer = True
+                    travel_time = int(transfer_node_time[1])
+                    wait_time   = int(transfer_node_time[0])
+                else:
+                    is_transfer = False
+                    travel_time = neighbor_weight
+                    wait_time = 0
+
+                new_path_item = (
+                    is_transfer,
+                    vertices[neighbor_id].station_id,
+                    vertices[neighbor_id].route_id,
+                    travel_time,
+                    wait_time
+                )
+
+                new_path = paths[current_vertex_id] + [new_path_item]
+                paths[neighbor_id] = new_path
+
+    """
+    best_weight = float('infinity')
+    print(ending_vertices)
+    for ending_vertex_id in ending_vertices:
+        print(ending_vertex_id, weights[ending_vertex_id])
+        if weights[ending_vertex_id] < best_weight:
+            best_weight = weights[ending_vertex_id]
+            best_end_vertex_id = ending_vertex_id
+
+    best_end_vertex = vertices[best_end_vertex_id]
+    """
+
+    out_str = f'The shortest path from {stop_name(starting_station_id)} to {stop_name(best_end_vertex.station_id)} takes {misc.mins_and_secs(weights[best_end_vertex_id])}'
+    print(out_str)
+    print('-'*len(out_str),'\n')
+
+    full_path = paths[best_end_vertex_id]
+    full_path.pop(0)
+
+    for path_item in full_path:
+        is_transfer, station_id, route_id, travel_time, wait_time = path_item
+        if is_transfer:
+            print('TRANSFER TO', route_id, '- wait time:', misc.mins_and_secs(wait_time))
+            print('    ride to', stop_name(station_id), 'which takes', misc.mins_and_secs(travel_time))
+        else:
+            print('    ride to', stop_name(station_id), 'which takes', misc.mins_and_secs(travel_time))
+
+    print('\n')
 
 def main():
     """Creates new RealtimeHandler, then calls get_static() and check_feed()
     """
-    with misc.TimeLogger('realtime.py') as _tl:
-        realtime_handler = RealtimeHandler(MTA_SETTINGS, name='MTA')
-        realtime_handler.get_static()
+    parser_logger.info('\n')
 
-        feed_is_new = realtime_handler.check_feed()
-        #feed_is_new = realtime_handler.get_example_feed()
-        if feed_is_new:
+    with misc.TimeLogger('realtime.py') as _tl_all:
+        with misc.TimeLogger('get_static()') as _tl:
+            realtime_handler = RealtimeHandler(MTA_SETTINGS, name='MTA')
+            realtime_handler.get_static()
+
+        with misc.TimeLogger('check_feed()') as _tl:
+            feed_is_new = realtime_handler.check_feed()
+
+        if not feed_is_new:
+            realtime_handler.get_prev_feed()
+
+        with misc.TimeLogger('parse_feed()') as _tl:
             realtime_handler.parse_feed()
+
+        with misc.TimeLogger('add_transfer_edges()') as _tl:
             realtime_handler.add_transfer_edges()
-            realtime_handler.condense_trivial_vertices()
-            realtime_handler.pack_graph()
-            realtime_handler.to_json()
-            realtime_handler.viz()
+
+        #with misc.TimeLogger('condense_trivial_vertices()') as _tl:
+        #    realtime_handler.condense_trivial_vertices()
+
+        with misc.TimeLogger('dijkstra()') as _tl:
+            dijkstra(realtime_handler, sys.argv[1], sys.argv[2])
+
+        realtime_handler.pack_graph()
+        realtime_handler.to_json()
 
         return feed_is_new
 
