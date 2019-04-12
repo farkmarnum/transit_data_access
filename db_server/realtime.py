@@ -65,11 +65,13 @@ class Station():
         self.vertices_by_branch = defaultdict(list)
         self.vertices = []
         self.parent_station = parent_station
+        self.routes = set() # TODO remove this after testing
 
 class TransitVertex():
 
     def add_info(self, station_id, route_id, branch_id, stop_id):
         self.station_id, self.route_id, self.branch_id, self.stop_id = station_id, route_id, branch_id, stop_id
+
 
     def add_prev_station(self, prev_station):
         self.prev_station = prev_station
@@ -120,11 +122,13 @@ class TransitVertex():
     def __init__(self, time_, trip_id):
         self.id_ = small_hash( (time_, trip_id) )
         self.time_ = time_
-        self.in_degree = self.out_degree = 0
+        self.in_degree = 0
+        self.out_degree = 0
         self.neighbor = (None, None)
         self.transfers = {}
         self.condensed_neighbors = {}
-        self.prev_station = self.next_station = None
+        self.prev_station = None
+        self.next_station = None
         self.trivial = False
         #self.trip_id = trip_id
 
@@ -293,10 +297,12 @@ class RealtimeHandler:
                         try:
                             station = self.stations[station_id]
                             station.add_vertex(branch_id, vertex.id_, vertex_time)
+                            station.routes.add(route_id)
                         except KeyError:
                             station = Station(station_id)
                             station.add_vertex(branch_id, vertex.id_, vertex_time)
                             self.stations[station_id] = station
+                            station.routes.add(route_id)
 
                         if prev_vertex:
                             prev_vertex.add_next_station( station_id )
@@ -502,27 +508,28 @@ def add_tranfers_for_vertex_and_station(vertices, vertex, station, min_transfer_
             transfer_vertex_id, _ = vertices[next_vertex_in_branch_id].neighbor
             try:
                 transfer_vertex = vertices[ transfer_vertex_id ]
-            except KeyError:
-                continue
 
-            if transfer_vertex.station_id not in [vertex.prev_station, vertex.next_station]: # (if the transfer_vertex is not headed to the current vertex's station or to the neighbor's next station)
-            #if transfer_vertex.station_id != vertex.prev_station:
-                vertex.add_transfer( transfer_vertex, wait_time )
+                if transfer_vertex.station_id not in [vertex.prev_station, vertex.next_station]: # (if the transfer_vertex is not headed to the current vertex's station or to the neighbor's next station)
+                #if transfer_vertex.station_id != vertex.prev_station:
+                    vertex.add_transfer( transfer_vertex, wait_time )
+
+            except KeyError:
+                pass
 
         except IndexError:
             # there are no vertices for this branch after this vertex's time
-            pass
+            continue
 
 
 def dijkstra(realtime_handler_obj, starting_station_id, ending_station_id):
     """ implements dijkstra's shortest-path algorithm
     """
     vertices, stations, stop_name = realtime_handler_obj.vertices, realtime_handler_obj.stations, realtime_handler_obj.stop_name
-
+    shortest_paths_count = 0
+    shortest_path_end_ids = []
     if starting_station_id not in stations:
         print(f'{starting_station_id} not found')
         return False
-
     if ending_station_id not in stations:
         print(f'{ending_station_id} not found')
         return False
@@ -532,10 +539,18 @@ def dijkstra(realtime_handler_obj, starting_station_id, ending_station_id):
 
     starting_vertex = TransitVertex(time.time(), 'unique')
     starting_vertex.add_info(starting_station_id, None, None, None)
+
     vertices[starting_vertex.id_] = starting_vertex
     ending_vertices = ending_station.vertices
 
     add_tranfers_for_vertex_and_station(vertices, starting_vertex, starting_station)
+
+    try:
+        for transfer_station_id, min_transfer_time in realtime_handler_obj.static_data['transfers'][starting_station_id].items():
+            add_tranfers_for_vertex_and_station(vertices, starting_vertex, realtime_handler_obj.stations[transfer_station_id], int(min_transfer_time))
+    except KeyError:
+        # (no additional transfer stations)
+        pass
 
     weights = {vertex_id: float('infinity') for vertex_id, _ in vertices.items()}
     paths = {vertex_id: [] for vertex_id, _ in vertices.items()}
@@ -544,15 +559,14 @@ def dijkstra(realtime_handler_obj, starting_station_id, ending_station_id):
     paths[starting_vertex.id_] = [ (False, starting_station_id, None, 0) ]
 
     queue = []
-    #orig_queue = []
+    removed = []
+
+    best_end_vertex = None
+    best_end_vertex_id = None
 
     for vertex_id, weight in weights.items():
         heapq.heappush(queue, (weight, vertex_id))
-        #heapq.heappush(orig_queue, (weight, vertex_id))
 
-    best_end_vertex = best_end_vertex_id = None
-
-    removed = []
 
     while len(queue) > 0:
         entry = heapq.heappop(queue)
@@ -563,31 +577,24 @@ def dijkstra(realtime_handler_obj, starting_station_id, ending_station_id):
 
         vertex = vertices[current_vertex_id]
 
-        if current_vertex_id in ending_vertices:
+        if current_vertex_id in ending_vertices and weights[current_vertex_id] < float('infinity'):
+            #shortest_path_end_ids.append(current_vertex_id)
             best_end_vertex_id = current_vertex_id
-            best_end_vertex = vertices[best_end_vertex_id]
             break
 
         neighbor_nodes = {}
         if vertex.neighbor[0]:
             neighbor_nodes[vertex.neighbor[0]] = int(vertex.neighbor[1])
 
-        # TODO check for transfers not None?
         for transfer_node_id, transfer_node_time in vertex.transfers.items():
                 neighbor_nodes[transfer_node_id] = int(transfer_node_time[0])+int(transfer_node_time[1])
 
         for neighbor_id, neighbor_weight in neighbor_nodes.items():
             new_weight = weights[current_vertex_id] + neighbor_weight
 
-            #if neighbor_id in ending_vertices:
-            #    print(neighbor_id, new_weight)
-
             if new_weight < weights[neighbor_id]:
-                #try:
                 removed.append( (weights[neighbor_id], neighbor_id) )
                 heapq.heappush(queue, (new_weight, neighbor_id) )
-                #except ValueError:
-                #    pass
 
                 weights[neighbor_id] = new_weight
 
@@ -611,23 +618,15 @@ def dijkstra(realtime_handler_obj, starting_station_id, ending_station_id):
                 new_path = paths[current_vertex_id] + [new_path_item]
                 paths[neighbor_id] = new_path
 
-    """
-    best_weight = float('infinity')
-    print(ending_vertices)
-    for ending_vertex_id in ending_vertices:
-        print(ending_vertex_id, weights[ending_vertex_id])
-        if weights[ending_vertex_id] < best_weight:
-            best_weight = weights[ending_vertex_id]
-            best_end_vertex_id = ending_vertex_id
 
-    best_end_vertex = vertices[best_end_vertex_id]
-    """
+    #if not shortest_paths_count:
+    #    print('No path found.')
+    #    return False
 
-    if weights[best_end_vertex_id] == float('infinity'):
-        print('No path found.')
-        return False
-
-    out_str = f'The shortest path from {stop_name(starting_station_id)} to {stop_name(best_end_vertex.station_id)} takes {misc.hr_min_sec(weights[best_end_vertex_id])}'
+    #for ending_vertex_id in shortest_path_end_ids:
+    #    if weights[ending_vertex_id] == float('infinity'):
+    #        break
+    out_str = f'The shortest path from {stop_name(starting_station_id)} to {stop_name(vertices[best_end_vertex_id].station_id)} takes {misc.hr_min_sec(weights[best_end_vertex_id])}'
     print(out_str)
     print('-'*len(out_str),'\n')
 
@@ -637,12 +636,14 @@ def dijkstra(realtime_handler_obj, starting_station_id, ending_station_id):
     for path_item in full_path:
         is_transfer, station_id, route_id, travel_time, wait_time = path_item
         if is_transfer:
-            print('TRANSFER TO', route_id, '- wait time:', misc.hr_min_sec(wait_time))
+            print('TRANSFER TO', route_id, 'at', stop_name(station_id), '- wait time:', misc.hr_min_sec(wait_time))
             print('    ride to', stop_name(station_id), 'which takes', misc.hr_min_sec(travel_time))
         else:
             print('    ride to', stop_name(station_id), 'which takes', misc.hr_min_sec(travel_time))
+            pass
 
-    print('\n')
+    print()
+
 
 def main():
     """Creates new RealtimeHandler, then calls get_static() and check_feed()
@@ -679,3 +680,171 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+
+
+def testing_dijkstra(realtime_handler_obj, starting_station_id, ending_station_id):
+    """ implements dijkstra's shortest-path algorithm
+    """
+    vertices, stations, stop_name = realtime_handler_obj.vertices, realtime_handler_obj.stations, realtime_handler_obj.stop_name
+
+    if starting_station_id not in stations:
+        print(f'{starting_station_id} not found')
+        return False
+
+    if ending_station_id not in stations:
+        print(f'{ending_station_id} not found')
+        return False
+
+    starting_station = stations[starting_station_id]
+    ending_station = stations[ending_station_id]
+
+    starting_vertex = TransitVertex(time.time(), 'unique')
+    starting_vertex.add_info(starting_station_id, None, None, None)
+    vertices[starting_vertex.id_] = starting_vertex
+    ending_vertices = ending_station.vertices
+
+    add_tranfers_for_vertex_and_station(vertices, starting_vertex, starting_station)
+
+    weights = {vertex_id: float('infinity') for vertex_id, _ in vertices.items()}
+    paths = {vertex_id: [] for vertex_id, _ in vertices.items()}
+
+    weights[starting_vertex.id_] = 0
+    paths[starting_vertex.id_] = [ (False, starting_station_id, None, 0) ]
+
+    queue = []
+    removed = []
+    best_end_vertex = best_end_vertex_id = None
+
+    for vertex_id, weight in weights.items():
+        heapq.heappush(queue, (weight, vertex_id))
+
+    while len(queue) > 0:
+        entry = heapq.heappop(queue)
+        if entry in removed:
+            continue
+
+        current_weight, current_vertex_id = entry
+
+        vertex = vertices[current_vertex_id]
+
+        #if current_vertex_id in ending_vertices:
+        #    best_end_vertex_id = current_vertex_id
+        #    best_end_vertex = vertices[best_end_vertex_id]
+        #    break
+
+        neighbor_nodes = {}
+        if vertex.neighbor[0]:
+            neighbor_nodes[vertex.neighbor[0]] = int(vertex.neighbor[1])
+
+        for transfer_node_id, transfer_node_time in vertex.transfers.items():
+                neighbor_nodes[transfer_node_id] = int(transfer_node_time[0])+int(transfer_node_time[1])
+
+        for neighbor_id, neighbor_weight in neighbor_nodes.items():
+            new_weight = weights[current_vertex_id] + neighbor_weight
+
+            if new_weight < weights[neighbor_id]:
+                removed.append( (weights[neighbor_id], neighbor_id) )
+                heapq.heappush(queue, (new_weight, neighbor_id) )
+
+                weights[neighbor_id] = new_weight
+
+                if neighbor_id in vertex.transfers.keys():
+                    is_transfer = True
+                    travel_time = int(transfer_node_time[1])
+                    wait_time   = int(transfer_node_time[0])
+                else:
+                    is_transfer = False
+                    travel_time = neighbor_weight
+                    wait_time = 0
+
+                new_path_item = (
+                    is_transfer,
+                    vertices[neighbor_id].station_id,
+                    vertices[neighbor_id].route_id,
+                    travel_time,
+                    wait_time
+                )
+
+                new_path = paths[current_vertex_id] + [new_path_item]
+                paths[neighbor_id] = new_path
+
+    """
+    best_weight = float('infinity')
+    for ending_vertex_id in ending_vertices:
+        if weights[ending_vertex_id] < best_weight:
+            best_weight = weights[ending_vertex_id]
+            best_end_vertex_id = ending_vertex_id
+
+    best_end_vertex = vertices[best_end_vertex_id]
+    """
+
+    """
+    if weights[best_end_vertex_id] == float('infinity'):
+        print('No path found.')
+        return False
+
+    out_str = f'The shortest path from {stop_name(starting_station_id)} to {stop_name(best_end_vertex.station_id)} takes {misc.hr_min_sec(weights[best_end_vertex_id])}'
+    print(out_str)
+    print('-'*len(out_str),'\n')
+
+    full_path = paths[best_end_vertex_id]
+    full_path.pop(0)
+
+    for path_item in full_path:
+        is_transfer, station_id, route_id, travel_time, wait_time = path_item
+        if is_transfer:
+            print('TRANSFER TO', route_id, '- wait time:', misc.hr_min_sec(wait_time))
+            print('    ride to', stop_name(station_id), 'which takes', misc.hr_min_sec(travel_time))
+        else:
+            print('    ride to', stop_name(station_id), 'which takes', misc.hr_min_sec(travel_time))
+
+    print('\n')
+    """
+
+    """
+    i = j = 0
+    for station_id, station in stations.items():
+
+        ending_vertices = station.vertices
+
+        best_weight = float('infinity')
+        for ending_vertex_id in ending_vertices:
+            if weights[ending_vertex_id] < best_weight:
+                best_weight = weights[ending_vertex_id]
+                best_end_vertex_id = ending_vertex_id
+
+        try:
+            out_str = f'{misc.hr_min_sec(weights[best_end_vertex_id])} '
+            out_str = out_str + ' ' * ( 8 - len(out_str) )
+            out_str = out_str + f' from {stop_name(starting_station_id)} to {stop_name(vertices[best_end_vertex_id].station_id)}'
+            out_str = out_str + ' ' * ( 60 - len(out_str) )
+            out_str = out_str + '(' + vertices[best_end_vertex_id].route_id + ')'
+            print(out_str)
+            j = j + 1
+        except (OverflowError, IndexError):
+            #print('no path found', end='')
+            i = i + 1
+    """
+
+    i = j = k = 0
+    for station_id, station in stations.items():
+
+        ending_vertices = station.vertices
+
+        best_weight = float('infinity')
+        for ending_vertex_id in ending_vertices:
+            if weights[ending_vertex_id] < best_weight:
+                best_weight = weights[ending_vertex_id]
+                best_end_vertex_id = ending_vertex_id
+
+        if best_weight == float('infinity'):
+            i = i + 1
+            print(stop_name(station_id), stations[station_id].routes, len(stations[station_id].vertices))
+        elif best_weight > 7200:
+            j = j + 1
+        else:
+            k = k + 1
+
+    print(f'{i} paths with no route, {j} paths with long route, {k} paths with reasonable route')

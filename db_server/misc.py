@@ -69,23 +69,24 @@ def hr_min_sec(total_seconds):
     minbuff = ''
 
     if hrs < 1:
-        hrs = ''
+        hrs_ = ''
     else:
-        hrs = str(hrs) + ':'
+        hrs_ = str(hrs) + ':'
         if mins < 10:
             minbuff = '0'
 
     if mins < 1:
-        mins = ''
-        suffix = ' seconds'
+        mins_ = ''
+        if hrs < 1:
+            suffix = ' seconds'
     else:
-        mins = str(mins) + ':'
+        mins_ = str(mins) + ':'
         if secs < 10:
             secbuff = '0'
 
-    secs = str(secs)
+    secs_ = str(secs)
 
-    return hrs + minbuff + mins + secbuff + secs + suffix
+    return hrs_ + minbuff + mins_ + secbuff + secs_ + suffix
 
 def trip_to_shape(trip_id, trip_to_shape_long_dict=None):
     """Takes a trip_id in form '092200_6..N03R' or 'AFA18GEN-1037-Sunday-00_000600_1..S03R', and returns what's after the last underscore.
