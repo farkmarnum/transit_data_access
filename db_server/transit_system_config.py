@@ -15,8 +15,7 @@ LIST_OF_FILES = [
     'stop_times.txt',
     'stops.txt',
     'transfers.txt',
-    'trips.txt',
-    'trip_id_to_shape.json'
+    'trips.txt'
 ]
 
 def _mta_get_url(feed_id):
@@ -28,6 +27,7 @@ _mta_feed_ids = ['1', '2', '11', '16', '21', '26', '31', '51']
 _mta_url_list = [_mta_get_url(feed_id) for feed_id in _mta_feed_ids]
 
 MTA_SETTINGS = types.SimpleNamespace(
+    ts_name='MTA_subway',
     static_url='http://web.mta.info/developers/data/nyct/subway/google_transit.zip',
     realtime_urls=_mta_url_list,
     realtime_data_path=f'{DATA_PATH}/MTA/realtime/raw',

@@ -20,7 +20,7 @@ REALTIME_FREQ = 3 # realtime GTFS feed will be checked every REALTIME_FREQ secon
 IP = '127.0.0.1'
 PORT = 65432
 
-TIMEOUT = 10
+TIMEOUT = 6.2
 
 ####################################################################################
 # LOG SETUP
@@ -147,17 +147,31 @@ class NestedDict(dict):
 
 class TimeLogger():
     """ Convenient little way to log how long something takes
-    Usage: with TimeLogger('process name') as _tl:
-    """
-    def __init__(self, message_text):
-        self.message_text = message_text
-        self.start_time = None
+    Usage:
 
-    def add_to_message(self, additional_text):
-        self.message_text.append(additional_text)
+    with TimeLogger() as _tl:
+        # BLOCK 1
+        _tl.log_time()
+        # BLOCK 2
+        _tl.log_time()
+        # BLOCK 3
+
+    # parser_logger will then
+    """
+    def __init__(self):
+        self.times = []
 
     def __enter__(self):
-        self.start_time = time.time()
+        self.log_time()
+        return self
+
+    def log_time(self, block_name=''):
+        self.times.append( (time.time(), block_name) )
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-       parser_logger.info('%s completed, took %s seconds', self.message_text, time.time()-self.start_time)
+        prev_time, _ = self.times.pop(0)
+        while len(self.times) > 0:
+            time_, block_name = self.times.pop(0)
+            block_time = time_ - prev_time
+            parser_logger.info('%s took %s seconds', block_name, block_time)
+            prev_time = time_

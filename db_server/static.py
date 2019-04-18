@@ -1,20 +1,20 @@
 """Classes and methods for static GTFS data
 """
-from profilehooks import profile
-import logging
-import os
-import sys
-import shutil
-import time
 import csv
-import zipfile
+import datetime
 from collections import defaultdict
-import json
 import eventlet
 import filecmp
-import datetime
-import requests
+import json
+import logging
+import os
 import pandas as pd
+import pickle
+import requests
+import shutil
+import sys
+import time
+import zipfile
 
 import misc
 from transit_system_config import MTA_SETTINGS, LIST_OF_FILES
@@ -23,51 +23,55 @@ parser_logger = misc.parser_logger
 
 eventlet.monkey_patch()
 
+class SetEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, set):
+            return list(obj)
+        return json.JSONEncoder.default(self, obj)
+
 class StaticHandler:
-    """Construction functions for TransitSystem"""
+    def __init__(self, gtfs_settings):
+        self.gtfs_settings = gtfs_settings
+        self.name = gtfs_settings.ts_name
+        self.static_data = {}
+        self.rswn_columns = [
+            'route_id',
+            'shape_id',
+            'stop_sequence',
+            'stop_id',
+        ]
+        self.rswn_sort_by = [
+            'route_id',
+            'shape_id',
+            'stop_sequence'
+        ]
 
-    _has_parent_station_column = True
-    _rswn_list_of_columns = [
-        'route_id',
-        'shape_id',
-        'stop_sequence',
-        'stop_id',
-        'stop_name',
-        'parent_station',
-        #'stop_lat',
-        #'stop_lon',
-    ]
-
-    _rswn_sort_by = [
-        'route_id',
-        'shape_id',
-        'stop_sequence'
-    ]
-
-    def _locate_csv(self, name):
+    def locate_csv(self, name):
         """Generates the path/filname for the csv given the name & gtfs_settings
         """
         return '%s/%s.txt' % (self.gtfs_settings.static_data_path, name)
 
-    def _parse_stop_id(self, row):
-        """ Converts a stop_id like '123N' to its parent station '123' if there is one
+    def has_static_data(self):
+        """Checks if static_data_path is populated with the csv files in LIST_OF_FILES
+        Returns a bool
         """
-        if self._has_parent_station_column:
-            if row['parent_station'] is not None:
-                return row['parent_station']
-        return row['stop_id']
+        all_files_are_loaded = True
+        for file_ in LIST_OF_FILES:
+            all_files_are_loaded *= os.path.isfile(f'{self.gtfs_settings.static_data_path}/{file_}')
+        return all_files_are_loaded
 
-    def _merge_trips_and_stops(self):
-        """Combines trips.csv stops.csv and stop_times.csv into _locate_csv('route_stops_with_names')
-        Keeps the columns in _rswn_list_of_columns
 
-        Also, compiles a csv of truncated_trip_id, shape_id and writes it to _locate_csv('trip_id_to_shape')
+    def merge_trips_and_stops(self):
+        """Combines trips.csv stops.csv and stop_times.csv into locate_csv('route_stops_with_names')
+        Keeps the columns in rswn_columns
+
+        Also, compiles a csv of truncated_trip_id, shape_id and writes it to locate_csv('trip_id_to_shape')
         """
         parser_logger.info("Cross referencing route, stop, and trip information...")
 
-        trips_csv = self._locate_csv('trips')
-        stops_csv = self._locate_csv('stops')
-        stop_times_csv = self._locate_csv('stop_times')
+        trips_csv = self.locate_csv('trips')
+        stops_csv = self.locate_csv('stops')
+        stop_times_csv = self.locate_csv('stop_times')
 
         trips = pd.read_csv(trips_csv, dtype=str)
         stops = pd.read_csv(stops_csv, dtype=str)
@@ -80,60 +84,33 @@ class StaticHandler:
         x_to_r = lambda str_: str_.replace(r'(.*?_.*?_.*\..*?)X.*', r'\1R', regex=True) # convert the weird shape_ids with 'X' in them to be <everything up to the X> + 'R'
         slice_shape_from_trip = lambda str_: str_.replace(r'.*_(.*?$)', r'\1', regex=True) # slice what's after the last '_'
 
+        # For any rows with empty 'shape_id', take the trip_id value, fix the 'X' if necessary, then slice to get shape_id
         trips['shape_id'] = trips['shape_id'].fillna(
             slice_shape_from_trip(
                 x_to_r(
                     trips['trip_id'].str
                 )
             )
-        ) # for any rows with empty 'shape_id', take the trip_id value, fix the 'X' if necessary, then slice to get shape_id
+        )
 
         composite = pd.merge(trips, stop_times, how='inner', on='trip_id')
         composite = pd.merge(composite, stops, how='inner', on='stop_id')
-        composite = composite[self._rswn_list_of_columns]
-        composite = composite.drop_duplicates().sort_values(by=self._rswn_sort_by)
+        composite = composite[self.rswn_columns]
+        composite = composite.drop_duplicates().sort_values(by=self.rswn_sort_by)
 
-        rswn_csv = self._locate_csv('route_stops_with_names')
+        rswn_csv = self.locate_csv('route_stops_with_names')
         composite.to_csv(rswn_csv, index=False)
         parser_logger.info('%s created', rswn_csv)
 
-        trip_id_to_shape = trips[['trip_id', 'shape_id']].copy()
-
-        _, trip_id_to_shape['trip_start_time'], trip_id_to_shape['trip_shape_trunc'] = trip_id_to_shape['trip_id'].str.split('_').str
-
-        trip_id_to_shape['trip_shape_trunc'] = trip_id_to_shape['trip_shape_trunc'].replace(r'(.*\.[NS]).*$', r'\1', regex=True)
-        trip_id_to_shape = trip_id_to_shape[['trip_shape_trunc','trip_start_time','shape_id']].drop_duplicates()
-        trip_id_to_shape = trip_id_to_shape.sort_values(['trip_shape_trunc','trip_start_time'])
-
-        dict_ = defaultdict(dict)
-        for _, row in trip_id_to_shape.iterrows():
-            dict_[row.trip_shape_trunc][int(row.trip_start_time)] = row.shape_id
-
-
-        tits_fname = f'{self.gtfs_settings.static_data_path}/trip_id_to_shape.json' # get your mind out of the gutter! 'tits' is clearly an abbreviation for trip_id_to_shape
-        with open(tits_fname, 'w') as tits_file:
-            json.dump(dict_, tits_file)
-
-        parser_logger.info('%s created', tits_fname)
-
-    def has_static_data(self):
-        """Checks if static_data_path is populated with the csv files in LIST_OF_FILES
-        Returns a bool
-        """
-        all_files_are_loaded = True
-        for file_ in LIST_OF_FILES:
-            all_files_are_loaded *= os.path.isfile(f'{self.gtfs_settings.static_data_path}/{file_}')
-        return all_files_are_loaded
-
-    def update_(self, force=False):
+    def update(self, force=False):
         """Downloads new static GTFS data, checks if different than existing data,
         unzips, and then generates additional csv files:
 
         downloads the zip to {data_path}/tmp/static_data.zip
         unzips it to {data_path}/tmp/static_data
             if successful, it then deletes {data_path}/static/GTFS/ and moves the new data there
-        _merge_trips_and_stops combines trips, stops, and stop_times to make route_stops_with_names
-        _load_time_between_stops calculates time b/w each pair of adjacent stops using stop_times
+        merge_trips_and_stops combines trips, stops, and stop_times to make route_stops_with_names
+        load_time_between_stops calculates time b/w each pair of adjacent stops using stop_times
         """
         url = self.gtfs_settings.static_url
         end_path = self.gtfs_settings.static_data_path
@@ -150,7 +127,7 @@ class StaticHandler:
 
         parser_logger.info('Downloading GTFS static data from %s to %s', url, zip_path)
         try:
-            _new_data = requests.get(url, allow_redirects=True, timeout=5)
+            new_data = requests.get(url, allow_redirects=True, timeout=5)
         except requests.exceptions.RequestException as err:
             parser_logger.error('%s: Failed to connect to %s\n', err, url)
             if self.has_static_data():
@@ -162,7 +139,7 @@ class StaticHandler:
 
 
         with open(zip_path, 'wb') as zip_outfile:
-            zip_outfile.write(_new_data.content)
+            zip_outfile.write(new_data.content)
 
         parser_logger.info('Extracting zip to %s', tmp_path)
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
@@ -174,7 +151,7 @@ class StaticHandler:
         if self.has_static_data() and not force:
             if not filecmp.dircmp(end_path, tmp_path).diff_files:
                 parser_logger.info('No difference found b/w existing static/GTFS/raw and new downloaded data')
-                parser_logger.info('Deleting %s and exiting update_ts() early', tmp_path)
+                parser_logger.info('Deleting %s and exiting update() early', tmp_path)
                 parser_logger.info('use force=True to force an update')
                 shutil.rmtree(tmp_path)
                 return False
@@ -185,8 +162,110 @@ class StaticHandler:
         parser_logger.info('Moving new data from %s to %s', tmp_path, end_path)
         os.rename(tmp_path, end_path)
 
-        self._merge_trips_and_stops()
+        self.merge_trips_and_stops()
         return True
+
+
+    def load_station_info(self):
+        with open(self.locate_csv('stops'), mode='r') as stops_file:
+            station_id_counter = 0
+            stops_with_parent_stations = []
+            stops_csv_reader = csv.DictReader(stops_file)
+
+            # First, load the stations (parent_station)
+            for row in stops_csv_reader:
+                stop_id, parent_station = row['stop_id'], row['parent_station']
+                if not parent_station:
+                    self.static_data['stations'][station_id_counter] = {
+                        'name': stop_id,
+                        'name': row['stop_name'],
+                        'lat': row['stop_lat'],
+                        'lon': row['stop_lon'],
+                        'arrivals': misc.NestedDict(),
+                        'travel_time': misc.NestedDict()
+                    }
+                    self.station_id_lookup[stop_id] = station_id_counter
+                    station_id_counter += 1
+                else:
+                    stops_with_parent_stations.append(row)
+
+            # Next, load the stops
+            for row in stops_with_parent_stations:
+                stop_id, parent_station = row['stop_id'], row['parent_station']
+                if parent_station:
+                    self.station_id_lookup[stop_id] = self.station_id_lookup[parent_station]
+
+    def load_route_info(self):
+        """ Load info for each route, and assign a route_id (int16), stored in route_id_lookup
+        """
+        route_id_counter = 0
+        with open(self.locate_csv('routes'), mode='r') as route_file:
+            route_csv_reader = csv.DictReader(route_file)
+            for row in route_csv_reader:
+                route_color = row['route_color'].strip()
+                text_color = row['route_text_color'].strip()
+                if not route_color:
+                    route_color = 'D3D3D3' #light grey
+                if not text_color:
+                    text_color = '000000'
+                route_color = int(route_color, 16)
+                text_color = int(text_color, 16)
+                route_id = route_id_counter
+
+                self.route_id_lookup[row['route_id']] = route_id
+                self.static_data['routes'][route_id] = {
+                    'name': row['route_id'],
+                    'desc': row['route_desc'],
+                    'color': route_color,
+                    'text_color': text_color,
+                    'stations': set()
+                }
+                route_id_counter += 1
+
+        with open(self.locate_csv('route_stops_with_names'), mode='r') as rswn_file:
+            rwsn_csv_reader = csv.DictReader(rswn_file)
+            for row in rwsn_csv_reader:
+                route_id = self.route_id_lookup[row['route_id']]
+                stop_id = self.station_id_lookup[row['stop_id']]
+                self.static_data['routes'][route_id]['stations'].add(stop_id)
+
+    def load_transfers(self):
+        with open(self.locate_csv('transfers'), mode='r') as transfers_file:
+            transfers_csv_reader = csv.DictReader(transfers_file)
+            for row in transfers_csv_reader:
+                if row['transfer_type'] == '2':
+                    min_transfer_time = int(row['min_transfer_time'])
+                    _from, _to = row['from_stop_id'], row['to_stop_id']
+                    _from = self.station_id_lookup[_from]
+                    _to = self.station_id_lookup[_to]
+
+                    self.static_data['transfers'][_from][_to] = min_transfer_time
+
+    def load_time_between_stops(self):
+        """Parses stop_times.csv to populate self.static_data['stops'] with time between stops info
+        """
+        parser_logger.info("Loading stop info and time between stops")
+        prev_stop_seq = -999
+        prev_stop = None
+        prev_arrival = None
+        seen = set()
+
+        with open(self.locate_csv('stop_times'), 'r') as stop_times_infile:
+            stop_times_csv = csv.DictReader(stop_times_infile)
+            for row in stop_times_csv:
+                stop_id, stop_sequence = row['stop_id'], int(row['stop_sequence'])
+                arrival = row['arrival_time'].split(':')
+                arrival = datetime.timedelta(hours=int(arrival[0]), minutes=int(arrival[1]), seconds=int(arrival[2]))
+
+                if (prev_stop, stop_id) not in seen:
+                    seen.add( (prev_stop, stop_id) )
+                    if stop_sequence - prev_stop_seq == 1:
+                        station_id = self.station_id_lookup[stop_id]
+                        prev_station = self.station_id_lookup[prev_stop]
+                        travel_time = int((arrival-prev_arrival).total_seconds())
+                        self.static_data['stations'][station_id]['travel_time'][prev_station] = travel_time
+
+                prev_arrival, prev_stop, prev_stop_seq = arrival, stop_id, stop_sequence
 
     def to_json(self, attempt=0):
         """ Stores self.static_data in self.gtfs_settings.static_json_path+'/static.json'
@@ -195,7 +274,7 @@ class StaticHandler:
 
         try:
             with open(json_path+'/static.json', 'w') as out_file:
-                json.dump(self.static_data, out_file)
+                json.dump(self.static_data, out_file, cls=SetEncoder)
 
         except OSError:
             if attempt != 0:
@@ -206,7 +285,7 @@ class StaticHandler:
             try:
                 os.makedirs(json_path)
             except PermissionError:
-                parser_logger.error('Don\'t have permission to write to %s/static.json', json_path)
+                parser_logger.error('Don\'t have permission to create %s', json_path)
                 exit()
             except FileExistsError:
                 parser_logger.error('The file %s/static.json exists, no permission to overwrite', json_path)
@@ -214,165 +293,125 @@ class StaticHandler:
 
             self.to_json(attempt=attempt+1)
 
-    def _load_time_between_stops(self):
-        """Parses stop_times.csv to populate self.static_data['stops'] with time between stops info
-        """
-        parser_logger.info("Loading stop info and time between stops")
-        branch_id = departure = arrival = prev_trip = None
-        seen = defaultdict(dict)
-
-        with open(self._locate_csv('stop_times'), 'r') as stop_times_infile:
-            stop_times_csv = csv.DictReader(stop_times_infile)
-            for row in stop_times_csv:
-                trip_id = row['trip_id']
-                shape_id = misc.trip_to_shape(trip_id)
-                stop_id = row['stop_id']
-                if not shape_id in seen or not stop_id in seen[shape_id]:
-                    seen[shape_id][stop_id] = True
-                else:
-                    continue
+    def to_pickle(self):
+        pickle_path = self.gtfs_settings.static_json_path
+        with open(f'{pickle_path}/static.P', 'wb') as out_file:
+            pickle.dump(self.static_data, out_file) #pickle.HIGHEST_PROTOCOL
 
 
-                arrival = row['arrival_time'].split(':')
-                arrival = datetime.timedelta(hours=int(arrival[0]), minutes=int(arrival[1]), seconds=int(arrival[2]))
-
-                if prev_trip == trip_id:
-                    route_id = shape_id.split('.')[0]
-                    travel_time = int((arrival-departure).total_seconds())
-                    if branch_id:
-                        self.static_data['stops'][stop_id]['travel_time'][route_id][branch_id] = travel_time
-
-                else:
-                    try:
-                        branch_id = self.static_data['shape_to_branch'][shape_id]
-                    except KeyError:
-                        parser_logger.warning('In _load_time_between_stops(), branch_id %s NOT FOUND', branch_id)
-                        branch_id = None
-
-                prev_trip = trip_id
-                departure = arrival
-
-    def build(self, force=False):
+    def build(self, tlog, force=False):
         """Builds JSON from the GTFS (with improvements)
-        """
-        json_path = self.gtfs_settings.static_json_path
-        if os.path.isfile(f'{json_path}/static.json') and not force:
-            parser_logger.info('%s already exists, build() is unneccessary', json_path)
-            parser_logger.info('use force=True to force a build')
-            return
 
-        # Initialize
-        transit_system = {
+        For example:
+        self.static_data = {
+            'name': '<transit system name>',
+            'static_timestamp': 1555298447,
+            'routes': {
+                0: { # <- route_id (int16)
+                    'desc': 'Trains operate between A and B...',
+                    'color': int('EE352E', 16), # (int32)
+                    'text_color': int('000000', 16), # (int32)
+                    'stations': [ #list of station_ids ( [int16*] )
+                        0, 1, 2, 3, 4, ...
+                    ]
+                },
+                ...
+            },
+            'route_id_lookup': {
+                '1': 0,
+                '2': 1,
+                '3': 2,
+                '4': 3,
+                ...
+            },
+            'stations': {
+                0: { # <- station_id (int16)
+                    'long_name': 'Van Cortlandt Park - 242 St',
+                    'lat': 40.889248, # <- will be 32 bit float
+                    'lon': -73.898583, # <- will be 32 bit float
+                    'travel_time': { #station_id (int16): time (int16)
+                        <prev station_id>: 90,
+                        <other prev station_id>: 270
+                    },
+                    'arrivals': {
+                        (route_id, direction): {
+                            (arrival_time, vertex_id),
+                            ...
+                        },
+                        ...
+                    }
+                },
+                ...
+            },
+            'station_id_lookup': {
+                '101': 0,
+                '101S': 0,
+                '101N': 0,
+                '102': 1,
+                '102N': 1,
+                '102S': 1,
+                ...
+            },
+            'transfers': {
+                <from_station_id>: { #(int16)
+                    <to_station_id>: 0, #(int16)
+                    <to_station_id>: 180,
+                    <to_station_id>: 300
+                },
+                <from_station_id>: {
+                    <to_station_id>: 0,
+                    <to_station_id>: 180
+                },
+                ...
+            }
+        }
+        """
+        self.static_data = {
             'name': self.name,
             'routes': {},
-            'stops': misc.NestedDict(),
-            'transfers': defaultdict(dict),
-            'shape_to_branch': {}
+            'route_id_lookup': {},
+            'stations': {},
+            'station_id_lookup': {},
+            'transfers': defaultdict(dict)
         }
-        # Load info for each stop (not including parent stops)
-        with open(self._locate_csv('stops'), mode='r') as stops_file:
-            stops_csv_reader = csv.DictReader(stops_file)
-            for row in stops_csv_reader:
-                transit_system['stops'][row['stop_id']] = {
-                    'info': {
-                        'name': row['stop_name'],
-                        'lat': row['stop_lat'],
-                        'lon': row['stop_lon'],
-                        'parent_station': row['parent_station'],
-                        'direction': row['stop_id'][-1]
-                    },
-                    'travel_time': misc.NestedDict()
-                }
+        self.station_id_lookup = self.static_data['station_id_lookup']
+        self.route_id_lookup = self.static_data['route_id_lookup']
 
-        with open(self._locate_csv('transfers'), mode='r') as transfers_file:
-            transfers_csv_reader = csv.DictReader(transfers_file)
-            for row in transfers_csv_reader:
-                if row['transfer_type'] == '2':
-                    transit_system['transfers'][row['from_stop_id']][row['to_stop_id']] = row['min_transfer_time']
+        self.load_station_info()
+        tlog.log_time('load_station_info()')
 
-        # Load info for each route
-        with open(self._locate_csv('routes'), mode='r') as route_file:
-            route_csv_reader = csv.DictReader(route_file)
-            for row in route_csv_reader:
-                if row['route_color'].strip():
-                    color = row['route_color']
-                else:
-                    color = 'lightgrey'
+        self.load_route_info()
+        tlog.log_time('load_route_info()')
 
-                if row['route_text_color'].strip():
-                    text_color = row['route_text_color']
-                else:
-                    text_color = 'black'
+        self.load_transfers()
+        tlog.log_time('load_transfers()')
 
-                transit_system['routes'][row['route_id']] = {
-                    'desc': row['route_desc'],
-                    'color': color,
-                    'text_color': text_color,
-                    'shapes': defaultdict(list),
-                    'branches': {
-                        'N': defaultdict(list),
-                        'S': defaultdict(list)
-                    }
-                }
+        self.load_time_between_stops()
+        tlog.log_time('load_time_between_stops()')
 
-        # Load route>shape>stop tree
-        with open(self._locate_csv('route_stops_with_names'), mode='r') as rswn_file:
-            rwsn_csv_reader = csv.DictReader(rswn_file)
-            for row in rwsn_csv_reader:
-                route = transit_system['routes'][row['route_id']]
-                route['shapes'][row['shape_id']].append(row['stop_id'])
+        self.static_data['static_timestamp'] = int(time.time())
 
-        # Merge shapes into branches
-        for route_id, route in transit_system['routes'].items():
-            br_count = {}
-            br_count['N'] = br_count['S'] = 0 # how many branches in each direction
-
-            for shape_id, shape_stop_list in route['shapes'].items():
-                for i in range(len(shape_id)):
-                    if shape_id[i-1] == '.' and shape_id[i] != '.':  # the N or S follows the dot(s)
-                        direction = shape_id[i]
-                        break
-                else:
-                    raise Exception(f'Error: cannot determine direction from shape id {shape_id}')
-
-                for branch_id, branch_stop_list in route['branches'][direction].items():
-
-                    if set(shape_stop_list).issubset(set(branch_stop_list)):
-                        transit_system['shape_to_branch'][shape_id] = branch_id
-                        break
-
-                    if set(branch_stop_list).issubset(set(shape_stop_list)):
-                        transit_system['shape_to_branch'][shape_id] = branch_id
-                        break
-
-                else: # no branches contained this shape (or were contained in it)
-                    new_branch_id = f'{route_id}{direction}_{br_count[direction]}'
-
-                    route['branches'][direction][new_branch_id] = shape_stop_list
-                    transit_system['shape_to_branch'][shape_id] = new_branch_id
-                    br_count[direction] += 1
-
-        transit_system['static_timestamp'] = int(time.time())
-
-        self.static_data = transit_system
-        self._load_time_between_stops()
         self.to_json()
+        self.to_pickle()
+        tlog.log_time('to_json() and to_pickle()')
         parser_logger.info("New static build written to JSON")
 
 
-    def __init__(self, gtfs_settings, name=''):
-        self.gtfs_settings = gtfs_settings
-        self.name = name
-        self.static_data = None
-
 
 def main(force=False):
-    """Creates new StaticHandler, then calls update_() and build()
+    """Creates new StaticHandler, then calls update() and build()
     """
-    with misc.TimeLogger('static.py') as _tl:
-        static_handler = StaticHandler(MTA_SETTINGS, name='MTA')
-        static_handler.update_(force)
-        static_handler.build(force)
+    with misc.TimeLogger() as tlog:
+        parser_logger.info("\nSTATIC.PY")
+        static_handler = StaticHandler(MTA_SETTINGS)
+        tlog.log_time('StaticHandler()')
+
+        static_is_new = static_handler.update(force)
+        tlog.log_time('update()')
+
+        if static_is_new:
+            static_handler.build(tlog, force)
+            tlog.log_time('build()')
 
 
 if __name__ == '__main__':
