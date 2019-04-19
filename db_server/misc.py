@@ -22,6 +22,14 @@ PORT = 65432
 
 TIMEOUT = 6.2
 
+PARSE_FAIL, PARSE_SUCCESS, REALTIME_NOT_NEW, PREV_REALTIME_TOO_OLD, NEW_STATIC = list(range(5))
+RIDE, TRANSFER, WALK = list(range(3))
+STATION, LOC = list(range(2))
+DIRECTIONS = {
+    'N': 0,
+    'S': 1
+}
+
 ####################################################################################
 # LOG SETUP
 if not os.path.exists(LOG_PATH):
@@ -146,8 +154,7 @@ class NestedDict(dict):
         return self.setdefault(key, NestedDict())
 
 class TimeLogger():
-    """ Convenient little way to log how long something takes
-    Usage:
+    """ Convenient little way to log how long something takes. Usage:
 
     with TimeLogger() as _tl:
         # BLOCK 1
@@ -155,17 +162,15 @@ class TimeLogger():
         # BLOCK 2
         _tl.log_time()
         # BLOCK 3
-
-    # parser_logger will then
     """
     def __init__(self):
         self.times = []
 
     def __enter__(self):
-        self.log_time()
+        self.tlog()
         return self
 
-    def log_time(self, block_name=''):
+    def tlog(self, block_name=''):
         self.times.append( (time.time(), block_name) )
 
     def __exit__(self, exc_type, exc_val, exc_tb):

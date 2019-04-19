@@ -9,7 +9,6 @@ import json
 import logging
 import os
 import pandas as pd
-import pickle
 import requests
 import shutil
 import sys
@@ -293,13 +292,7 @@ class StaticHandler:
 
             self.to_json(attempt=attempt+1)
 
-    def to_pickle(self):
-        pickle_path = self.gtfs_settings.static_json_path
-        with open(f'{pickle_path}/static.P', 'wb') as out_file:
-            pickle.dump(self.static_data, out_file) #pickle.HIGHEST_PROTOCOL
-
-
-    def build(self, tlog, force=False):
+    def build(self, _tl, force=False):
         """Builds JSON from the GTFS (with improvements)
 
         For example:
@@ -378,22 +371,21 @@ class StaticHandler:
         self.route_id_lookup = self.static_data['route_id_lookup']
 
         self.load_station_info()
-        tlog.log_time('load_station_info()')
+        _tl.tlog('load_station_info()')
 
         self.load_route_info()
-        tlog.log_time('load_route_info()')
+        _tl.tlog('load_route_info()')
 
         self.load_transfers()
-        tlog.log_time('load_transfers()')
+        _tl.tlog('load_transfers()')
 
         self.load_time_between_stops()
-        tlog.log_time('load_time_between_stops()')
+        _tl.tlog('load_time_between_stops()')
 
         self.static_data['static_timestamp'] = int(time.time())
 
         self.to_json()
-        self.to_pickle()
-        tlog.log_time('to_json() and to_pickle()')
+        _tl.tlog('to_json()')
         parser_logger.info("New static build written to JSON")
 
 
@@ -401,17 +393,17 @@ class StaticHandler:
 def main(force=False):
     """Creates new StaticHandler, then calls update() and build()
     """
-    with misc.TimeLogger() as tlog:
+    with misc.TimeLogger() as _tl:
         parser_logger.info("\nSTATIC.PY")
         static_handler = StaticHandler(MTA_SETTINGS)
-        tlog.log_time('StaticHandler()')
+        _tl.tlog('StaticHandler()')
 
         static_is_new = static_handler.update(force)
-        tlog.log_time('update()')
+        _tl.tlog('update()')
 
         if static_is_new:
-            static_handler.build(tlog, force)
-            tlog.log_time('build()')
+            static_handler.build(_tl, force)
+            _tl.tlog('build()')
 
 
 if __name__ == '__main__':
