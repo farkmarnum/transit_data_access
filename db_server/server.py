@@ -1,17 +1,16 @@
-"""gets the database (websocket) server running
+""" Gets the database (websocket) server running
 """
 import socketio
 import eventlet
-from eventlet.support import greenlets as greenlet
-import time
 import util as ut
 
 eventlet.monkey_patch()
 
-KILL_SERVER = False
-
 
 class DatabaseServer():
+    """ Initializes a server using socketio and eventlet. Use start() and stop() to... start and stop it.
+        push() pushes new data to all clients
+    """
     def connect(self, sid, environ):
         ut.server_logger.info('Client connected: %s', sid)
 
@@ -29,9 +28,9 @@ class DatabaseServer():
         self.app = socketio.WSGIApp(self.sio)
         self.keep_server_running = True
 
-    def push(self, json):
+    def push(self, data):
         ut.server_logger.info('Pushing new data to clients')
-        self.sio.emit('db_server_push', json)
+        self.sio.emit('db_server_push', data)
 
     def server_process(self):
         eventlet.wsgi.server(eventlet.listen((ut.IP, ut.PORT)), self.app, log=ut.server_logger)
@@ -44,12 +43,6 @@ class DatabaseServer():
         ut.server_logger.info('Stopping eventlet server')
         self.server_thread.kill()
 
-def main():
-    ut.server_logger.info('~~~~~~~~~~ server.py beginning! ~~~~~~~~~~')
-    db_server = DatabaseServer()
-    db_server.start()
-    return db_server
-
 
 if __name__ == "__main__":
-    main()
+    print('Server.py is not intended to be run as a script on its own.')
