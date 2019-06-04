@@ -4,15 +4,15 @@ import os
 import logging
 from typing import NamedTuple, NewType, Union, List, Optional
 
-### CONSTANTS
+# CONSTANTS
 PACKAGE_NAME = 'transit_data_access'
 DATA_PATH = f'/data/{PACKAGE_NAME}/db_server'
 
-REALTIME_RAW_SUFFIX=f'realtime/raw'
-REALTIME_PARSED_SUFFIX=f'realtime/parsed'
-STATIC_TMP_SUFFIX=f'static/tmp'
-STATIC_RAW_SUFFIX=f'static/raw'
-STATIC_PARSED_SUFFIX=f'static/parsed'
+REALTIME_RAW_SUFFIX = f'realtime/raw'
+REALTIME_PARSED_SUFFIX = f'realtime/parsed'
+STATIC_TMP_SUFFIX = f'static/tmp'
+STATIC_RAW_SUFFIX = f'static/raw'
+STATIC_PARSED_SUFFIX = f'static/parsed'
 
 LOG_PATH = f'/var/log/{PACKAGE_NAME}/db_server'
 LOG_LEVEL = logging.INFO
@@ -27,25 +27,28 @@ RT_FEED_FAIL, RT_FEED_IS_OLD, RT_FEED_IS_NEW = list(range(3))
 
 RealtimeFeed = NewType('RealtimeFeed', bytes)
 StaticFeed = NewType('StaticFeed', bytes)
-GTFSFeed = Union[RealtimeFeed, StaticFeed, None]
+
+OptionalInt = Optional[Union[int, None]]
+OptionalStr = Optional[Union[str, None]]
+OptionalRealtimeFeed = Optional[Union[RealtimeFeed, None]]
 
 
-### CUSTOM TYPES
+# CUSTOM TYPES
 class FeedStatus(NamedTuple):
     feed_fetched: bool
     feed_is_new: bool
     timestamp_diff: Optional[int]
     error: Optional[str]
 
+
 class RealtimeFetchResult(NamedTuple):
     feed_fetched: bool
-    feed_is_new: Optional[bool] = False
-    error: Optional[str] = ''
-    feed: Optional[RealtimeFeed] = None
-    timestamp: Optional[Union[int, None]] = None
+    error: OptionalStr = None
+    feed: OptionalRealtimeFeed = None
+    timestamp: OptionalInt = None
 
 
-### LOG SETUP
+# LOG SETUP
 def log_setup(loggers: list):
     """ Creates paths and files for loggers, given a list of logger objects
     """
@@ -107,7 +110,7 @@ class TimeLogger():
         return self
 
     def tlog(self, block_name=''):
-        self.times.append( (time.time(), block_name) )
+        self.times.append((time.time(), block_name))
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         prev_time, _ = self.times.pop(0)
@@ -116,4 +119,3 @@ class TimeLogger():
             block_time = time_ - prev_time
             parser_logger.info('%s took %s seconds', block_name, block_time)
             prev_time = time_
-
