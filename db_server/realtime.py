@@ -1,5 +1,6 @@
 """ Downloads realtime GTFS data, checks if it's new, parses it, and stores it
 """
+import time
 from typing import NewType
 import warnings
 import eventlet
@@ -7,12 +8,13 @@ from eventlet.green.urllib.error import URLError
 from eventlet.green.urllib import request
 from google.transit import gtfs_realtime_pb2
 from google.protobuf.message import DecodeError
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 import util as ut
 from gtfs_conf import GTFS_CONF
 
 REALTIME_RAW_PATH = f'{ut.DATA_PATH}/{GTFS_CONF.name}/{ut.REALTIME_RAW_SUFFIX}'
 REALTIME_PARSED_PATH = f'{ut.DATA_PATH}/{GTFS_CONF.name}/{ut.REALTIME_PARSED_SUFFIX}'
-
 
 FeedStatus = NewType('FeedStatus', int)
 NONE, NEW_FEED, OLD_FEED, FETCH_FAILED, DECODE_FAILED, RUNTIME_WARNING = list(range(6))
@@ -36,6 +38,7 @@ class RealtimeFeedHandler():
         with request.urlopen(self.url) as response:
             feed_message = gtfs_realtime_pb2.FeedMessage()
             with warnings.catch_warnings() and eventlet.Timeout(ut.TIMEOUT):
+                warnings.filterwarnings(action='error', category=RuntimeWarning)
                 try:
                     feed_message.ParseFromString(response.read())
                     self.timestamp = feed_message.header.timestamp
@@ -46,12 +49,16 @@ class RealtimeFeedHandler():
                         return True
                     else:
                         self.status = OLD_FEED
+                        # print('old feed!')
                 except (URLError, eventlet.Timeout) as err:
                     self.status = FETCH_FAILED
+                    # print('fetch failed!')
                 except DecodeError:
                     self.status = DECODE_FAILED
+                    # print('decode error!')
                 except RuntimeWarning:
                     self.status = RUNTIME_WARNING
+                    # print('runtime warning!')
                 finally:
                     return False
 
@@ -76,10 +83,10 @@ class RealtimeManager():
             self.request_pool.spawn(feed.fetch)
 
         self.request_pool.waitall()
-
-        for feed in self.feeds:
-            print(feed.id_, feed_status_messages[feed.status], sep=' ', end=', ')
         print()
+
+        feed_ages = {feed.id_: time.time() - feed.latest_timestamp for feed in self.feeds}
+        return feed_ages
 
     def parse_feed(self):
         """ Parses the feed into the smallest possible representation of the necessary realtime data.
@@ -93,7 +100,56 @@ class RealtimeManager():
         self.merged_feeds_prev = None
 
 
-rm = RealtimeManager()
-for _ in range(100):
-    rm.check()
-    eventlet.sleep(1)
+if __name__ == "__main__":
+    rm = RealtimeManager()
+
+    plots = {feed.id_: [] for feed in rm.feeds}
+    plots['sum'] = []
+    plots['min_recent_sum'] = []
+    # plots['sum_extended'] = []
+    xlist = []
+
+    plt.style.use('fivethirtyeight')
+    fig = plt.figure()
+    ax1 = fig.add_subplot(1, 1, 1)
+
+
+    MIN_PERIOD = 5
+    MAX_PERIOD = 15
+    frames_since_min = 0
+    current_min = float('inf')
+    def animate(i):
+        feed_ages = rm.check()
+
+        ax1.clear()
+        xlist.append(i)
+        """
+        age_sum = 0
+        for id_, age in feed_ages.items():
+            if age > 600:
+                age = 0
+            plots[id_].append(age)
+            ax1.plot(xlist, plots[id_])
+            age_sum += age
+        """
+        # frames_since_min += 1
+        current_sum = sum(feed_ages.values()) / 8
+        plots['sum'].append(current_sum)
+        # plots['sum_change'].append(plots['sum'][i] - plots['sum'][i - 1])
+        recent_sums = plots['sum'][-1 - MAX_PERIOD:]
+        plots['min_recent_sum'].append(min(recent_sums))
+        """
+        for i, recent_sum in enumerate(recent_sums):
+            if recent_sum == min_recent_sum:
+                plots['sum_extended'].append(min_recent_sum + (AGE_PERIOD - i) * 8)
+                break
+        else:
+            raise IndexError
+        """
+        ax1.plot(xlist, plots['sum'])
+        # ax1.plot(xlist, plots['sum_change'])
+        ax1.plot(xlist, plots['min_recent_sum'])
+        # ax1.plot(xlist, plots['sum_extended'])
+
+    ani = animation.FuncAnimation(fig, animate, interval=500)
+    plt.show()
