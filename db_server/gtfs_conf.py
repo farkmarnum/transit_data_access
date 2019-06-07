@@ -13,7 +13,7 @@ class GTFSConf(NamedTuple):
 API_KEY = 'f775a76bd1960c98831b3c2b06c19bb5'
 
 _base_url = 'http://datamine.mta.info/mta_esi.php'
-_feed_ids = ['1', '2', '11', '16', '21', '26', '31', '51']
+_feed_ids = sorted(['1', '2', '11', '16', '21', '26', '31', '36', '51'], key=int)
 _url_dict = {feed_id: f'{_base_url}?key={API_KEY}&feed_id={feed_id}' for feed_id in _feed_ids}
 
 GTFS_CONF = GTFSConf(
