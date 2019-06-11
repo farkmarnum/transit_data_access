@@ -10,7 +10,7 @@ class GTFSConf(NamedTuple):
     realtime_urls: Dict[str, str]
 
 
-API_KEY = 'f775a76bd1960c98831b3c2b06c19bb5'
+API_KEY: str = 'f775a76bd1960c98831b3c2b06c19bb5'
 
 _base_url = 'http://datamine.mta.info/mta_esi.php'
 _feed_ids = sorted(['1', '2', '11', '16', '21', '26', '31', '36', '51'], key=int)

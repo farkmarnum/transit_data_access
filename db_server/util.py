@@ -1,18 +1,29 @@
 """ This contains all utility functions and package variables.
 """
 import os
+from typing import \
+    Tuple, NamedTuple, List, Set, Dict, DefaultDict, \
+    Type, TypeVar, NewType, \
+    Any, Optional, Union
+import time
+import json
 import logging
-from typing import NamedTuple, NewType, Union, List, Optional
+from dataclasses import dataclass, is_dataclass
+import pyhash  # type: ignore
+from gtfs_conf import GTFS_CONF
 
-# CONSTANTS
+
+#####################################
+#             CONSTANTS             #
+#####################################
 PACKAGE_NAME = 'transit_data_access'
 DATA_PATH = f'/data/{PACKAGE_NAME}/db_server'
 
-REALTIME_RAW_SUFFIX = f'realtime/raw'
-REALTIME_PARSED_SUFFIX = f'realtime/parsed'
-STATIC_TMP_SUFFIX = f'static/tmp'
-STATIC_RAW_SUFFIX = f'static/raw'
-STATIC_PARSED_SUFFIX = f'static/parsed'
+REALTIME_RAW_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/realtime/raw'
+REALTIME_PARSED_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/realtime/parsed'
+STATIC_TMP_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/static/tmp'
+STATIC_RAW_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/static/raw'
+STATIC_PARSED_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/static/parsed'
 
 LOG_PATH = f'/var/log/{PACKAGE_NAME}/db_server'
 LOG_LEVEL = logging.INFO
@@ -21,34 +32,193 @@ IP = '127.0.0.1'
 PORT = 3333
 
 REALTIME_FREQ = 15
-TIMEOUT = 1
-
-RT_FEED_FAIL, RT_FEED_IS_OLD, RT_FEED_IS_NEW = list(range(3))
-
-RealtimeFeed = NewType('RealtimeFeed', bytes)
-StaticFeed = NewType('StaticFeed', bytes)
-
-OptionalInt = Optional[Union[int, None]]
-OptionalStr = Optional[Union[str, None]]
-OptionalRealtimeFeed = Optional[Union[RealtimeFeed, None]]
+REALTIME_TIMEOUT = 2
+MAX_ATTEMPTS = 3
 
 
-# CUSTOM TYPES
-class FeedStatus(NamedTuple):
-    feed_fetched: bool
-    feed_is_new: bool
-    timestamp_diff: Optional[int]
-    error: Optional[str]
+
+#####################################
+# TRANSIT TYPES / METHODS / CLASSES #
+#####################################
+ShortHash = NewType('ShortHash', int)
+
+StationHash  = NewType('StationHash', ShortHash)    # unique hash of station id  # noqa
+RouteHash    = NewType('RouteHash', ShortHash)      # unique hash of route id    # noqa
+TripHash     = NewType('TripHash', ShortHash)       # unique hash of trip id     # noqa
+
+SpecifiedHash = TypeVar('SpecifiedHash', StationHash, RouteHash, TripHash)
+
+ArrivalTime  = NewType('ArrivalTime', int)          # POSIX time                 # noqa
+TravelTime   = NewType('TravelTime', int)           # number of seconds          # noqa
+TransferTime = NewType('TransferTime', int)         # number of seconds          # noqa
 
 
-class RealtimeFetchResult(NamedTuple):
-    feed_fetched: bool
-    error: OptionalStr = None
-    feed: OptionalRealtimeFeed = None
-    timestamp: OptionalInt = None
+hasher = pyhash.super_fast_hash()
+def short_hash(input_: Any, type_hint: Type[SpecifiedHash]) -> SpecifiedHash:
+    """ Returns a unique (TODO: collision handling!) hash of a station, route, or trip id
+    Examples:
+        short_hash('101', StationHash) returns a short hash with type hint StationHash
+        short_hash('1', RouteHash) returns a short hash with type hint RouteHash
+        short_hash('092200_6..N03R', TripHash) returns a short hash with type hint TripHash
+    """
+    hash_int = hasher(str(input_) + type_hint.__name__)
+    typed_hash = type_hint(ShortHash(hash_int))
+    return typed_hash
 
 
-# LOG SETUP
+TripStatus = NewType('TripStatus', int)
+STOPPED, DELAYED, ON_TIME = list(map(TripStatus, range(3)))
+
+
+class Branch(NamedTuple):
+    route: RouteHash
+    final_stop: StationHash
+    def serialize(self) -> str:
+        return f'{self.route},{self.final_stop}'
+
+
+@dataclass
+class StationArrival:
+    arrival_time: ArrivalTime
+    trip_hash: TripHash
+
+
+@dataclass
+class RouteInfo:
+    desc: str
+    color: int
+    text_color: int
+    stations: Set[StationHash]
+
+
+@dataclass
+class Station:
+    id_: StationHash
+    name: str
+    lat: float
+    lon: float
+    travel_time: Dict[StationHash, TravelTime]
+    arrivals: Dict[Branch, StationArrival]
+
+    def add_arrival(self, branch: Branch, arrival_time: ArrivalTime, trip: TripHash):
+        self.arrivals[branch] = StationArrival(arrival_time, trip)
+
+
+@dataclass
+class Trip:
+    id_: TripHash
+    branch: Branch
+    arrivals: Dict[ArrivalTime, StationHash]
+    status: Optional[TripStatus] = None
+    delay: Optional[int] = 0  # in seconds
+
+    def add_arrival(self, station: StationHash, arrival_time: ArrivalTime):
+        self.arrivals[arrival_time] = station
+
+
+@dataclass
+class StaticData:
+    name: str
+    static_timestamp: int
+    routes: Dict[RouteHash, RouteInfo]
+    stations: Dict[StationHash, Station]
+    routehash_lookup: Dict[str, RouteHash]
+    stationhash_lookup: Dict[str, StationHash]
+    transfers: DefaultDict[StationHash, Dict[StationHash, TransferTime]]
+
+
+@dataclass
+class RealtimeData(StaticData):
+    average_realtime_timestamp: int
+    trips: Dict[TripHash, Trip]
+
+
+class UpdateFailed(Exception):
+    pass
+
+
+class StaticJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, set):
+            return list(obj)
+        if is_dataclass(obj):
+            custom_obj = {
+                "_type": str(type(obj)),
+                "value": obj.__dict__
+                # "value": self.fix_branch_keys(obj.__dict__)
+            }
+            return custom_obj
+        return json.JSONEncoder.default(self, obj)
+
+
+class RealtimeJSONEncoder(json.JSONEncoder):
+    def fix_branch_keys(self, dict_: dict) -> dict:
+        data_dict = {}
+        for k, v in dict_.items():
+            if isinstance(v, dict):
+                v = self.fix_branch_keys(v)
+            if isinstance(k, Branch):
+                k = k.serialize()
+            data_dict[k] = v
+        return data_dict
+
+    def default(self, obj):
+        if isinstance(obj, set):
+            return list(obj)
+        if is_dataclass(obj):
+            return self.fix_branch_keys(obj.__dict__)
+        return json.JSONEncoder.default(self, obj)
+
+
+class StaticJSONDecoder(json.JSONDecoder):
+    def __init__(self, *args, **kwargs):
+        json.JSONDecoder.__init__(self, object_hook=self.object_hook, *args, **kwargs)
+
+    def keys_to_ints(self, dict_: dict) -> dict:
+        data_dict = {}
+        for k, v in dict_.items():
+            if isinstance(v, dict):
+                data_dict[k] = self.keys_to_ints(v)
+            else:
+                try:
+                    data_dict[int(k)] = v
+                except ValueError:
+                    data_dict[k] = v
+        return data_dict
+
+    def object_hook(self, obj):
+        if '_type' not in obj:
+            return obj
+        """
+        if obj['_type'] == 'dict':
+            out_dict = {}
+            for k, v in obj.items():
+                try:
+                    out_dict[int(k[0])] = v
+                except ValueError:
+                    out_dict[k] = v
+            return out_dict
+        """
+        _type_dict = {
+            '<class \'util.RouteInfo\'>': RouteInfo,
+            '<class \'util.Branch\'>': Branch,
+            '<class \'util.StationArrival\'>': StationArrival,
+            '<class \'util.RouteInfo\'>': RouteInfo,
+            '<class \'util.Station\'>': Station,
+            '<class \'util.Trip\'>': Trip,
+            '<class \'util.StaticData\'>': StaticData,
+        }
+        try:
+            _type = _type_dict[obj['_type']]
+            data_dict = self.keys_to_ints(obj['value'])
+            return _type(**data_dict)
+        except IndexError:
+            return obj
+
+
+#####################################
+#           LOGGING SETUP           #
+#####################################
 def log_setup(loggers: list):
     """ Creates paths and files for loggers, given a list of logger objects
     """
@@ -82,14 +252,6 @@ def log_setup(loggers: list):
 parser_logger = logging.getLogger('parser')
 server_logger = logging.getLogger('server')
 log_setup([parser_logger, server_logger])
-
-
-class NestedDict(dict):
-    """A dict that automatically creates new dicts within itself as needed"""
-    def __getitem__(self, key):
-        if key in self:
-            return self.get(key)
-        return set.setdefault(key, NestedDict())
 
 
 class TimeLogger():
