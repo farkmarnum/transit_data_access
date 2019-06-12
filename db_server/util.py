@@ -2,13 +2,14 @@
 """
 import os
 from typing import \
-    Tuple, NamedTuple, List, Set, Dict, DefaultDict, \
+    NamedTuple, List, Set, Dict, DefaultDict, \
     Type, TypeVar, NewType, \
-    Any, Optional, Union
+    Any, Optional
+from collections import defaultdict
 import time
 import json
 import logging
-from dataclasses import dataclass, is_dataclass
+from dataclasses import dataclass, is_dataclass, field
 import pyhash  # type: ignore
 from gtfs_conf import GTFS_CONF
 
@@ -19,11 +20,11 @@ from gtfs_conf import GTFS_CONF
 PACKAGE_NAME = 'transit_data_access'
 DATA_PATH = f'/data/{PACKAGE_NAME}/db_server'
 
-REALTIME_RAW_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/realtime/raw'
-REALTIME_PARSED_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/realtime/parsed'
-STATIC_TMP_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/static/tmp'
-STATIC_RAW_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/static/raw'
-STATIC_PARSED_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/static/parsed'
+REALTIME_RAW_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/realtime/raw/'
+REALTIME_PARSED_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/realtime/parsed/'
+STATIC_TMP_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/static/tmp/'
+STATIC_RAW_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/static/raw/'
+STATIC_PARSED_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/static/parsed/'
 
 LOG_PATH = f'/var/log/{PACKAGE_NAME}/db_server'
 LOG_LEVEL = logging.INFO
@@ -51,7 +52,7 @@ SpecifiedHash = TypeVar('SpecifiedHash', StationHash, RouteHash, TripHash)
 ArrivalTime  = NewType('ArrivalTime', int)          # POSIX time                 # noqa
 TravelTime   = NewType('TravelTime', int)           # number of seconds          # noqa
 TransferTime = NewType('TransferTime', int)         # number of seconds          # noqa
-
+TimeDiff = NewType('TimeDiff', int)  # number of seconds
 
 hasher = pyhash.super_fast_hash()
 def short_hash(input_: Any, type_hint: Type[SpecifiedHash]) -> SpecifiedHash:
@@ -66,9 +67,9 @@ def short_hash(input_: Any, type_hint: Type[SpecifiedHash]) -> SpecifiedHash:
     return typed_hash
 
 
+
 TripStatus = NewType('TripStatus', int)
 STOPPED, DELAYED, ON_TIME = list(map(TripStatus, range(3)))
-
 
 class Branch(NamedTuple):
     route: RouteHash
@@ -76,12 +77,20 @@ class Branch(NamedTuple):
     def serialize(self) -> str:
         return f'{self.route},{self.final_stop}'
 
-
-@dataclass
-class StationArrival:
+class StationArrival(NamedTuple):
     arrival_time: ArrivalTime
     trip_hash: TripHash
+"""
+class TripArrival(NamedTuple):
+    arrival_time: ArrivalTime
+    station_hash: StationHash
+"""
 
+
+def dict_of_list_factory():
+    return defaultdict(list)
+def dict_of_dict_of_list_factory():
+    return defaultdict(lambda: defaultdict(list))
 
 @dataclass
 class RouteInfo:
@@ -90,31 +99,28 @@ class RouteInfo:
     text_color: int
     stations: Set[StationHash]
 
-
 @dataclass
 class Station:
     id_: StationHash
     name: str
     lat: float
     lon: float
-    travel_time: Dict[StationHash, TravelTime]
-    arrivals: Dict[Branch, StationArrival]
+    travel_times: Dict[StationHash, TravelTime]
+    # arrivals: Dict[Branch, List[StationArrival]] = field(default_factory=dict_of_list_factory)
 
-    def add_arrival(self, branch: Branch, arrival_time: ArrivalTime, trip: TripHash):
-        self.arrivals[branch] = StationArrival(arrival_time, trip)
-
+    # def add_arrival(self, branch: Branch, arrival_time: ArrivalTime, trip: TripHash):
+    #    self.arrivals[branch].append(StationArrival(arrival_time, trip))
 
 @dataclass
 class Trip:
     id_: TripHash
     branch: Branch
-    arrivals: Dict[ArrivalTime, StationHash]
-    status: Optional[TripStatus] = None
-    delay: Optional[int] = 0  # in seconds
+    arrivals: Dict[StationHash, ArrivalTime] = field(default_factory=dict)
+    status: TripStatus = ON_TIME
+    timestamp: Optional[int] = None  # in seconds
 
     def add_arrival(self, station: StationHash, arrival_time: ArrivalTime):
-        self.arrivals[arrival_time] = station
-
+        self.arrivals[station] = ArrivalTime(arrival_time)
 
 @dataclass
 class StaticData:
@@ -126,11 +132,41 @@ class StaticData:
     stationhash_lookup: Dict[str, StationHash]
     transfers: DefaultDict[StationHash, Dict[StationHash, TransferTime]]
 
-
 @dataclass
 class RealtimeData(StaticData):
     average_realtime_timestamp: int
     trips: Dict[TripHash, Trip]
+
+
+
+@dataclass
+class TripDiff:
+    deleted: List[TripHash] = field(default_factory=list)
+    added: List[Trip] = field(default_factory=list)
+
+@dataclass
+class ArrivalsDiff:
+    deleted: Dict[TripHash, List[StationHash]] = field(default_factory=dict_of_list_factory)
+    added: Dict[TripHash, Dict[StationHash, ArrivalTime]] = field(default_factory=dict_of_list_factory)
+    modified: Dict[TimeDiff, Dict[TripHash, List[StationHash]]] = field(default_factory=dict_of_dict_of_list_factory)
+
+@dataclass
+class StatusDiff:
+    modified: Dict[TripHash, TripStatus] = field(default_factory=dict)
+
+@dataclass
+class BranchDiff:
+    modified: Dict[TripHash, Branch] = field(default_factory=dict)
+
+@dataclass
+class DataDiff:
+    average_realtime_timestamp: int
+    trips: TripDiff
+    arrivals: ArrivalsDiff
+    status: StatusDiff
+    branch: BranchDiff
+
+
 
 
 class UpdateFailed(Exception):
@@ -145,7 +181,6 @@ class StaticJSONEncoder(json.JSONEncoder):
             custom_obj = {
                 "_type": str(type(obj)),
                 "value": obj.__dict__
-                # "value": self.fix_branch_keys(obj.__dict__)
             }
             return custom_obj
         return json.JSONEncoder.default(self, obj)
@@ -189,16 +224,6 @@ class StaticJSONDecoder(json.JSONDecoder):
     def object_hook(self, obj):
         if '_type' not in obj:
             return obj
-        """
-        if obj['_type'] == 'dict':
-            out_dict = {}
-            for k, v in obj.items():
-                try:
-                    out_dict[int(k[0])] = v
-                except ValueError:
-                    out_dict[k] = v
-            return out_dict
-        """
         _type_dict = {
             '<class \'util.RouteInfo\'>': RouteInfo,
             '<class \'util.Branch\'>': Branch,
@@ -211,6 +236,8 @@ class StaticJSONDecoder(json.JSONDecoder):
         try:
             _type = _type_dict[obj['_type']]
             data_dict = self.keys_to_ints(obj['value'])
+            # if _type == Station:
+            #    del(data_dict['arrivals'])
             return _type(**data_dict)
         except IndexError:
             return obj

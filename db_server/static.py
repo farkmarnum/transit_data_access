@@ -26,7 +26,7 @@ class StaticHandler(object):
         """
         tmp_path = u.STATIC_TMP_PATH
         raw_path = u.STATIC_RAW_PATH
-        zip_filepath = u.STATIC_TMP_PATH + '/static_data.zip'
+        zip_filepath = u.STATIC_TMP_PATH + 'static_data.zip'
 
         try:
             os.makedirs(tmp_path, exist_ok=True)
@@ -64,7 +64,7 @@ class StaticHandler(object):
     def locate_csv(self, name: str) -> str:
         """Generates the path/filname for the csv given the name & gtfs_settings
         """
-        return '%s/%s.txt' % (u.STATIC_RAW_PATH, name)
+        return u.STATIC_RAW_PATH + name + '.txt'
 
 
     def merge_trips_and_stops(self):
@@ -120,8 +120,7 @@ class StaticHandler(object):
                         name=row['stop_name'],
                         lat=float(row['stop_lat']),
                         lon=float(row['stop_lon']),
-                        travel_time={},
-                        arrivals={})
+                        travel_times={})
                     self.data.stationhash_lookup[stop_id] = station_hash
                 else:
                     station_hash = u.short_hash(parent_station, u.StationHash)
@@ -174,21 +173,21 @@ class StaticHandler(object):
 
 
     def serialize(self, attempt=0) -> None:
-        """ Stores self.data in u.STATIC_PARSED_PATH+'/static.json'
+        """ Stores self.data in u.STATIC_PARSED_PATH+'static.json'
         """
         json_path = u.STATIC_PARSED_PATH
 
         try:
-            with open(json_path + '/static.json', 'w') as out_file:
+            with open(json_path + 'static.json', 'w') as out_file:
                 json.dump(self.data, out_file, cls=u.StaticJSONEncoder)
-            u.parser_logger.info('Wrote parsed static data to %s/static.json', json_path)
+            u.parser_logger.info('Wrote parsed static data to %sstatic.json', json_path)
 
         except OSError as err:
             if attempt != 0:
-                u.parser_logger.error('Unable to write to %s/static.json', json_path)
+                u.parser_logger.error('Unable to write to %sstatic.json', json_path)
                 raise u.UpdateFailed(err)
 
-            u.parser_logger.info('%s/static.json does not exist, attempting to create it', json_path)
+            u.parser_logger.info('%sstatic.json does not exist, attempting to create it', json_path)
 
             try:
                 os.makedirs(json_path)
@@ -196,7 +195,7 @@ class StaticHandler(object):
                 u.parser_logger.error('Don\'t have permission to create %s', json_path)
                 raise u.UpdateFailed(err)
             except FileExistsError as err:
-                u.parser_logger.error('The file %s/static.json exists, no permission to overwrite', json_path)
+                u.parser_logger.error('The file %sstatic.json exists, no permission to overwrite', json_path)
                 raise u.UpdateFailed(err)
 
             self.serialize(attempt=attempt + 1)

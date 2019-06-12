@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+package transit_data_access;
+
+
+// Message types that are reused in different scopes:
+message StationHash {
+  int32 station_hash = 1;
+}
+
+message TripHash {
+  int32 trip_hash = 2;
+}
+
+message RouteHash {
+  int32 route_hash = 3;
+}
+
+message Branch {
+  RouteHash route_hash = 4;
+  StationHash final_stop = 5;
+}
+
+
+// Full data message:
+message DataFull {
+  string name = 1001;
+  int32 static_timestamp = 1002;
+  int32 average_realtime_timestamp = 1003;
+
+  message RouteInfo {
+    string desc = 1004;
+    int32 color = 1005;
+    int32 text_color = 1006;
+    message StationsList {
+      repeated StationHash station_hash = 1007;
+    }
+    StationsList stations = 1008;
+  }
+  map<RouteHash, RouteInfo> routes = 1009;
+
+  message StationInfo {
+    string name = 11;
+    float lat = 12;
+    float lon = 13;
+    message TravelTime {
+      sint32 travel_time = 14;
+    }
+    map<StationHash, TravelTime> travel_times = 15;
+  }
+  map<StationHash, StationInfo> stations = 1010;
+
+  map<string, RouteHash> routehash_lookup = 1011;
+  map<string, StationHash> stationhash_lookup = 1012;
+
+  message TransfersForStation {
+    message TransferTime {
+      sint32 travel_time = 1013;
+    }
+    map <StationHash, TransferTime> transfer_times = 1014;
+  }
+  map<StationHash, TransfersForStation> transfers = 1015;
+
+  message TripInfo {
+    Branch branch = 6;
+    enum TripStatus {
+      STOPPED = 0;
+      DELAYED = 1;
+      ON_TIME = 2;
+    }
+    TripStatus status = 7;
+    int32 timestamp = 8;
+    message ArrivalTime {
+      int32 arrival_time = 9;
+    }
+    map<StationHash, ArrivalTime> arrivals = 10;
+  }
+  map<TripHash, TripInfo> trips = 1016;
+
+}
+
+
+// Diff data message:
+message DataDiff {
+  repeated Person people = 1;
+}
