@@ -10,12 +10,22 @@ import zipfile
 import json
 import pandas as pd
 import util as u
-from gtfs_conf import GTFS_CONF
+from gtfs_conf import GTFS_CONF, LIST_OF_FILES
 
 
 class StaticHandler(object):
     """docstring for StaticHandler
     """
+
+    def has_static_data(self):
+        """Checks if static_data_path is populated with the csv files in LIST_OF_FILES
+        Returns a bool
+        """
+        all_files_are_loaded = True
+        for file_ in LIST_OF_FILES:
+            all_files_are_loaded *= os.path.isfile(u.STATIC_RAW_PATH + file_)
+        return all_files_are_loaded
+
     def get_feed(self) -> None:
         """Downloads new static GTFS data, checks if different than existing data,
         unzips, and then generates additional csv files:
@@ -24,13 +34,16 @@ class StaticHandler(object):
         merge_trips_and_stops combines trips, stops, and stop_times to make route_stops_with_names
         load_time_between_stops calculates time b/w each pair of adjacent stops using stop_times
         """
+        has_static_data = self.has_static_data()
         tmp_path = u.STATIC_TMP_PATH
         raw_path = u.STATIC_RAW_PATH
-        zip_filepath = u.STATIC_TMP_PATH + 'static_data.zip'
+        zip_filepath = u.STATIC_ZIP_PATH + 'static_data.zip'
+        old_zip_filepath = u.STATIC_ZIP_PATH + 'static_data_OLD.zip'
 
         try:
             os.makedirs(tmp_path, exist_ok=True)
             os.makedirs(raw_path, exist_ok=True)
+            os.makedirs(u.STATIC_ZIP_PATH, exist_ok=True)
         except PermissionError:
             u.parser_logger.error('Don\'t have permission to write to %s or %s', tmp_path, raw_path)
             raise u.UpdateFailed('PermissionError')
@@ -42,15 +55,25 @@ class StaticHandler(object):
             u.parser_logger.error('%s: Failed to connect to %s\n', err, self.url)
             raise u.UpdateFailed('Connection failure, couldn\'t get feed')
 
+        if has_static_data:
+            try:
+                shutil.move(zip_filepath, old_zip_filepath)
+            except FileNotFoundError:
+                has_static_data = False
+
         with open(zip_filepath, 'wb') as zip_outfile:
             zip_outfile.write(new_data.content)
+
+        if has_static_data:
+            no_new_data = (u.checksum(zip_filepath) == u.checksum(old_zip_filepath))
+            os.remove(old_zip_filepath)
+            u.parser_logger.info('removing %s', old_zip_filepath)
+            if no_new_data:
+                raise u.UpdateFailed('Static data checksum matches previously parsed static data. No new data!')
 
         u.parser_logger.info('Extracting zip to %s', tmp_path)
         with zipfile.ZipFile(zip_filepath, "r") as zip_ref:
             zip_ref.extractall(tmp_path)
-
-        u.parser_logger.info('removing %s', zip_filepath)
-        os.remove(zip_filepath)
 
         u.parser_logger.info('Deleting %s to make room for new static data', raw_path)
         shutil.rmtree(raw_path)
@@ -200,6 +223,14 @@ class StaticHandler(object):
 
             self.serialize(attempt=attempt + 1)
 
+    def update(self):
+        u.parser_logger.info('~~~~~~~~~~ Running STATIC.py ~~~~~~~~~~')
+        try:
+            self.get_feed()
+            self.parse()
+            self.serialize()
+        except u.UpdateFailed as err:
+            u.parser_logger.error(err)
 
     def __init__(self) -> None:
         self.url = GTFS_CONF.static_url
@@ -212,22 +243,9 @@ class StaticHandler(object):
             stationhash_lookup={},
             transfers=defaultdict(dict)
         )
-        self.data.static_timestamp = 2
-
-
-def update() -> bool:
-    sh = StaticHandler()
-    u.parser_logger.info('~~~~~~~~~~ Running STATIC.py ~~~~~~~~~~')
-    try:
-        sh.get_feed()
-        sh.parse()
-        sh.serialize()
-    except u.UpdateFailed as err:
-        print(err)
-        u.parser_logger.error(str(err))
-        return False
-    return True
+        self.data.static_timestamp = 0
 
 
 if __name__ == '__main__':
-    update()
+    sh = StaticHandler()
+    sh.update()

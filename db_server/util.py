@@ -11,6 +11,7 @@ import json
 import logging
 from dataclasses import dataclass, is_dataclass, field
 import pyhash  # type: ignore
+import hashlib
 from gtfs_conf import GTFS_CONF
 
 
@@ -25,6 +26,7 @@ REALTIME_PARSED_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/realtime/parsed/'
 STATIC_TMP_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/static/tmp/'
 STATIC_RAW_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/static/raw/'
 STATIC_PARSED_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/static/parsed/'
+STATIC_ZIP_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/static/zip/'
 
 LOG_PATH = f'/var/log/{PACKAGE_NAME}/db_server'
 LOG_LEVEL = logging.INFO
@@ -52,7 +54,7 @@ SpecifiedHash = TypeVar('SpecifiedHash', StationHash, RouteHash, TripHash)
 ArrivalTime  = NewType('ArrivalTime', int)          # POSIX time                 # noqa
 TravelTime   = NewType('TravelTime', int)           # number of seconds          # noqa
 TransferTime = NewType('TransferTime', int)         # number of seconds          # noqa
-TimeDiff = NewType('TimeDiff', int)  # number of seconds
+TimeDiff = NewType('TimeDiff', int)                 # number of seconds
 
 hasher = pyhash.super_fast_hash()
 def short_hash(input_: Any, type_hint: Type[SpecifiedHash]) -> SpecifiedHash:
@@ -125,7 +127,7 @@ class StaticData:
 
 @dataclass
 class RealtimeData(StaticData):
-    average_realtime_timestamp: int
+    realtime_timestamp: int
     trips: Dict[TripHash, Trip]
 
 
@@ -151,7 +153,7 @@ class BranchDiff:
 
 @dataclass
 class DataDiff:
-    average_realtime_timestamp: int
+    realtime_timestamp: int
     trips: TripDiff
     arrivals: ArrivalsDiff
     status: StatusDiff
@@ -270,7 +272,7 @@ server_logger = logging.getLogger('server')
 log_setup([parser_logger, server_logger])
 
 
-class TimeLogger():
+class TimeLogger:
     """ Convenient little way to log how long something takes. Usage:
 
     with TimeLogger() as _tl:
@@ -297,3 +299,11 @@ class TimeLogger():
             block_time = time_ - prev_time
             parser_logger.info('%s took %s seconds', block_name, block_time)
             prev_time = time_
+
+
+def checksum(fname):
+    hash_md5 = hashlib.md5()
+    with open(fname, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_md5.update(chunk)
+    return hash_md5.hexdigest()

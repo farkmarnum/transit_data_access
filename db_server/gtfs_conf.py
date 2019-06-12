@@ -9,6 +9,18 @@ class GTFSConf(NamedTuple):
     static_url: str
     realtime_urls: Dict[str, str]
 
+LIST_OF_FILES = [
+    'agency.txt',
+    'calendar_dates.txt',
+    'calendar.txt',
+    'route_stops_with_names.txt',
+    'routes.txt',
+    'shapes.txt',
+    'stop_times.txt',
+    'stops.txt',
+    'transfers.txt',
+    'trips.txt'
+]
 
 API_KEY: str = 'f775a76bd1960c98831b3c2b06c19bb5'
 

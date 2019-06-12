@@ -6,6 +6,8 @@ from typing import List, Dict, NamedTuple, NewType, Union, Any, Optional  # noqa
 import warnings
 import json
 import eventlet
+import gzip
+import bz2
 from eventlet.green.urllib.error import URLError
 from eventlet.green.urllib import request
 # from google.transit import gtfs_realtime_pb2
@@ -17,7 +19,7 @@ from google.protobuf.message import DecodeError
 # import numpy as np
 import util as u
 from gtfs_conf import GTFS_CONF
-
+from server import DatabaseServer
 
 TIME_DIFF_THRESHOLD = 3
 
@@ -32,7 +34,7 @@ class FetchResult(NamedTuple):
     error: str = ''
 
 
-class RealtimeFeedHandler():
+class RealtimeFeedHandler:
     """ TODO: docstring
     """
 
@@ -78,14 +80,16 @@ class RealtimeFeedHandler():
 class RealtimeManager():
     """docstring for RealtimeManager
     """
-    def __init__(self) -> None:
+    def __init__(self, db_server: DatabaseServer = None) -> None:
         self.request_pool = eventlet.GreenPool(len(GTFS_CONF.realtime_urls))
         self.feed_handlers = [RealtimeFeedHandler(url, id_) for id_, url in GTFS_CONF.realtime_urls.items()]
 
         self.feed: FeedMessage = None
         self.data: u.RealtimeData = None        # type: ignore
+        self.data_diff: u.DataDiff = None
         self.prev_data: u.RealtimeData = None   # type: ignore
         self.average_timestamp: int
+        self.db_server = db_server
 
     def fetch_all(self) -> None:
         """get all new feeds, check each, and combine
@@ -134,7 +138,7 @@ class RealtimeManager():
                 routehash_lookup={str(k): v for k, v in static_data.routehash_lookup.items()},
                 stationhash_lookup={str(k): v for k, v in static_data.stationhash_lookup.items()},
                 transfers={int(k): {int(_k): _v for _k, _v in v.items()} for k, v in static_data.transfers.items()},
-                average_realtime_timestamp=self.average_timestamp,
+                realtime_timestamp=int(time.time()),
                 trips={}
             )
 
@@ -180,10 +184,19 @@ class RealtimeManager():
         """
         json_path = u.REALTIME_PARSED_PATH
 
+        data_str = json.dumps(data, cls=u.RealtimeJSONEncoder)
         try:
             with open(json_path + outfile, 'w') as out_file:
-                json.dump(data, out_file, cls=u.RealtimeJSONEncoder)
+                out_file.write(data_str)
             u.parser_logger.info('Wrote parsed static data to %s', json_path + outfile)
+
+            # with gzip.open(json_path + outfile + '.gz', 'wb') as f:
+            #    b = bytes(data_str, 'utf-8')
+            #    f.write(gzip.compress(b, compresslevel=9))
+
+            with bz2.open(json_path + outfile + '.bz2', 'wb') as f:
+                b = bytes(data_str, 'utf-8')
+                f.write(bz2.compress(b, compresslevel=9))
 
         except (OSError, FileNotFoundError) as err:
             if attempt != 0:
@@ -201,7 +214,7 @@ class RealtimeManager():
                 u.parser_logger.error('The file %s exists, no permission to overwrite', json_path + outfile)
                 raise u.UpdateFailed(err)
 
-            self.serialize(attempt=attempt + 1)
+            self.serialize_to_JSON(attempt=attempt + 1)
 
     def diff(self) -> None:
         """ docstring for diff()
@@ -249,7 +262,7 @@ class RealtimeManager():
                 branch_diff.modified[trip_hash] = new_trip.branch
 
         data_diff = u.DataDiff(
-            average_realtime_timestamp=self.average_timestamp,
+            realtime_timestamp=self.data.realtime_timestamp,
             trips=trip_diff,
             arrivals=arrivals_diff,
             status=status_diff,
@@ -259,8 +272,9 @@ class RealtimeManager():
         self.serialize_to_JSON(data_diff, 'realtime_diff.json')
         # u.parser_logger.info('realtime JSON size:', os.path.getsize(u.REALTIME_PARSED_PATH + 'realtime.json'))
         # u.parser_logger.info('realtime_diff JSON size:', os.path.getsize(u.REALTIME_PARSED_PATH + 'realtime_diff.json'))
+        self.data_diff = data_diff
 
-    def to_protobuf(self):
+    def full_to_protobuf(self):
         """ doc
         """
         data_full = self.data
@@ -268,7 +282,7 @@ class RealtimeManager():
 
         proto_full.name = data_full.name
         proto_full.static_timestamp = data_full.static_timestamp
-        proto_full.average_realtime_timestamp = data_full.average_realtime_timestamp
+        proto_full.realtime_timestamp = data_full.realtime_timestamp
 
         for route_hash, route_info in data_full.routes.items():
             proto_full.routes[route_hash].desc = route_info.desc
@@ -301,12 +315,74 @@ class RealtimeManager():
             for station_hash, arrival_time in trip.arrivals.items():
                 proto_full.trips[trip_hash].arrivals[station_hash] = arrival_time
 
+        data_out = proto_full.SerializeToString()
         with open(u.REALTIME_PARSED_PATH + 'data_full.protobuf', 'wb') as outfile:
-            outfile.write(proto_full.SerializeToString())
+            outfile.write(data_out)
 
-        u.parser_logger.info('serialized data to protobuf')
+        # with gzip.open(u.REALTIME_PARSED_PATH + 'data_full.protobuf' + '.gz', 'wb') as f:
+        #        f.write(gzip.compress(data_out, compresslevel=9))
 
-    def update(self) -> bool:
+        with bz2.open(u.REALTIME_PARSED_PATH + 'data_full.protobuf' + '.bz2', 'wb') as f:
+                f.write(bz2.compress(data_out, compresslevel=9))
+        u.parser_logger.info('Serialized full_data to protobuf')
+
+
+    def diff_to_protobuf(self):
+        """ doc
+        """
+        if not self.data_diff:
+            return
+
+        data_update = self.data_diff
+        proto_update = transit_data_access_pb2.DataUpdate()
+
+        proto_update.realtime_timestamp = data_update.realtime_timestamp
+
+        proto_update.trips.deleted[:] = data_update.trips.deleted
+        for trip in data_update.trips.added:
+            proto_trip = proto_update.trips.added.add()
+            proto_trip.trip_hash = trip.id_
+            proto_trip.info.status = trip.status
+            proto_trip.info.timestamp = trip.timestamp if trip.timestamp else 0
+            proto_trip.info.branch.route_hash = trip.branch.route
+            proto_trip.info.branch.final_station = trip.branch.final_station
+            for station_hash, arrival_time in trip.arrivals.items():
+                proto_trip.info.arrivals[station_hash] = arrival_time
+
+        for trip_hash, stations_list in data_update.arrivals.deleted.items():
+            proto_update.arrivals.deleted.trip_station_dict[trip_hash].station_hash[:] = stations_list
+
+        for trip_hash, station_arrival_dict in data_update.arrivals.added.items():
+            for station_hash, arrival_time in station_arrival_dict.items():
+                station_arrival = proto_update.arrivals.added[trip_hash].arrival.add()
+                station_arrival.station_hash = station_hash
+                station_arrival.arrival_time = arrival_time
+
+        for time_diff, trip_stationlist_dict in data_update.arrivals.modified.items():
+            for trip_hash, stations_list in trip_stationlist_dict.items():
+                proto_update.arrivals.modified[time_diff].trip_station_dict[trip_hash].station_hash[:] = stations_list
+
+        for trip_hash, trip_status in data_update.status.modified.items():
+            proto_update.status[trip_hash] = trip_status
+
+        for trip_hash, branch in data_update.branch.modified.items():
+            proto_update.branch[trip_hash].route_hash = branch.route
+            proto_update.branch[trip_hash].final_station = branch.final_station
+
+        data_out = proto_update.SerializeToString()
+        with open(u.REALTIME_PARSED_PATH + 'data_update.protobuf', 'wb') as outfile:
+            outfile.write(data_out)
+
+        # with gzip.open(u.REALTIME_PARSED_PATH + 'data_update.protobuf' + '.gz', 'wb') as f:
+        #        f.write(gzip.compress(data_out, compresslevel=9))
+
+        with bz2.open(u.REALTIME_PARSED_PATH + 'data_update.protobuf' + '.bz2', 'wb') as f:
+                f.write(bz2.compress(data_out, compresslevel=9))
+
+        print(proto_update)
+        u.parser_logger.info('Serialized update_data to protobuf')
+
+    def update(self) -> None:
         with u.TimeLogger() as _tl:
             try:
                 self.prev_data = self.data
@@ -315,24 +391,26 @@ class RealtimeManager():
                 self.load_static()
                 self.parse()
                 self.diff()
-                self.to_protobuf()
+                self.full_to_protobuf()
+                self.diff_to_protobuf()
+                if self.db_server:
+                    self.db_server.push()
                 _tl.tlog('realtime update')
             except u.UpdateFailed as err:
                 self.data = self.prev_data
                 u.parser_logger.error(err)
                 if not self.data:
+                    eventlet.sleep(1)
                     self.update()
-                else:
-                    return False
-            return True
 
+    def run(self) -> None:
+        u.parser_logger.info('~~~~~~~~~~ Running realtime.py ~~~~~~~~~~')
+        while True:
+            _t = time.time()
+            self.update()
+            _t_diff = time.time() - _t
+            eventlet.sleep(u.REALTIME_FREQ - _t_diff)
 
 if __name__ == "__main__":
-    u.parser_logger.info('~~~~~~~~~~ Running realtime.py ~~~~~~~~~~')
     rm = RealtimeManager()
-
-    while True:
-        _t = time.time()
-        rm.update()
-        _t_diff = time.time() - _t
-        eventlet.sleep(u.REALTIME_FREQ - _t_diff)
+    rm.run()
