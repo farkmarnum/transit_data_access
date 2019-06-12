@@ -73,24 +73,19 @@ STOPPED, DELAYED, ON_TIME = list(map(TripStatus, range(3)))
 
 class Branch(NamedTuple):
     route: RouteHash
-    final_stop: StationHash
+    final_station: StationHash
     def serialize(self) -> str:
-        return f'{self.route},{self.final_stop}'
+        return f'{self.route},{self.final_station}'
 
 class StationArrival(NamedTuple):
     arrival_time: ArrivalTime
     trip_hash: TripHash
-"""
-class TripArrival(NamedTuple):
-    arrival_time: ArrivalTime
-    station_hash: StationHash
-"""
-
 
 def dict_of_list_factory():
     return defaultdict(list)
 def dict_of_dict_of_list_factory():
     return defaultdict(lambda: defaultdict(list))
+
 
 @dataclass
 class RouteInfo:
@@ -106,10 +101,6 @@ class Station:
     lat: float
     lon: float
     travel_times: Dict[StationHash, TravelTime]
-    # arrivals: Dict[Branch, List[StationArrival]] = field(default_factory=dict_of_list_factory)
-
-    # def add_arrival(self, branch: Branch, arrival_time: ArrivalTime, trip: TripHash):
-    #    self.arrivals[branch].append(StationArrival(arrival_time, trip))
 
 @dataclass
 class Trip:
@@ -165,8 +156,6 @@ class DataDiff:
     arrivals: ArrivalsDiff
     status: StatusDiff
     branch: BranchDiff
-
-
 
 
 class UpdateFailed(Exception):

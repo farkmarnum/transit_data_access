@@ -3,41 +3,19 @@ syntax = "proto3";
 package transit_data_access;
 
 
-// Message types that are reused in different scopes:
-message StationHash {
-  int32 station_hash = 1;
-}
-
-message TripHash {
-  int32 trip_hash = 2;
-}
-
-message RouteHash {
-  int32 route_hash = 3;
-}
-
-message Branch {
-  RouteHash route_hash = 4;
-  StationHash final_stop = 5;
-}
-
-
 // Full data message:
 message DataFull {
   string name = 1001;
-  int32 static_timestamp = 1002;
-  int32 average_realtime_timestamp = 1003;
+  uint32 static_timestamp = 1002;
+  uint32 average_realtime_timestamp = 1003;
 
   message RouteInfo {
     string desc = 1004;
-    int32 color = 1005;
-    int32 text_color = 1006;
-    message StationsList {
-      repeated StationHash station_hash = 1007;
-    }
-    StationsList stations = 1008;
+    uint32 color = 1005;
+    uint32 text_color = 1006;
+    repeated uint32 stations = 1008;                  // each element is a StationHash
   }
-  map<RouteHash, RouteInfo> routes = 1009;
+  map<uint32, RouteInfo> routes = 1009;               // map key is RouteHash
 
   message StationInfo {
     string name = 11;
@@ -46,22 +24,23 @@ message DataFull {
     message TravelTime {
       sint32 travel_time = 14;
     }
-    map<StationHash, TravelTime> travel_times = 15;
+    map<uint32, TravelTime> travel_times = 15;        // map key is StationHash
   }
-  map<StationHash, StationInfo> stations = 1010;
+  map<uint32, StationInfo> stations = 1010;           // map key is StationHash
 
-  map<string, RouteHash> routehash_lookup = 1011;
-  map<string, StationHash> stationhash_lookup = 1012;
+  map<string, uint32> routehash_lookup = 1011;        // map values are RouteHash
+  map<string, uint32> stationhash_lookup = 1012;      // map values are StationHash
 
   message TransfersForStation {
-    message TransferTime {
-      sint32 travel_time = 1013;
-    }
-    map <StationHash, TransferTime> transfer_times = 1014;
+    map<uint32, uint32> transfer_times = 1014;  // map key is StationHash, value is transfer_time
   }
-  map<StationHash, TransfersForStation> transfers = 1015;
+  map<uint32, TransfersForStation> transfers = 1015;  // map key is StationHash
 
   message TripInfo {
+    message Branch {
+      uint32 route_hash = 4;
+      uint32 final_station = 5;
+    }
     Branch branch = 6;
     enum TripStatus {
       STOPPED = 0;
@@ -69,18 +48,15 @@ message DataFull {
       ON_TIME = 2;
     }
     TripStatus status = 7;
-    int32 timestamp = 8;
-    message ArrivalTime {
-      int32 arrival_time = 9;
-    }
-    map<StationHash, ArrivalTime> arrivals = 10;
+    uint32 timestamp = 8;
+    map<uint32, uint32> arrivals = 10;                  // map key is StationHash, value is Arrival Time
   }
-  map<TripHash, TripInfo> trips = 1016;
+  map<uint32, TripInfo> trips = 1016;                   // map key is TripHash
 
 }
 
 
 // Diff data message:
 message DataDiff {
-  repeated Person people = 1;
+  int32 placeholder_for_now = 200;
 }

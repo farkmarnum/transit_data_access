@@ -10,6 +10,7 @@ from eventlet.green.urllib.error import URLError
 from eventlet.green.urllib import request
 # from google.transit import gtfs_realtime_pb2
 from google.transit.gtfs_realtime_pb2 import FeedMessage    # type: ignore
+import transit_data_access_pb2
 from google.protobuf.message import DecodeError
 # import matplotlib.pyplot as plt
 # import matplotlib.animation as animation
@@ -116,6 +117,7 @@ class RealtimeManager():
                     full_feed.MergeFrom(fh.prev_feed)
                 except (ValueError, TypeError) as err:
                     raise u.UpdateFailed('Could not merge feed', fh.id_, err)
+
             self.feed = full_feed
 
     def load_static(self) -> None:
@@ -129,9 +131,9 @@ class RealtimeManager():
                 static_timestamp=static_data.static_timestamp,
                 routes=static_data.routes,
                 stations=static_data.stations,
-                routehash_lookup=static_data.routehash_lookup,
-                stationhash_lookup=static_data.stationhash_lookup,
-                transfers=static_data.transfers,
+                routehash_lookup={str(k): v for k, v in static_data.routehash_lookup.items()},
+                stationhash_lookup={str(k): v for k, v in static_data.stationhash_lookup.items()},
+                transfers={int(k): {int(_k): _v for _k, _v in v.items()} for k, v in static_data.transfers.items()},
                 average_realtime_timestamp=self.average_timestamp,
                 trips={}
             )
@@ -156,12 +158,10 @@ class RealtimeManager():
                     try:
                         station_hash = self.data.stationhash_lookup[stop_time_update.stop_id]
                     except KeyError:
-                        # print(stop_time_update.stop_id)
                         continue
                     arrival_time = u.ArrivalTime(stop_time_update.arrival.time)
                     if arrival_time < time.time():
                         continue
-                    # self.data.stations[station_hash].add_arrival(branch, arrival_time, trip_hash)
                     self.data.trips[trip_hash].add_arrival(station_hash, arrival_time)
 
             elif elem.HasField('vehicle'):
@@ -172,8 +172,10 @@ class RealtimeManager():
                     trip_hash = u.short_hash(elem.vehicle.trip.trip_id, u.TripHash)
                     self.data.trips[trip_hash].status = u.STOPPED
 
+        self.serialize_to_JSON(self.data, 'realtime.json')
 
-    def serialize(self, data, outfile, attempt=0):
+
+    def serialize_to_JSON(self, data, outfile, attempt=0):
         """ Stores data in outfile with custom JSON encoder u.RealtimeJSONEncoder
         """
         json_path = u.REALTIME_PARSED_PATH
@@ -254,10 +256,55 @@ class RealtimeManager():
             branch=branch_diff
         )
         # print(arrivals_diff)
-        self.serialize(data_diff, 'realtime_diff.json')
-        print('realtime JSON size:', os.path.getsize(u.REALTIME_PARSED_PATH + 'realtime.json'))
-        print('realtime_diff JSON size:', os.path.getsize(u.REALTIME_PARSED_PATH + 'realtime_diff.json'))
+        self.serialize_to_JSON(data_diff, 'realtime_diff.json')
+        # u.parser_logger.info('realtime JSON size:', os.path.getsize(u.REALTIME_PARSED_PATH + 'realtime.json'))
+        # u.parser_logger.info('realtime_diff JSON size:', os.path.getsize(u.REALTIME_PARSED_PATH + 'realtime_diff.json'))
 
+    def to_protobuf(self):
+        """ doc
+        """
+        data_full = self.data
+        proto_full = transit_data_access_pb2.DataFull()
+
+        proto_full.name = data_full.name
+        proto_full.static_timestamp = data_full.static_timestamp
+        proto_full.average_realtime_timestamp = data_full.average_realtime_timestamp
+
+        for route_hash, route_info in data_full.routes.items():
+            proto_full.routes[route_hash].desc = route_info.desc
+            proto_full.routes[route_hash].color = route_info.color
+            proto_full.routes[route_hash].text_color = route_info.text_color
+            proto_full.routes[route_hash].stations[:] = list(route_info.stations)
+
+        for station_hash, station in data_full.stations.items():
+            proto_full.stations[station_hash].name = station.name
+            proto_full.stations[station_hash].lat = station.lat
+            proto_full.stations[station_hash].lon = station.lon
+            for other_station_hash, travel_time in station.travel_times.items():
+                proto_full.stations[station_hash].travel_times[other_station_hash] = travel_time
+
+        for route_str, route_hash in data_full.routehash_lookup.items():
+            proto_full.routehash_lookup[route_str] = route_hash
+
+        for station_str, station_hash in data_full.stationhash_lookup.items():
+            proto_full.stationhash_lookup[station_str] = station_hash
+
+        for station_hash, transfers_for_station in data_full.transfers.items():
+            for other_station_hash, transfer_time in transfers_for_station.items():
+                proto_full.transfers[station_hash].transfer_times[other_station_hash] = transfer_time
+
+        for trip_hash, trip in data_full.trips.items():
+            proto_full.trips[trip_hash].branch.route_hash = trip.branch.route
+            proto_full.trips[trip_hash].branch.final_station = trip.branch.final_station
+            proto_full.trips[trip_hash].status = trip.status
+            proto_full.trips[trip_hash].timestamp = trip.timestamp if trip.timestamp else 0
+            for station_hash, arrival_time in trip.arrivals.items():
+                proto_full.trips[trip_hash].arrivals[station_hash] = arrival_time
+
+        with open(u.REALTIME_PARSED_PATH + 'data_full.protobuf', 'wb') as outfile:
+            outfile.write(proto_full.SerializeToString())
+
+        u.parser_logger.info('serialized data to protobuf')
 
     def update(self) -> bool:
         with u.TimeLogger() as _tl:
@@ -265,20 +312,19 @@ class RealtimeManager():
                 self.prev_data = self.data
                 self.fetch_all()
                 self.merge_feeds()
-                # with open('/Users/user/dev/transit_data_access/tmp.txt', 'w') as outfile:
-                #    outfile.write(str(self.feed.entity))
                 self.load_static()
                 self.parse()
-                self.serialize(self.data, 'realtime.json')
                 self.diff()
+                self.to_protobuf()
                 _tl.tlog('realtime update')
             except u.UpdateFailed as err:
                 self.data = self.prev_data
-                print(err)
                 u.parser_logger.error(err)
-                return False
+                if not self.data:
+                    self.update()
+                else:
+                    return False
             return True
-
 
 
 if __name__ == "__main__":
