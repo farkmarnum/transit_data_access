@@ -6,7 +6,6 @@ from typing import List, Dict, NamedTuple, NewType, Union, Any, Optional  # noqa
 import warnings
 import json
 import eventlet
-import gzip
 import bz2
 from eventlet.green.urllib.error import URLError
 from eventlet.green.urllib import request
@@ -65,7 +64,7 @@ class RealtimeFeedHandler:
                 self.result = FetchResult(FETCH_FAILED, error=f'TIMEOUT of {err}')
 
         if attempt + 1 < u.MAX_ATTEMPTS:
-            print('retry!', self.result)
+            u.parser_logger.info('Fetch failed for %s, trying again', self.id_)
             self.fetch(attempt=attempt + 1)
 
     def __init__(self, url, id_):
@@ -81,6 +80,7 @@ class RealtimeManager():
     """docstring for RealtimeManager
     """
     def __init__(self, db_server: DatabaseServer = None) -> None:
+        self.parser_thread = None
         self.request_pool = eventlet.GreenPool(len(GTFS_CONF.realtime_urls))
         self.feed_handlers = [RealtimeFeedHandler(url, id_) for id_, url in GTFS_CONF.realtime_urls.items()]
 
@@ -190,10 +190,6 @@ class RealtimeManager():
                 out_file.write(data_str)
             u.parser_logger.info('Wrote parsed static data to %s', json_path + outfile)
 
-            # with gzip.open(json_path + outfile + '.gz', 'wb') as f:
-            #    b = bytes(data_str, 'utf-8')
-            #    f.write(gzip.compress(b, compresslevel=9))
-
             with bz2.open(json_path + outfile + '.bz2', 'wb') as f:
                 b = bytes(data_str, 'utf-8')
                 f.write(bz2.compress(b, compresslevel=9))
@@ -268,10 +264,7 @@ class RealtimeManager():
             status=status_diff,
             branch=branch_diff
         )
-        # print(arrivals_diff)
         self.serialize_to_JSON(data_diff, 'realtime_diff.json')
-        # u.parser_logger.info('realtime JSON size:', os.path.getsize(u.REALTIME_PARSED_PATH + 'realtime.json'))
-        # u.parser_logger.info('realtime_diff JSON size:', os.path.getsize(u.REALTIME_PARSED_PATH + 'realtime_diff.json'))
         self.data_diff = data_diff
 
     def full_to_protobuf(self):
@@ -318,10 +311,6 @@ class RealtimeManager():
         data_out = proto_full.SerializeToString()
         with open(u.REALTIME_PARSED_PATH + 'data_full.protobuf', 'wb') as outfile:
             outfile.write(data_out)
-
-        # with gzip.open(u.REALTIME_PARSED_PATH + 'data_full.protobuf' + '.gz', 'wb') as f:
-        #        f.write(gzip.compress(data_out, compresslevel=9))
-
         with bz2.open(u.REALTIME_PARSED_PATH + 'data_full.protobuf' + '.bz2', 'wb') as f:
                 f.write(bz2.compress(data_out, compresslevel=9))
         u.parser_logger.info('Serialized full_data to protobuf')
@@ -372,14 +361,8 @@ class RealtimeManager():
         data_out = proto_update.SerializeToString()
         with open(u.REALTIME_PARSED_PATH + 'data_update.protobuf', 'wb') as outfile:
             outfile.write(data_out)
-
-        # with gzip.open(u.REALTIME_PARSED_PATH + 'data_update.protobuf' + '.gz', 'wb') as f:
-        #        f.write(gzip.compress(data_out, compresslevel=9))
-
         with bz2.open(u.REALTIME_PARSED_PATH + 'data_update.protobuf' + '.bz2', 'wb') as f:
                 f.write(bz2.compress(data_out, compresslevel=9))
-
-        print(proto_update)
         u.parser_logger.info('Serialized update_data to protobuf')
 
     def update(self) -> None:
@@ -404,12 +387,19 @@ class RealtimeManager():
                     self.update()
 
     def run(self) -> None:
-        u.parser_logger.info('~~~~~~~~~~ Running realtime.py ~~~~~~~~~~')
         while True:
             _t = time.time()
             self.update()
             _t_diff = time.time() - _t
             eventlet.sleep(u.REALTIME_FREQ - _t_diff)
+
+    def start(self):
+        u.parser_logger.info('~~~~~~~~~~ Running realtime parser ~~~~~~~~~~')
+        self.parser_thread = eventlet.spawn(self.run)
+
+    def stop(self):
+        u.parser_logger.info('~~~~~~~~~~ Stopping realtime parser ~~~~~~~~~~')
+        self.parser_thread.kill()
 
 if __name__ == "__main__":
     rm = RealtimeManager()

@@ -12,7 +12,7 @@ import logging
 from dataclasses import dataclass, is_dataclass, field
 import pyhash  # type: ignore
 import hashlib
-from gtfs_conf import GTFS_CONF
+from gtfs_conf import GTFS_CONF  # type: ignore
 
 
 #####################################
@@ -32,7 +32,7 @@ LOG_PATH = f'/var/log/{PACKAGE_NAME}/db_server'
 LOG_LEVEL = logging.INFO
 
 IP = '127.0.0.1'
-PORT = 3333
+PORT = 8000
 
 REALTIME_FREQ = 15
 REALTIME_TIMEOUT = 2
@@ -249,7 +249,7 @@ def log_setup(loggers: list):
             print(f'ERROR: Don\'t have permission to create log path: {LOG_PATH}')
             exit()
 
-    # set the formatfor log messages
+    # set the format for log messages
     log_format = '%(asctime)s.%(msecs)03d %(levelname)s %(message)s'
     log_date_format = '%Y-%m-%d %H:%M:%S'
     log_formatter = logging.Formatter(fmt=log_format, datefmt=log_date_format)

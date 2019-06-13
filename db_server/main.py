@@ -24,7 +24,7 @@ def scheduler(db_server) -> None:
         schedule.run_pending()
         eventlet.sleep(0.5)
 
-def main() -> None:
+def start() -> None:
     """ Starts server, then starts scheduler for parsing. Stops server after interupt.
     """
     print(f'Logging in {u.LOG_PATH}')
@@ -34,7 +34,7 @@ def main() -> None:
 
     static_parse()
     realtime_manager = realtime.RealtimeManager(db_server)
-    realtime_manager.run()
+    realtime_manager.start()
 
     eventlet.spawn(scheduler, db_server)
     while True:
@@ -44,6 +44,7 @@ def main() -> None:
             print('\nKeyboardInterrupt, exiting')
             break
     db_server.stop()
+    realtime_manager.stop()
 
 if __name__ == "__main__":
-    main()
+    start()
