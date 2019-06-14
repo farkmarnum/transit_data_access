@@ -1,11 +1,11 @@
 """ This script manages the database server
 """
-import eventlet  # noqa
-import schedule  # type: ignore
-import util as u # type: ignore
-import server    # type: ignore
-import static    # type: ignore
-import realtime  # type: ignore
+import eventlet   # noqa
+import schedule   # type: ignore
+import util as u  # type: ignore
+import server     # type: ignore
+import static     # type: ignore
+import realtime   # type: ignore
 
 def static_parse() -> None:
     """ Fetches static feed, handles errors, and parses if new (which stores it in a file).

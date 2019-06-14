@@ -2,7 +2,8 @@
 """
 import time
 import os
-from typing import List, Dict, NamedTuple, NewType, Union, Any, Optional  # noqa
+from typing import List, Dict, Tuple, NamedTuple, NewType, Union, Any, Optional  # noqa
+from bisect import bisect_left
 import warnings
 import json
 import eventlet
@@ -23,6 +24,7 @@ TIME_DIFF_THRESHOLD = 3
 FetchStatus = NewType('FetchStatus', int)
 NONE, NEW_FEED, OLD_FEED, FETCH_FAILED, DECODE_FAILED, RUNTIME_WARNING = list(map(FetchStatus, range(6)))
 
+Timestamp = NewType('Timestamp', int)
 
 class FetchResult(NamedTuple):
     status: FetchStatus
@@ -77,6 +79,7 @@ class RealtimeManager():
     """docstring for RealtimeManager
     """
     def __init__(self, db_server: DatabaseServer = None) -> None:
+        self.db_server = db_server
         self.parser_thread = None
         self.initial_merge_attempts = 0
         self.max_initial_merge_attempts = 10
@@ -84,11 +87,14 @@ class RealtimeManager():
         self.feed_handlers = [RealtimeFeedHandler(url, id_) for id_, url in GTFS_CONF.realtime_urls.items()]
 
         self.feed: FeedMessage = None
-        self.data: u.RealtimeData = None        # type: ignore
-        self.data_diff: u.DataDiff = None
-        self.prev_data: u.RealtimeData = None   # type: ignore
-        self.average_timestamp: int
-        self.db_server = db_server
+        self.current_data: u.RealtimeData = None  # type: ignore
+        self.current_timestamp: Timestamp = Timestamp(0)
+
+        self.data_dict: Dict[Timestamp, u.RealtimeData] = {}
+        self.diff_dict: Dict[Timestamp, u.DataDiff] = {}
+
+        self.data_serialized_bz2: Dict[Timestamp, bytes] = {}
+        self.diff_serialized_bz2: Dict[Timestamp, bytes] = {}
 
     def fetch_all(self) -> None:
         """get all new feeds, check each, and combine
@@ -102,7 +108,7 @@ class RealtimeManager():
             if fh.result.status not in [NEW_FEED, OLD_FEED]:
                 u.parser_logger.error('Encountered %s when fetching feed %s', fh.result.error, fh.id_)
 
-        self.average_timestamp = int(sum([fh.latest_timestamp for fh in self.feed_handlers]) / len(self.feed_handlers))
+        # self.average_realtime_timestamp = int(sum([fh.latest_timestamp for fh in self.feed_handlers]) / len(self.feed_handlers))
         new_feeds = sum([int(fh.result.status == NEW_FEED) for fh in self.feed_handlers])
         u.parser_logger.info('%s new feeds', new_feeds)
         if new_feeds < 1:
@@ -124,12 +130,13 @@ class RealtimeManager():
             self.feed = full_feed
 
     def load_static(self) -> None:
-        """Loads the static.json file into self.data
+        """Loads the static.json file into self.current_data
         """
         static_json = u.STATIC_PARSED_PATH + 'static.json'
         with open(static_json, mode='r') as static_json_file:
             static_data = json.loads(static_json_file.read(), cls=u.StaticJSONDecoder)
-            self.data = u.RealtimeData(
+            self.current_timestamp = Timestamp(int(time.time()))
+            self.current_data = u.RealtimeData(
                 name=static_data.name,
                 static_timestamp=static_data.static_timestamp,
                 routes=static_data.routes,
@@ -137,7 +144,7 @@ class RealtimeManager():
                 routehash_lookup={str(k): v for k, v in static_data.routehash_lookup.items()},
                 stationhash_lookup={str(k): v for k, v in static_data.stationhash_lookup.items()},
                 transfers={int(k): {int(_k): _v for _k, _v in v.items()} for k, v in static_data.transfers.items()},
-                realtime_timestamp=int(time.time()),
+                realtime_timestamp=self.current_timestamp,
                 trips={}
             )
 
@@ -146,20 +153,20 @@ class RealtimeManager():
             trip_hash = u.short_hash(elem.trip_update.trip.trip_id, u.TripHash)
             route_hash = u.short_hash(elem.trip_update.trip.route_id, u.RouteHash)
 
-            if trip_hash not in self.data.trips:
+            if trip_hash not in self.current_data.trips:
                 if not len(elem.trip_update.stop_time_update):
                     continue
                 last_stop_id = elem.trip_update.stop_time_update[-1].stop_id
-                final_station = self.data.stationhash_lookup[last_stop_id]
+                final_station = self.current_data.stationhash_lookup[last_stop_id]
                 if not final_station:
                     continue
                 branch = u.Branch(route_hash, final_station)
-                self.data.trips[trip_hash] = u.Trip(id_=trip_hash, branch=branch)
+                self.current_data.trips[trip_hash] = u.Trip(id_=trip_hash, branch=branch)
 
             if elem.HasField('trip_update'):
                 for stop_time_update in elem.trip_update.stop_time_update:
                     try:
-                        station_hash = self.data.stationhash_lookup[stop_time_update.stop_id]
+                        station_hash = self.current_data.stationhash_lookup[stop_time_update.stop_id]
                     except KeyError:
                         u.parser_logger.debug('KeyError for %s', stop_time_update.stop_id)
                         continue
@@ -167,18 +174,32 @@ class RealtimeManager():
                     arrival_time = u.ArrivalTime(stop_time_update.arrival.time)
                     if arrival_time < time.time():
                         continue
-                    self.data.trips[trip_hash].add_arrival(station_hash, arrival_time)
+                    self.current_data.trips[trip_hash].add_arrival(station_hash, arrival_time)
 
             elif elem.HasField('vehicle'):
                 timestamp = elem.vehicle.timestamp
-                self.data.trips[trip_hash].timestamp = timestamp
+                self.current_data.trips[trip_hash].timestamp = timestamp
 
                 if time.time() - timestamp > 90:
                     trip_hash = u.short_hash(elem.vehicle.trip.trip_id, u.TripHash)
-                    self.data.trips[trip_hash].status = u.STOPPED
+                    self.current_data.trips[trip_hash].status = u.STOPPED
 
-        self.serialize_to_JSON(self.data, 'realtime.json')
+        # self.serialize_to_JSON(self.current_data, 'realtime.json')
 
+
+    def load_data_and_diffs(self) -> None:
+        self.data_dict[self.current_timestamp] = self.current_data
+        if len(self.data_dict) > 20:
+            del self.data_dict[min(self.data_dict)]
+        assert len(self.data_dict) <= 20
+
+        # tmp_placeholder_diff_dict, self.diff_dict = self.diff_dict, {}
+        self.diff_dict = {}
+
+        for timestamp in (set(self.data_dict) - {self.current_timestamp}):
+            self.diff_dict[timestamp] = self.diff(old_data=self.data_dict[timestamp], new_data=self.current_data)
+
+        # del tmp_placeholder_diff_dict  # TODO! actually handle exceptions and use this
 
     def serialize_to_JSON(self, data, outfile, attempt=0):
         """ Stores data in outfile with custom JSON encoder u.RealtimeJSONEncoder
@@ -213,14 +234,12 @@ class RealtimeManager():
 
             self.serialize_to_JSON(attempt=attempt + 1)
 
-    def diff(self) -> None:
+
+    def diff(self, old_data: u.RealtimeData, new_data: u.RealtimeData) -> u.DataDiff:
         """ docstring for diff()
         """
-        if not self.prev_data:
-            return None
-
-        new_trips = self.data.trips
-        old_trips = self.prev_data.trips
+        new_trips = new_data.trips
+        old_trips = old_data.trips
 
         trip_diff = u.TripDiff(
             deleted=list(set(old_trips) - set(new_trips)),
@@ -231,8 +250,8 @@ class RealtimeManager():
         branch_diff   = u.BranchDiff()  # noqa
 
         for trip_hash in (set(new_trips) & set(old_trips)):
-            new_trip = self.data.trips[trip_hash]
-            old_trip = self.prev_data.trips[trip_hash]
+            new_trip = new_trips[trip_hash]
+            old_trip = old_trips[trip_hash]
 
             # Since arrivals is a dict, set(arrivals) is a set of the keys, which are station_hashes:
             new_arrivals = set(new_trip.arrivals)
@@ -259,19 +278,18 @@ class RealtimeManager():
                 branch_diff.modified[trip_hash] = new_trip.branch
 
         data_diff = u.DataDiff(
-            realtime_timestamp=self.data.realtime_timestamp,
+            realtime_timestamp=self.current_data.realtime_timestamp,
             trips=trip_diff,
             arrivals=arrivals_diff,
             status=status_diff,
-            branch=branch_diff
-        )
-        self.serialize_to_JSON(data_diff, 'realtime_diff.json')
-        self.data_diff = data_diff
+            branch=branch_diff)
 
-    def full_to_protobuf(self):
+        return data_diff
+
+    def full_to_protobuf_bz2(self) -> None:
         """ doc
         """
-        data_full = self.data
+        data_full = self.current_data
         proto_full = transit_data_access_pb2.DataFull()
 
         proto_full.name = data_full.name
@@ -309,27 +327,32 @@ class RealtimeManager():
             for station_hash, arrival_time in trip.arrivals.items():
                 proto_full.trips[trip_hash].arrivals[station_hash] = arrival_time
 
-        data_out = proto_full.SerializeToString()
+        compressed_protobuf = bz2.compress(proto_full.SerializeToString(), compresslevel=9)
+        """
         with open(u.REALTIME_PARSED_PATH + 'data_full.protobuf', 'wb') as outfile:
             outfile.write(data_out)
         with bz2.open(u.REALTIME_PARSED_PATH + 'data_full.protobuf' + '.bz2', 'wb') as f:
-                f.write(bz2.compress(data_out, compresslevel=9))
+            f.write(bz2.compress(data_out, compresslevel=9))
         u.parser_logger.debug('Serialized full_data to protobuf')
+        """
+
+        # return bz2.compress(data_out, compresslevel=9)
+        self.data_serialized_bz2[self.current_timestamp] = compressed_protobuf
+        if len(self.data_serialized_bz2) > 20:
+            del self.data_serialized_bz2[min(self.data_serialized_bz2)]
+        assert len(self.data_serialized_bz2) <= 20
 
 
-    def diff_to_protobuf(self):
+
+    def diff_to_protobuf_bz2(self, data_diff: u.DataDiff) -> bytes:
         """ doc
         """
-        if not self.data_diff:
-            return
-
-        data_update = self.data_diff
         proto_update = transit_data_access_pb2.DataUpdate()
 
-        proto_update.realtime_timestamp = data_update.realtime_timestamp
+        proto_update.realtime_timestamp = data_diff.realtime_timestamp
 
-        proto_update.trips.deleted[:] = data_update.trips.deleted
-        for trip in data_update.trips.added:
+        proto_update.trips.deleted[:] = data_diff.trips.deleted
+        for trip in data_diff.trips.added:
             proto_trip = proto_update.trips.added.add()
             proto_trip.trip_hash = trip.id_
             proto_trip.info.status = trip.status
@@ -339,51 +362,70 @@ class RealtimeManager():
             for station_hash, arrival_time in trip.arrivals.items():
                 proto_trip.info.arrivals[station_hash] = arrival_time
 
-        for trip_hash, stations_list in data_update.arrivals.deleted.items():
+        for trip_hash, stations_list in data_diff.arrivals.deleted.items():
             proto_update.arrivals.deleted.trip_station_dict[trip_hash].station_hash[:] = stations_list
 
-        for trip_hash, station_arrival_dict in data_update.arrivals.added.items():
+        for trip_hash, station_arrival_dict in data_diff.arrivals.added.items():
             for station_hash, arrival_time in station_arrival_dict.items():
                 station_arrival = proto_update.arrivals.added[trip_hash].arrival.add()
                 station_arrival.station_hash = station_hash
                 station_arrival.arrival_time = arrival_time
 
-        for time_diff, trip_stationlist_dict in data_update.arrivals.modified.items():
+        for time_diff, trip_stationlist_dict in data_diff.arrivals.modified.items():
             for trip_hash, stations_list in trip_stationlist_dict.items():
                 proto_update.arrivals.modified[time_diff].trip_station_dict[trip_hash].station_hash[:] = stations_list
 
-        for trip_hash, trip_status in data_update.status.modified.items():
+        for trip_hash, trip_status in data_diff.status.modified.items():
             proto_update.status[trip_hash] = trip_status
 
-        for trip_hash, branch in data_update.branch.modified.items():
+        for trip_hash, branch in data_diff.branch.modified.items():
             proto_update.branch[trip_hash].route_hash = branch.route
             proto_update.branch[trip_hash].final_station = branch.final_station
 
+        """
         data_out = proto_update.SerializeToString()
-        with open(u.REALTIME_PARSED_PATH + 'data_update.protobuf', 'wb') as outfile:
+        with open(u.REALTIME_PARSED_PATH + 'data_diff.protobuf', 'wb') as outfile:
             outfile.write(data_out)
-        with bz2.open(u.REALTIME_PARSED_PATH + 'data_update.protobuf' + '.bz2', 'wb') as f:
+        with bz2.open(u.REALTIME_PARSED_PATH + 'data_diff.protobuf' + '.bz2', 'wb') as f:
                 f.write(bz2.compress(data_out, compresslevel=9))
         u.parser_logger.debug('Serialized update_data to protobuf')
+        """
+        compressed_protobuf = bz2.compress(proto_update.SerializeToString(), compresslevel=9)
+        return compressed_protobuf
+
+
+    def all_diff_to_protobuf_bz2(self):
+        for timestamp, diff in self.diff_dict.items():
+            self.diff_serialized_bz2[timestamp] = self.diff_to_protobuf_bz2(diff)
+
 
     def update(self) -> None:
         with u.TimeLogger() as _tl:
             try:
-                self.prev_data = self.data
+                tmp_data_placeholder = self.current_data
+
                 self.fetch_all()
                 self.merge_feeds()
                 self.load_static()
                 self.parse()
-                self.diff()
-                self.full_to_protobuf()
-                self.diff_to_protobuf()
+                self.load_data_and_diffs()
+                self.full_to_protobuf_bz2()
+                self.all_diff_to_protobuf_bz2()
+
+                # print('data dict from realtime:', {k: int(len(v) / 1000) for k, v in self.data_serialized_bz2.items()})
+                # print('diff dict from realtime:', {k: int(len(v) / 1000) for k, v in self.diff_serialized_bz2.items()})
+
                 if self.db_server:
-                    self.db_server.push(self.data.realtime_timestamp)
+                    self.db_server.push(
+                        current_timestamp=self.current_timestamp,
+                        data_full=self.data_serialized_bz2[self.current_timestamp],
+                        data_diffs=self.diff_serialized_bz2)
                 _tl.tlog('realtime update')
+
             except u.UpdateFailed as err:
-                self.data = self.prev_data
+                self.current_data = tmp_data_placeholder
                 u.parser_logger.error(err)
-                if not self.data:
+                if not self.current_data:
                     if self.initial_merge_attempts < self.max_initial_merge_attempts:
                         eventlet.sleep(5)
                         self.initial_merge_attempts += 1
@@ -412,3 +454,5 @@ class RealtimeManager():
 if __name__ == "__main__":
     rm = RealtimeManager()
     rm.start()
+    while True:
+        eventlet.sleep(2)

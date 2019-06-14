@@ -1,5 +1,6 @@
 """ Gets the database (websocket) server running
 """
+from typing import Dict
 import socketio   # type: ignore
 import eventlet
 import util as u  # type: ignore
@@ -29,20 +30,20 @@ class DatabaseServer:
     def disconnect(self, sid):
         u.server_logger.info('Client disconnected: %s', sid)
 
-    def push(self, timestamp):
+    def push(self, current_timestamp: int, data_full: bytes, data_diffs: Dict[int, bytes]) -> None:
         u.server_logger.info('Pushing the realime data to web_server')
+        """
         with open(u.REALTIME_PARSED_PATH + 'data_full.protobuf.bz2', 'rb') as full_infile, \
                 open(u.REALTIME_PARSED_PATH + 'data_update.protobuf.bz2', 'rb') as update_infile:
             self.data_full = full_infile.read()
             self.data_update = update_infile.read()
+        """
 
         self.server.emit('new_data', {
-            'data_full': self.data_full,
-            'data_update': self.data_update,
-            'timestamp': timestamp
+            'current_timestamp': current_timestamp,
+            'data_full': data_full,
+            'data_diffs': data_diffs
         }, namespace='/socket.io')
-        # self.server.emit('new_data_full', self.data_full, namespace='/socket.io')
-        # self.server.emit('new_data_update', self.data_update, namespace='/socket.io')
 
     def server_process(self):
         eventlet.wsgi.server(eventlet.listen((u.IP, u.PORT)), self.app, log=u.server_logger, log_format=WSGI_LOG_FORMAT)

@@ -65,8 +65,10 @@ class DatabaseClient:
         u.server_logger.info('Received new data.')
         self.db_client.emit('client_response', 'Received new data. Thanks!', namespace='/socket.io')
         if self.web_server:
-            self.web_server.new_data(data['data_full'], data['data_update'], Timestamp(data['timestamp']))
-
+            self.web_server.new_data(
+                current_timestamp=Timestamp(data['current_timestamp']),
+                data_full=data['data_full'],
+                data_diffs=data['data_diffs'])
 
 
 SID = NewType('SID', str)
@@ -82,13 +84,17 @@ class WebServer:
         self.web_server.on('disconnect', self.on_disconnect, namespace='/socket.io')
         self.web_server.on('data_received', self.on_data_received, namespace='/socket.io')
 
-        self.client_managers: Dict[SID, ClientManager] = {}
-
         self.data_full: bytes = b''
-        self.data_update: bytes = b''
-        self.latest_timestamp: Optional[Timestamp] = None
-        self.previous_timestamp: Optional[Timestamp] = None
-        self.data_updates: Dict[Timestamp, DataUpdateWithTimestamp] = {}
+        self.data_diffs: Dict[Timestamp, bytes] = {}
+        self.current_timestamp: Timestamp = Timestamp(0)
+
+        # self.data_update: bytes = b''
+        # self.latest_timestamp: Optional[Timestamp] = None
+        # self.previous_timestamp: Optional[Timestamp] = None
+        # self.data_updates: Dict[Timestamp, DataUpdateWithTimestamp] = {}
+
+        self.client_managers: Dict[SID, ClientManager] = {}
+        self.pool = eventlet.GreenPool(size=10000)
 
 
     def server_process(self) -> None:
@@ -105,6 +111,7 @@ class WebServer:
         u.server_logger.info('~~~~~~~ Stopping eventlet server ~~~~~~~')
         self.server_thread.kill()
 
+
     def on_connect(self, sid: SID, environ: Any) -> None:
         u.server_logger.info('Client connected: %s', sid)
         self.client_managers[sid] = ClientManager(sid=sid, server=self)
@@ -116,9 +123,19 @@ class WebServer:
         except KeyError:
             u.server_logger.error('%s disconnected but was not found in self.client_managers', sid)
 
-    def new_data(self, data_full: bytes, data_update: bytes, timestamp: Timestamp) -> None:
+    def on_data_received(self, sid: SID, data):
+        # print(data)
+        u.server_logger.info('Data received by %s! timestamp: %s', sid, data['client_latest_timestamp'])
+        self.client_managers[sid].last_successful_timestamp = data['client_latest_timestamp']
+        # print(self.client_managers[sid].last_successful_timestamp)
+
+    def new_data(self, current_timestamp: Timestamp, data_full: bytes, data_diffs: Dict[Timestamp, bytes]) -> None:
         u.server_logger.info('Loading new data.')
 
+        self.current_timestamp = current_timestamp
+        self.data_full = data_full
+        self.data_diffs = {Timestamp(k): v for k, v in data_diffs.items()}
+        """
         self.previous_timestamp, self.latest_timestamp = self.latest_timestamp, timestamp
         self.data_full = data_full
         self.data_update = data_update
@@ -127,44 +144,45 @@ class WebServer:
             self.data_updates[self.previous_timestamp] = DataUpdateWithTimestamp(timestamp=self.latest_timestamp, data_update=data_update)
         if len(self.data_updates) > 20:
             del self.data_updates[min(self.data_updates)]
+        """
 
         for cm in self.client_managers.values():
-            # u.server_logger.info('sending data to %s', cm.sid)
-            eventlet.spawn(cm.send_necessary_data)
+            self.pool.spawn(cm.send_necessary_data)
 
-    def on_data_received(self, sid: SID, data):
-        u.server_logger.info('Data received by %s! timestamp: %s', sid, data['client_latest_timestamp'])
-        self.client_managers[sid].last_successful_timestamp = data['client_latest_timestamp']
 
 
 class ClientManager:
     def __init__(self, sid: SID, server: WebServer) -> None:
         self.sid = sid
         self.server = server
-        self.last_successful_timestamp: Optional[Timestamp] = None
+        self.last_successful_timestamp: Timestamp = Timestamp(0)
+        self.currently_sending_data: bool = False
 
     def send_full(self) -> None:
         self.server.web_server.emit(
             'data_full',
             {
-                "timestamp": self.server.latest_timestamp,
+                "timestamp": self.server.current_timestamp,
                 "data_full": self.server.data_full
             },
             namespace='/socket.io',
             room=self.sid)
         u.server_logger.info('Sent full to %s', self.sid)
 
-    def send_single_update(self) -> None:
+    def send_update(self) -> None:
+        data_update = self.server.data_diffs[self.last_successful_timestamp]
+
         self.server.web_server.emit(
             'data_update',
             {
-                "timestamp": self.server.latest_timestamp,
-                "data_update": self.server.data_update
+                "timestamp": self.server.current_timestamp,
+                "data_update": data_update
             },
             namespace='/socket.io',
             room=self.sid)
         u.server_logger.info('Sent update to %s', self.sid)
 
+    """
     def send_multiple_updates(self) -> None:
         updates = self.server.data_updates
         timestamps_of_updates = sorted(updates)
@@ -179,14 +197,24 @@ class ClientManager:
             namespace='/socket.io',
             room=self.sid)
         u.server_logger.info('Sent multiple updates to %s', self.sid)
+    """
 
     def send_necessary_data(self) -> None:
-        if not self.last_successful_timestamp or (self.last_successful_timestamp not in self.server.data_updates):
+        if self.currently_sending_data:
+            return
+        self.currently_sending_data = True
+        u.server_logger.info('called! sid=%s', self.sid)
+
+        # print('cm: last_succ_ts:', self.last_successful_timestamp)
+        # print('cm: web_server.data_diffs:', {k: int(len(v) / 1024) for k, v in self.server.data_diffs.items()})
+
+
+        if (not self.last_successful_timestamp) or (self.last_successful_timestamp not in self.server.data_diffs):
             self.send_full()
-        elif self.last_successful_timestamp == web_server.previous_timestamp:
-            self.send_single_update()
         else:
-            self.send_multiple_updates()
+            self.send_update()
+
+        self.currently_sending_data = False
 
 
 

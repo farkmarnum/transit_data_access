@@ -37,6 +37,7 @@ socket.on('data_update', function (data) {
   socket.emit('data_received', { 'client_latest_timestamp': latestTimestamp });
 });
 
+/*
 socket.on('multiple_data_updates', function (data) {
   for (const [timestamp, dataUpdate] of Object.entries(data)) {
     console.log(timestamp, formatBytes(dataUpdate.byteLength));
@@ -45,3 +46,4 @@ socket.on('multiple_data_updates', function (data) {
   latestTimestamp = Math.min(...timestamps);
   socket.emit('data_received', { 'client_latest_timestamp': latestTimestamp });
 });
+*/
