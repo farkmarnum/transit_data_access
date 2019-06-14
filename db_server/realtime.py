@@ -3,6 +3,7 @@
 import time
 import os
 from typing import List, Dict, NamedTuple, NewType, Union, Any, Optional  # noqa
+from collections import defaultdict
 import warnings
 import json
 import eventlet
@@ -143,25 +144,25 @@ class RealtimeManager():
 
     def parse(self) -> None:
         for elem in self.feed.entity:
-            if elem.HasField('trip_update'):
-                trip_hash = u.short_hash(elem.trip_update.trip.trip_id, u.TripHash)
-                route_hash = u.short_hash(elem.trip_update.trip.route_id, u.RouteHash)
-                try:
-                    last_stop_id = elem.trip_update.stop_time_update[-1].stop_id
-                except IndexError:
-                    pass
+            trip_hash = u.short_hash(elem.trip_update.trip.trip_id, u.TripHash)
+            route_hash = u.short_hash(elem.trip_update.trip.route_id, u.RouteHash)
+
+            if trip_hash not in self.data.trips:
+                if not len(elem.trip_update.stop_time_update):
+                    continue
+                last_stop_id = elem.trip_update.stop_time_update[-1].stop_id
                 final_station = self.data.stationhash_lookup[last_stop_id]
                 branch = u.Branch(route_hash, final_station)
-                self.data.trips[trip_hash] = u.Trip(
-                    id_=trip_hash,
-                    branch=branch
-                )
+                self.data.trips[trip_hash] = u.Trip(id_=trip_hash, branch=branch)
 
+            if elem.HasField('trip_update'):
                 for stop_time_update in elem.trip_update.stop_time_update:
                     try:
                         station_hash = self.data.stationhash_lookup[stop_time_update.stop_id]
                     except KeyError:
+                        u.parser_logger.debug('KeyError for %s', stop_time_update.stop_id)
                         continue
+
                     arrival_time = u.ArrivalTime(stop_time_update.arrival.time)
                     if arrival_time < time.time():
                         continue

@@ -9,8 +9,8 @@ import csv
 import zipfile
 import json
 import pandas as pd
-import util as u
-from gtfs_conf import GTFS_CONF, LIST_OF_FILES
+import util as u  # type: ignore
+from gtfs_conf import GTFS_CONF, LIST_OF_FILES  # type: ignore
 
 
 class StaticHandler(object):

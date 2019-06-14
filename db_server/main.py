@@ -2,9 +2,9 @@
 """
 import eventlet  # noqa
 import schedule  # type: ignore
-import util as u  # type: ignore
-import server  # type: ignore
-import static  # type: ignore
+import util as u # type: ignore
+import server    # type: ignore
+import static    # type: ignore
 import realtime  # type: ignore
 
 def static_parse() -> None:
