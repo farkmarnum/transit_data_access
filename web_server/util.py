@@ -10,8 +10,8 @@ LOG_LEVEL = logging.INFO
 DB_IP = '127.0.0.1'
 DB_PORT = 8000
 
-WEB_IP = ''
-WEB_PORT = 0
+WEB_IP = '127.0.0.1'
+WEB_PORT = 9000
 
 def log_setup(loggers: list):
     """ Creates paths and files for loggers, given a list of logger objects

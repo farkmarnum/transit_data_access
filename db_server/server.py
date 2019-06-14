@@ -14,14 +14,11 @@ class DatabaseServer:
         push() pushes new data to all clients
     """
     def __init__(self):
-        self.server = socketio.Server(async_mode='eventlet', namespace='/socketio')
-        self.server.on('connect', self.connect, namespace='/socketio')
-        self.server.on('disconnect', self.disconnect, namespace='/socketio')
-        self.server.on('client_response', self.client_response, namespace='/socketio')
+        self.server = socketio.Server(async_mode='eventlet', namespace='/socket.io')
+        self.server.on('connect', self.connect, namespace='/socket.io')
+        self.server.on('disconnect', self.disconnect, namespace='/socket.io')
+        self.server.on('client_response', self.client_response, namespace='/socket.io')
         self.app = socketio.WSGIApp(self.server)
-        self.realtime_timestamp = 0
-        self.data_full = None
-        self.data_update = None
 
     def connect(self, sid, environ):
         u.server_logger.info('Client connected: %s', sid)
@@ -32,15 +29,20 @@ class DatabaseServer:
     def disconnect(self, sid):
         u.server_logger.info('Client disconnected: %s', sid)
 
-    def push(self):
+    def push(self, timestamp):
         u.server_logger.info('Pushing the realime data to web_server')
         with open(u.REALTIME_PARSED_PATH + 'data_full.protobuf.bz2', 'rb') as full_infile, \
                 open(u.REALTIME_PARSED_PATH + 'data_update.protobuf.bz2', 'rb') as update_infile:
             self.data_full = full_infile.read()
             self.data_update = update_infile.read()
 
-        self.server.emit('new_data_full', self.data_full)
-        self.server.emit('new_data_update', self.data_update)
+        self.server.emit('new_data', {
+            'data_full': self.data_full,
+            'data_update': self.data_update,
+            'timestamp': timestamp
+        }, namespace='/socket.io')
+        # self.server.emit('new_data_full', self.data_full, namespace='/socket.io')
+        # self.server.emit('new_data_update', self.data_update, namespace='/socket.io')
 
     def server_process(self):
         eventlet.wsgi.server(eventlet.listen((u.IP, u.PORT)), self.app, log=u.server_logger, log_format=WSGI_LOG_FORMAT)

@@ -11,14 +11,11 @@ from eventlet.green.urllib.error import URLError
 from eventlet.green.urllib import request
 # from google.transit import gtfs_realtime_pb2
 from google.transit.gtfs_realtime_pb2 import FeedMessage    # type: ignore
-import transit_data_access_pb2
+import transit_data_access_pb2    # type: ignore
 from google.protobuf.message import DecodeError
-# import matplotlib.pyplot as plt
-# import matplotlib.animation as animation
-# import numpy as np
-import util as u
-from gtfs_conf import GTFS_CONF
-from server import DatabaseServer
+import util as u    # type: ignore
+from gtfs_conf import GTFS_CONF    # type: ignore
+from server import DatabaseServer    # type: ignore
 
 TIME_DIFF_THRESHOLD = 3
 
@@ -64,7 +61,7 @@ class RealtimeFeedHandler:
                 self.result = FetchResult(FETCH_FAILED, error=f'TIMEOUT of {err}')
 
         if attempt + 1 < u.MAX_ATTEMPTS:
-            u.parser_logger.info('Fetch failed for %s, trying again', self.id_)
+            u.parser_logger.debug('Fetch failed for %s, trying again', self.id_)
             self.fetch(attempt=attempt + 1)
 
     def __init__(self, url, id_):
@@ -81,6 +78,8 @@ class RealtimeManager():
     """
     def __init__(self, db_server: DatabaseServer = None) -> None:
         self.parser_thread = None
+        self.initial_merge_attempts = 0
+        self.max_initial_merge_attempts = 10
         self.request_pool = eventlet.GreenPool(len(GTFS_CONF.realtime_urls))
         self.feed_handlers = [RealtimeFeedHandler(url, id_) for id_, url in GTFS_CONF.realtime_urls.items()]
 
@@ -94,7 +93,7 @@ class RealtimeManager():
     def fetch_all(self) -> None:
         """get all new feeds, check each, and combine
         """
-        u.parser_logger.info('Checking feeds!')
+        u.parser_logger.debug('Checking feeds!')
         for fh in self.feed_handlers:
             self.request_pool.spawn(fh.fetch)
         self.request_pool.waitall()
@@ -188,7 +187,7 @@ class RealtimeManager():
         try:
             with open(json_path + outfile, 'w') as out_file:
                 out_file.write(data_str)
-            u.parser_logger.info('Wrote parsed static data to %s', json_path + outfile)
+            u.parser_logger.debug('Wrote parsed static data to %s', json_path + outfile)
 
             with bz2.open(json_path + outfile + '.bz2', 'wb') as f:
                 b = bytes(data_str, 'utf-8')
@@ -313,7 +312,7 @@ class RealtimeManager():
             outfile.write(data_out)
         with bz2.open(u.REALTIME_PARSED_PATH + 'data_full.protobuf' + '.bz2', 'wb') as f:
                 f.write(bz2.compress(data_out, compresslevel=9))
-        u.parser_logger.info('Serialized full_data to protobuf')
+        u.parser_logger.debug('Serialized full_data to protobuf')
 
 
     def diff_to_protobuf(self):
@@ -363,7 +362,7 @@ class RealtimeManager():
             outfile.write(data_out)
         with bz2.open(u.REALTIME_PARSED_PATH + 'data_update.protobuf' + '.bz2', 'wb') as f:
                 f.write(bz2.compress(data_out, compresslevel=9))
-        u.parser_logger.info('Serialized update_data to protobuf')
+        u.parser_logger.debug('Serialized update_data to protobuf')
 
     def update(self) -> None:
         with u.TimeLogger() as _tl:
@@ -377,14 +376,21 @@ class RealtimeManager():
                 self.full_to_protobuf()
                 self.diff_to_protobuf()
                 if self.db_server:
-                    self.db_server.push()
+                    self.db_server.push(self.data.realtime_timestamp)
                 _tl.tlog('realtime update')
             except u.UpdateFailed as err:
                 self.data = self.prev_data
                 u.parser_logger.error(err)
                 if not self.data:
-                    eventlet.sleep(1)
-                    self.update()
+                    if self.initial_merge_attempts < self.max_initial_merge_attempts:
+                        eventlet.sleep(5)
+                        self.initial_merge_attempts += 1
+                        self.update()
+                    else:
+                        u.parser_logger.error('Couldn\'t get all feeds, exiting after %s attempts', self.max_initial_merge_attempts)
+                        print(f'Couldn\'t get all feeds, exiting after {self.max_initial_merge_attempts} attempts')
+                        print(err)
+                        exit()
 
     def run(self) -> None:
         while True:
