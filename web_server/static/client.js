@@ -19,18 +19,22 @@ var socket = io.connect(`http://${domain}:${port}/socket.io`);
 
 var latestTimestamp = 0;
 
+/*
 socket.on('new_data', function (data) {
   socket.emit('data_request', { 'client_latest_timestamp': latestTimestamp });
 });
+*/
 
 socket.on('data_full', function (data) {
   console.log(data.timestamp, formatBytes(data.data_full.byteLength));
   latestTimestamp = data.timestamp;
+  socket.emit('data_received', { 'client_latest_timestamp': latestTimestamp });
 });
 
 socket.on('data_update', function (data) {
   console.log(data.timestamp, formatBytes(data.data_update.byteLength));
   latestTimestamp = data.timestamp;
+  socket.emit('data_received', { 'client_latest_timestamp': latestTimestamp });
 });
 
 socket.on('multiple_data_updates', function (data) {
@@ -39,4 +43,5 @@ socket.on('multiple_data_updates', function (data) {
   }
   var timestamps = Object.keys(data).map(key => parseInt(key));
   latestTimestamp = Math.min(...timestamps);
+  socket.emit('data_received', { 'client_latest_timestamp': latestTimestamp });
 });

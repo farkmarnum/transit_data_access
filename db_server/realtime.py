@@ -3,7 +3,6 @@
 import time
 import os
 from typing import List, Dict, NamedTuple, NewType, Union, Any, Optional  # noqa
-from collections import defaultdict
 import warnings
 import json
 import eventlet
@@ -152,6 +151,8 @@ class RealtimeManager():
                     continue
                 last_stop_id = elem.trip_update.stop_time_update[-1].stop_id
                 final_station = self.data.stationhash_lookup[last_stop_id]
+                if not final_station:
+                    continue
                 branch = u.Branch(route_hash, final_station)
                 self.data.trips[trip_hash] = u.Trip(id_=trip_hash, branch=branch)
 
