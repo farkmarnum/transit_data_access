@@ -409,4 +409,4 @@ class RealtimeManager():
 
 if __name__ == "__main__":
     rm = RealtimeManager()
-    rm.run()
+    rm.start()

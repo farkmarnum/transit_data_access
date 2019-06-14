@@ -12,10 +12,8 @@ Flask==1.0.3
 greenlet==0.4.15
 gtfs-realtime-bindings==0.0.5
 idna==2.8
-ipython==7.5.0
 ipython-genutils==0.2.0
 itsdangerous==1.1.0
-jedi==0.13.3
 Jinja2==2.10.1
 kiwisolver==1.1.0
 MarkupSafe==1.1.1
@@ -26,13 +24,12 @@ mypy-extensions==0.4.1
 mypy-lang==0.5.0
 numpy==1.16.4
 pandas==0.24.2
-parso==0.4.0
 pep8==1.7.1
 pexpect==4.7.0
 pickleshare==0.7.5
+pipdeptree==0.13.2
 prompt-toolkit==2.0.9
 protobuf==3.8.0
-ptpython==2.0.4
 ptyprocess==0.6.0
 Pygments==2.4.2
 pyhash==0.9.3

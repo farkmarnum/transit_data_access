@@ -2,11 +2,10 @@
 """
 import eventlet  # noqa
 import schedule  # type: ignore
-import util as u
-import server
-import static
-import realtime
-from gtfs_conf import GTFS_CONF
+import util as u  # type: ignore
+import server  # type: ignore
+import static  # type: ignore
+import realtime  # type: ignore
 
 def static_parse() -> None:
     """ Fetches static feed, handles errors, and parses if new (which stores it in a file).

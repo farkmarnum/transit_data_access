@@ -48,6 +48,7 @@ class DatabaseClient:
         eventlet.spawn(self.db_client.wait)
 
     def stop(self):
+        u.server_logger.info('~~~~~~~~~~~~~~~ Stopping Database Client ~~~~~~~~~~~~~~~')
         self.db_client.disconnect()
 
     def on_connect(self):
@@ -93,11 +94,11 @@ class WebServer:
         )
 
     def start(self):
-        u.server_logger.info('Starting eventlet server @ %s:%s', u.WEB_IP, u.WEB_PORT)
+        u.server_logger.info('~~~~~~~ Starting eventlet server @ %s:%s ~~~~~~~', u.WEB_IP, u.WEB_PORT)
         self.server_thread = eventlet.spawn(self.server_process)
 
     def stop(self):
-        u.server_logger.info('Stopping eventlet server')
+        u.server_logger.info('~~~~~~~ Stopping eventlet server ~~~~~~~')
         self.server_thread.kill()
 
     def on_connect(self, sid, environ):
@@ -145,19 +146,20 @@ class WebServer:
 
 
 if __name__ == "__main__":
+    db_client = DatabaseClient()
+    db_client.start()
+
     web_server = WebServer()
     web_server.start()
 
     eventlet.sleep(2)
-
-    db_client = DatabaseClient()
     db_client.add_web_server(web_server)
-    db_client.start()
-
 
     while True:
         try:
             eventlet.greenthread.sleep(1)
         except KeyboardInterrupt:
             print('KeyboardInterrupt, exiting')
+            web_server.stop()
+            db_client.stop()
             exit()
