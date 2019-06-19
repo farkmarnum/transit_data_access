@@ -72,8 +72,11 @@ class StaticHandler(object):
                 raise u.UpdateFailed('Static data checksum matches previously parsed static data. No new data!')
 
         u.parser_logger.info('Extracting zip to %s', tmp_path)
-        with zipfile.ZipFile(zip_filepath, "r") as zip_ref:
-            zip_ref.extractall(tmp_path)
+        try:
+            with zipfile.ZipFile(zip_filepath, "r") as zip_ref:
+                zip_ref.extractall(tmp_path)
+        except zipfile.BadZipFile as err:
+                raise u.UpdateFailed(err)
 
         u.parser_logger.info('Deleting %s to make room for new static data', raw_path)
         shutil.rmtree(raw_path)

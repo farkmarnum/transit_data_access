@@ -1,41 +1,58 @@
-from typing import Dict, NewType, NamedTuple, Optional, Any
-from bisect import bisect_left
+from multiprocessing import Pool
+from typing import Dict, Any, List
 import socketio  # type: ignore
 import eventlet
 from flask import Flask
-# from google.transit.gtfs_realtime_pb2 import FeedMessage  # tpye: ignore
-# import bz2
 import util as u  # type: ignore
-
 
 eventlet.monkey_patch()
 
-Timestamp = NewType('Timestamp', int)
-class DataUpdateWithTimestamp(NamedTuple):
-    timestamp: Timestamp
-    data_update: bytes
-
-
 DB_SERVER_URL = f'http://{u.DB_IP}:{u.DB_PORT}'
+WSGI_LOG_FORMAT = '%(client_ip)s %(request_line)s %(status_code)s %(body_length)s %(wall_seconds).6f'
+
 
 class DatabaseClient:
     """ doc
     """
     def __init__(self):
-        self.db_client = socketio.Client()
-        self.db_client.on('on_connect', self.on_connect, namespace='/socket.io')
-        self.db_client.on('on_disconnect', self.on_disconnect, namespace='/socket.io')
-        self.db_client.on('new_data', self.on_new_data, namespace='/socket.io')
-        self.web_server = None
+        self.socket_to_db_server = socketio.Client()
+        self.namespace = self.SocketToDbServerNamespace('/socket.io')
+        self.socket_to_db_server.register_namespace(self.namespace)
+        self.web_servers: List = []
+
+    class SocketToDbServerNamespace(socketio.ClientNamespace):
+        def on_connect(self):
+            u.server_logger.info('Connected to Database Server at %s', DB_SERVER_URL)
+
+        def on_disconnect(self):
+            u.server_logger.info('Disconnected from Database Server at %s', DB_SERVER_URL)
+            # TODO: handle reconnection!
+
+        def on_new_data(self, data):
+            u.server_logger.info('Received new data.')
+            self.emit('client_response', 'Received new data. Thanks!')
+
+            if not len(self.web_servers):
+                u.server_logger.warning('No web server connected yet.')
+
+            for server in self.web_servers:
+                server.load_new_data(
+                    current_timestamp=int(data['current_timestamp']),
+                    data_full=data['data_full'],
+                    data_diffs=data['data_diffs'])
+
+        def __init__(self, namespace):
+            self.namespace = namespace
+            self.web_servers: List = []
 
     def start(self):
-        u.server_logger.info('~~~~~~~~~~~~~~~ Starting Database Client ~~~~~~~~~~~~~~~')
+        u.server_logger.info('Starting DatabaseClient')
         attempt = 0
         max_attempts = 5
         success = False
         while not success:
             try:
-                self.db_client.connect(DB_SERVER_URL, namespaces=['/socket.io'])
+                self.socket_to_db_server.connect(DB_SERVER_URL, namespaces=['/socket.io'])
                 success = True
             except socketio.exceptions.ConnectionError as err:
                 if attempt < max_attempts:
@@ -45,194 +62,156 @@ class DatabaseClient:
                     u.server_logger.error('Unable to connect to %s, %s', DB_SERVER_URL, err)
                     return
 
-        eventlet.spawn(self.db_client.wait)
+        eventlet.spawn(self.socket_to_db_server.wait)
 
     def stop(self):
-        u.server_logger.info('~~~~~~~~~~~~~~~ Stopping Database Client ~~~~~~~~~~~~~~~')
-        self.db_client.disconnect()
-
-    def on_connect(self):
-        u.server_logger.info('Connected to Database Server at %s', DB_SERVER_URL)
-
-    def on_disconnect(self):
-        u.server_logger.info('Disconnected from Database Server at %s', DB_SERVER_URL)
-        # TODO: handle reconnection!
+        u.server_logger.info('Stopping DatabaseClient')
+        self.socket_to_db_server.disconnect()
 
     def add_web_server(self, web_server):
-        self.web_server = web_server
-
-    def on_new_data(self, data):
-        u.server_logger.info('Received new data.')
-        self.db_client.emit('client_response', 'Received new data. Thanks!', namespace='/socket.io')
-        if self.web_server:
-            self.web_server.new_data(
-                current_timestamp=Timestamp(data['current_timestamp']),
-                data_full=data['data_full'],
-                data_diffs=data['data_diffs'])
+        self.web_servers.append(web_server)
+        self.namespace.web_servers.append(web_server)
 
 
-SID = NewType('SID', str)
 
 class WebServer:
-    def __init__(self) -> None:
+    def __init__(self, port) -> None:  # , message_queue) -> None:
+        self.port = port
+        self.sessions: Dict[int, dict] = {}
+        # self.message_queue = message_queue
         self.flask_app = Flask(__name__)
         self.flask_app.config['TEMPLATES_AUTO_RELOAD'] = True
-        self.flask_app.add_url_rule(rule='/', view_func=(lambda: "hello world"))
+        self.flask_app.add_url_rule(rule='/', view_func=(lambda: f'hello world, my internal port is {port}'))
 
-        self.web_server = socketio.Server(async_mode='eventlet', namespace='/socket.io')
-        self.web_server.on('connect', self.on_connect, namespace='/socket.io')
-        self.web_server.on('disconnect', self.on_disconnect, namespace='/socket.io')
-        self.web_server.on('data_received', self.on_data_received, namespace='/socket.io')
+        self.web_server_socket = socketio.Server(async_mode='eventlet')  # , client_manager=self.message_queue)
+        self.web_server_socket.register_namespace(
+            self.WebServerSocketNamespace(
+                namespace='/socket.io',
+                web_server=self))
+        self.clients: List = []
 
         self.data_full: bytes = b''
-        self.data_diffs: Dict[Timestamp, bytes] = {}
-        self.current_timestamp: Timestamp = Timestamp(0)
+        self.data_diffs: Dict[int, bytes] = {}
+        self.current_timestamp: int = 0
 
-        # self.data_update: bytes = b''
-        # self.latest_timestamp: Optional[Timestamp] = None
-        # self.previous_timestamp: Optional[Timestamp] = None
-        # self.data_updates: Dict[Timestamp, DataUpdateWithTimestamp] = {}
-
-        self.client_managers: Dict[SID, ClientManager] = {}
         self.pool = eventlet.GreenPool(size=10000)
 
+    class WebServerSocketNamespace(socketio.Namespace):
+        def on_connect(self, sid, environ: Any) -> None:
+            u.server_logger.info('Client %s connected to server on port %s', sid, self.web_server.port)
+            with self.web_server.web_server_socket.session(sid) as session:
+                session['last_successful_timestamp'] = 0
+                session['waiting_for_confirmation'] = True
+                self.web_server.clients.append(sid)
+
+        def on_disconnect(self, sid) -> None:
+            u.server_logger.info('Client %s disconnected from server on port %s', sid, self.web_server.port)
+            try:
+                self.web_server.clients.remove(sid)
+            except ValueError:
+                u.server_logger.error('%s (%s server) disconnected but was not found in WebServer.clients', sid, self.web_server.port)
+
+        def on_connection_confirmed(self, sid) -> None:
+            u.server_logger.info('Client confirmed connection: %s', sid)
+            with self.web_server.web_server_socket.session(sid) as session:
+                session['waiting_for_confirmation'] = False
+
+        def on_data_received(self, sid, data):
+            u.server_logger.info('Data received by %s! timestamp: %s', sid, data['client_latest_timestamp'])
+            with self.web_server.web_server_socket.session(sid) as session:
+                session['last_successful_timestamp'] = int(data['client_latest_timestamp'])
+                session['waiting_for_confirmation'] = False
+
+        def __init__(self, namespace, web_server):
+            self.namespace = namespace
+            self.web_server = web_server
 
     def server_process(self) -> None:
         eventlet.wsgi.server(
-            eventlet.listen((u.WEB_IP, u.WEB_PORT)),
-            socketio.WSGIApp(self.web_server, self.flask_app),
-            log=u.server_logger)
+            eventlet.listen((u.WEB_IP, self.port)),
+            socketio.WSGIApp(self.web_server_socket, self.flask_app),
+            log=u.server_logger,
+            log_format=WSGI_LOG_FORMAT)
 
     def start(self) -> None:
-        u.server_logger.info('~~~~~~~ Starting eventlet server @ %s:%s ~~~~~~~', u.WEB_IP, u.WEB_PORT)
         self.server_thread = eventlet.spawn(self.server_process)
 
     def stop(self) -> None:
-        u.server_logger.info('~~~~~~~ Stopping eventlet server ~~~~~~~')
+        # self.web_server_socket.emit('server_stopping')
         self.server_thread.kill()
 
-
-    def on_connect(self, sid: SID, environ: Any) -> None:
-        u.server_logger.info('Client connected: %s', sid)
-        self.client_managers[sid] = ClientManager(sid=sid, server=self)
-
-    def on_disconnect(self, sid: SID) -> None:
-        u.server_logger.info('Client disconnected: %s', sid)
-        try:
-            del self.client_managers[sid]
-        except KeyError:
-            u.server_logger.error('%s disconnected but was not found in self.client_managers', sid)
-
-    def on_data_received(self, sid: SID, data):
-        # print(data)
-        u.server_logger.info('Data received by %s! timestamp: %s', sid, data['client_latest_timestamp'])
-        self.client_managers[sid].last_successful_timestamp = data['client_latest_timestamp']
-        # print(self.client_managers[sid].last_successful_timestamp)
-
-    def new_data(self, current_timestamp: Timestamp, data_full: bytes, data_diffs: Dict[Timestamp, bytes]) -> None:
+    def load_new_data(self, current_timestamp: int, data_full: bytes, data_diffs: Dict[int, bytes]) -> None:
         u.server_logger.info('Loading new data.')
-
         self.current_timestamp = current_timestamp
         self.data_full = data_full
-        self.data_diffs = {Timestamp(k): v for k, v in data_diffs.items()}
-        """
-        self.previous_timestamp, self.latest_timestamp = self.latest_timestamp, timestamp
-        self.data_full = data_full
-        self.data_update = data_update
+        self.data_diffs = {int(k): v for k, v in data_diffs.items()}
+        for sid in self.clients:
+            self.pool.spawn(self.send_necessary_data, sid)
 
-        if self.previous_timestamp:
-            self.data_updates[self.previous_timestamp] = DataUpdateWithTimestamp(timestamp=self.latest_timestamp, data_update=data_update)
-        if len(self.data_updates) > 20:
-            del self.data_updates[min(self.data_updates)]
-        """
-
-        for cm in self.client_managers.values():
-            self.pool.spawn(cm.send_necessary_data)
-
-
-
-class ClientManager:
-    def __init__(self, sid: SID, server: WebServer) -> None:
-        self.sid = sid
-        self.server = server
-        self.last_successful_timestamp: Timestamp = Timestamp(0)
-        self.currently_sending_data: bool = False
-
-    def send_full(self) -> None:
-        self.server.web_server.emit(
+    def send_full(self, sid) -> None:
+        self.web_server_socket.emit(
             'data_full',
             {
-                "timestamp": self.server.current_timestamp,
-                "data_full": self.server.data_full
+                "timestamp": self.current_timestamp,
+                "data_full": self.data_full
             },
             namespace='/socket.io',
-            room=self.sid)
-        u.server_logger.info('Sent full to %s', self.sid)
+            room=sid)
+        u.server_logger.info('Sent full to %s', sid)
 
-    def send_update(self) -> None:
-        data_update = self.server.data_diffs[self.last_successful_timestamp]
-
-        self.server.web_server.emit(
-            'data_update',
-            {
-                "timestamp": self.server.current_timestamp,
-                "data_update": data_update
+    def send_update(self, sid, last_successful_timestamp: int) -> None:
+        self.web_server_socket.emit(
+            'data_update', {
+                "timestamp": self.current_timestamp,
+                "data_update": self.data_diffs[last_successful_timestamp]
             },
             namespace='/socket.io',
-            room=self.sid)
-        u.server_logger.info('Sent update to %s', self.sid)
+            room=sid)
+        u.server_logger.info('Sent update to %s', sid)
 
-    """
-    def send_multiple_updates(self) -> None:
-        updates = self.server.data_updates
-        timestamps_of_updates = sorted(updates)
+    def send_necessary_data(self, sid) -> None:
+        u.server_logger.info('send_necessary_data for %s', sid)
+        with self.web_server_socket.session(sid) as session:
+            print(session)
+            if session['waiting_for_confirmation']:
+                self.web_server_socket.emit(
+                    'connection_check',
+                    namespace='/socket.io',
+                    room=sid)
+                return
 
-        _index = bisect_left(timestamps_of_updates, self.last_successful_timestamp)
-        timestamps_of_necessary_updates = timestamps_of_updates[_index:]
+            last_successful_timestamp = session['last_successful_timestamp']
+            if (not last_successful_timestamp) or (last_successful_timestamp not in self.data_diffs):
+                self.send_full(sid)
+            else:
+                self.send_update(sid, last_successful_timestamp)
 
-        necessary_updates_dict = {updates[t].timestamp: updates[t].data_update for t in timestamps_of_necessary_updates}
-        self.server.web_server.emit(
-            'multiple_data_updates',
-            necessary_updates_dict,
-            namespace='/socket.io',
-            room=self.sid)
-        u.server_logger.info('Sent multiple updates to %s', self.sid)
-    """
-
-    def send_necessary_data(self) -> None:
-        if self.currently_sending_data:
-            return
-        self.currently_sending_data = True
-        u.server_logger.info('called! sid=%s', self.sid)
-
-        # print('cm: last_succ_ts:', self.last_successful_timestamp)
-        # print('cm: web_server.data_diffs:', {k: int(len(v) / 1024) for k, v in self.server.data_diffs.items()})
+            session['waiting_for_confirmation'] = True
 
 
-        if (not self.last_successful_timestamp) or (self.last_successful_timestamp not in self.server.data_diffs):
-            self.send_full()
-        else:
-            self.send_update()
+"""
+class WebServerManager(object):
+    def __init__(self):
+        # self.message_queue = socketio.RedisManager('redis://127.0.0.1:6379')
+        self.db_client = DatabaseClient()
+        ws_ports = list(range(u.WEB_SERVER_FIRST_PORT, u.WEB_SERVER_FIRST_PORT + u.NUMBER_OF_WEB_SERVERS))
 
-        self.currently_sending_data = False
+        p = Pool(u.NUMBER_OF_WEB_SERVERS)
+        self.web_servers = []
+        # self.web_servers = p.map(self.create_web_server, ws_ports)
 
+    def create_web_server(self, port: int) -> WebServer:
+        ws = WebServer(port=port)
+        self.db_client.add_web_server(ws)
+        return ws
 
+    def start(self):
+        self.db_client.start()
+        for server in self.web_servers:
+            server.start()
 
-if __name__ == "__main__":
-    db_client = DatabaseClient()
-    db_client.start()
-
-    web_server = WebServer()
-    web_server.start()
-
-    eventlet.sleep(2)
-    db_client.add_web_server(web_server)
-
-    while True:
-        try:
-            eventlet.greenthread.sleep(1)
-        except KeyboardInterrupt:
-            print('KeyboardInterrupt, exiting')
-            web_server.stop()
-            db_client.stop()
-            exit()
+    def stop(self):
+        self.db_client.stop()
+        for server in self.web_servers:
+            server.stop()
+"""

@@ -15,15 +15,19 @@ function formatBytes (bytes, decimals) {
 
 var domain = '127.0.0.1';
 var port = '80';
-var socket = io.connect(`http://${domain}:${port}/socket.io`);
+var socket = io(`http://${domain}:${port}/socket.io`);
 
 var latestTimestamp = 0;
 
-/*
-socket.on('new_data', function (data) {
-  socket.emit('data_request', { 'client_latest_timestamp': latestTimestamp });
+socket.on('connect', function () {
+  socket.emit('connection_confirmed');
+  console.log('connected!');
 });
-*/
+
+socket.on('connection_check', function () {
+  socket.emit('connection_confirmed');
+  console.log('sending connection confirmation');
+});
 
 socket.on('data_full', function (data) {
   console.log(data.timestamp, formatBytes(data.data_full.byteLength));
@@ -36,14 +40,3 @@ socket.on('data_update', function (data) {
   latestTimestamp = data.timestamp;
   socket.emit('data_received', { 'client_latest_timestamp': latestTimestamp });
 });
-
-/*
-socket.on('multiple_data_updates', function (data) {
-  for (const [timestamp, dataUpdate] of Object.entries(data)) {
-    console.log(timestamp, formatBytes(dataUpdate.byteLength));
-  }
-  var timestamps = Object.keys(data).map(key => parseInt(key));
-  latestTimestamp = Math.min(...timestamps);
-  socket.emit('data_received', { 'client_latest_timestamp': latestTimestamp });
-});
-*/

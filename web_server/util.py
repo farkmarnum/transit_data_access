@@ -8,10 +8,11 @@ LOG_PATH = f'/var/log/{PACKAGE_NAME}/web_server'
 LOG_LEVEL = logging.INFO
 
 DB_IP = '127.0.0.1'
-DB_PORT = 8000
+DB_PORT = 45654
 
 WEB_IP = '127.0.0.1'
-WEB_PORT = 9000
+WEB_SERVER_FIRST_PORT = 9000
+# NUMBER_OF_WEB_SERVERS = 5
 
 def log_setup(loggers: list):
     """ Creates paths and files for loggers, given a list of logger objects

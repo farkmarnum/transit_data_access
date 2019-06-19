@@ -7,7 +7,7 @@ import util as u  # type: ignore
 
 eventlet.monkey_patch()
 
-WSGI_LOG_FORMAT = '%(client_ip)s "%(request_line)s" %(status_code)s %(body_length)s %(wall_seconds).6f'
+WSGI_LOG_FORMAT = '%(client_ip)s %(request_line)s %(status_code)s %(body_length)s %(wall_seconds).6f'
 
 
 class DatabaseServer:
