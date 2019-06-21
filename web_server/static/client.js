@@ -15,7 +15,7 @@ function formatBytes (bytes, decimals) {
 
 var domain = '127.0.0.1';
 var port = '80';
-var socket = io(`http://${domain}:${port}/socket.io`);
+var socket = io(`http://${domain}:${port}/socket.io`, { autoConnect: false });
 
 var latestTimestamp = 0;
 
@@ -40,3 +40,34 @@ socket.on('data_update', function (data) {
   latestTimestamp = data.timestamp;
   socket.emit('data_received', { 'client_latest_timestamp': latestTimestamp });
 });
+
+socket.open();
+console.log('socket opened');
+
+const readline = require('readline');
+readline.emitKeypressEvents(process.stdin);
+process.stdin.setRawMode(true);
+
+process.stdin.on('keypress', (key, data) => {
+  if (data.ctrl && data.name === 'c') {
+    process.exit();
+  } else if (key === 'c') {
+    socket.close();
+    console.log('closing socket');
+  } else if (key === 'o') {
+    socket.open();
+    console.log('opening socket');
+  }
+});
+
+/*
+sleep(20).then(() => {
+  socket.close();
+  console.log('socket closed');
+
+  sleep(15).then(() => {
+    socket.open();
+    console.log('socket reopened');
+  });
+});
+*/

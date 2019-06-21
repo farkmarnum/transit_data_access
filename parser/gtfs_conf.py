@@ -1,6 +1,6 @@
 """Configuration information for specific transit systems
 """
-
+import os
 from typing import NamedTuple, Dict
 
 
@@ -22,7 +22,11 @@ LIST_OF_FILES = [
     'trips.txt'
 ]
 
-API_KEY: str = 'f775a76bd1960c98831b3c2b06c19bb5'
+try:
+    API_KEY: str = os.environ['MTA_API_KEY']
+except KeyError:
+    print('ERROR: API key for the MTA GTFS API must be set as the environment variable MTA_API_KEY')
+    exit()
 
 _base_url = 'http://datamine.mta.info/mta_esi.php'
 _feed_ids = sorted(['1', '2', '11', '16', '21', '26', '31', '36', '51'], key=int)

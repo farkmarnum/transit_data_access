@@ -1,4 +1,4 @@
-from multiprocessing import Pool
+from dataclasses import dataclass
 from typing import Dict, Any, List
 import socketio  # type: ignore
 import eventlet
@@ -73,22 +73,25 @@ class DatabaseClient:
         self.namespace.web_servers.append(web_server)
 
 
+@dataclass
+class WebClient:
+    connected: bool
+    last_successful_timestamp: int
+    waiting_for_confirmation: bool
 
 class WebServer:
     def __init__(self, port) -> None:  # , message_queue) -> None:
         self.port = port
-        self.sessions: Dict[int, dict] = {}
-        # self.message_queue = message_queue
         self.flask_app = Flask(__name__)
         self.flask_app.config['TEMPLATES_AUTO_RELOAD'] = True
         self.flask_app.add_url_rule(rule='/', view_func=(lambda: f'hello world, my internal port is {port}'))
 
-        self.web_server_socket = socketio.Server(async_mode='eventlet')  # , client_manager=self.message_queue)
+        self.web_server_socket = socketio.Server(async_mode='eventlet')
         self.web_server_socket.register_namespace(
             self.WebServerSocketNamespace(
                 namespace='/socket.io',
                 web_server=self))
-        self.clients: List = []
+        self.clients: Dict[int, WebClient] = {}
 
         self.data_full: bytes = b''
         self.data_diffs: Dict[int, bytes] = {}
@@ -98,29 +101,32 @@ class WebServer:
 
     class WebServerSocketNamespace(socketio.Namespace):
         def on_connect(self, sid, environ: Any) -> None:
-            u.server_logger.info('Client %s connected to server on port %s', sid, self.web_server.port)
-            with self.web_server.web_server_socket.session(sid) as session:
-                session['last_successful_timestamp'] = 0
-                session['waiting_for_confirmation'] = True
-                self.web_server.clients.append(sid)
+            if sid in self.web_server.clients:
+                u.server_logger.info('EXISTING client %s RECONNECTED to server on port %s', sid, self.web_server.port)
+                self.web_server.clients[sid].connected = True
+            else:
+                u.server_logger.info('NEW client %s CONNECTED to server on port %s', sid, self.web_server.port)
+                self.web_server.clients[sid] = WebClient(
+                    connected=True,
+                    last_successful_timestamp=0,
+                    waiting_for_confirmation=True
+                )
 
         def on_disconnect(self, sid) -> None:
             u.server_logger.info('Client %s disconnected from server on port %s', sid, self.web_server.port)
             try:
-                self.web_server.clients.remove(sid)
-            except ValueError:
+                self.web_server.clients[sid].connected = False
+            except KeyError:
                 u.server_logger.error('%s (%s server) disconnected but was not found in WebServer.clients', sid, self.web_server.port)
 
         def on_connection_confirmed(self, sid) -> None:
             u.server_logger.info('Client confirmed connection: %s', sid)
-            with self.web_server.web_server_socket.session(sid) as session:
-                session['waiting_for_confirmation'] = False
+            self.web_server.clients[sid].waiting_for_confirmation = False
 
         def on_data_received(self, sid, data):
             u.server_logger.info('Data received by %s! timestamp: %s', sid, data['client_latest_timestamp'])
-            with self.web_server.web_server_socket.session(sid) as session:
-                session['last_successful_timestamp'] = int(data['client_latest_timestamp'])
-                session['waiting_for_confirmation'] = False
+            self.web_server.clients[sid].last_successful_timestamp = int(data['client_latest_timestamp'])
+            self.web_server.clients[sid].waiting_for_confirmation = False
 
         def __init__(self, namespace, web_server):
             self.namespace = namespace
@@ -137,7 +143,6 @@ class WebServer:
         self.server_thread = eventlet.spawn(self.server_process)
 
     def stop(self) -> None:
-        # self.web_server_socket.emit('server_stopping')
         self.server_thread.kill()
 
     def load_new_data(self, current_timestamp: int, data_full: bytes, data_diffs: Dict[int, bytes]) -> None:
@@ -145,8 +150,9 @@ class WebServer:
         self.current_timestamp = current_timestamp
         self.data_full = data_full
         self.data_diffs = {int(k): v for k, v in data_diffs.items()}
-        for sid in self.clients:
-            self.pool.spawn(self.send_necessary_data, sid)
+        for sid, client in self.clients.items():
+            if client.connected:
+                self.pool.spawn(self.send_necessary_data, sid)
 
     def send_full(self, sid) -> None:
         self.web_server_socket.emit(
@@ -171,47 +177,19 @@ class WebServer:
 
     def send_necessary_data(self, sid) -> None:
         u.server_logger.info('send_necessary_data for %s', sid)
-        with self.web_server_socket.session(sid) as session:
-            print(session)
-            if session['waiting_for_confirmation']:
-                self.web_server_socket.emit(
-                    'connection_check',
-                    namespace='/socket.io',
-                    room=sid)
-                return
+        print(self.clients[sid])
+        if self.clients[sid].waiting_for_confirmation:
+            self.web_server_socket.emit(
+                'connection_check',
+                namespace='/socket.io',
+                room=sid)
+            return
 
-            last_successful_timestamp = session['last_successful_timestamp']
-            if (not last_successful_timestamp) or (last_successful_timestamp not in self.data_diffs):
-                self.send_full(sid)
-            else:
-                self.send_update(sid, last_successful_timestamp)
+        u.server_logger.info('confirmation not needed')
+        timestamp = self.clients[sid].last_successful_timestamp
+        if (not timestamp) or (timestamp not in self.data_diffs):
+            self.send_full(sid)
+        else:
+            self.send_update(sid, timestamp)
 
-            session['waiting_for_confirmation'] = True
-
-
-"""
-class WebServerManager(object):
-    def __init__(self):
-        # self.message_queue = socketio.RedisManager('redis://127.0.0.1:6379')
-        self.db_client = DatabaseClient()
-        ws_ports = list(range(u.WEB_SERVER_FIRST_PORT, u.WEB_SERVER_FIRST_PORT + u.NUMBER_OF_WEB_SERVERS))
-
-        p = Pool(u.NUMBER_OF_WEB_SERVERS)
-        self.web_servers = []
-        # self.web_servers = p.map(self.create_web_server, ws_ports)
-
-    def create_web_server(self, port: int) -> WebServer:
-        ws = WebServer(port=port)
-        self.db_client.add_web_server(ws)
-        return ws
-
-    def start(self):
-        self.db_client.start()
-        for server in self.web_servers:
-            server.start()
-
-    def stop(self):
-        self.db_client.stop()
-        for server in self.web_servers:
-            server.stop()
-"""
+        self.clients[sid].waiting_for_confirmation = True
