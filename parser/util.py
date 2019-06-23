@@ -1,48 +1,26 @@
 """ This contains all utility functions and package variables.
 """
 import os
+import sys
 from typing import \
     NamedTuple, List, Set, Dict, DefaultDict, \
     Type, TypeVar, NewType, \
-    Any, Optional
+    Any, Optional, Union
 from collections import defaultdict
 import time
 import json
 import logging
+import logging.config
 from dataclasses import dataclass, is_dataclass, field
 import pyhash  # type: ignore
 import hashlib
-from gtfs_conf import GTFS_CONF  # type: ignore
 
 
 #####################################
-#             CONSTANTS             #
+#            CUSTOM TYPES           #
 #####################################
-PACKAGE_NAME = 'transit_data_access'
-DATA_PATH = f'/data/{PACKAGE_NAME}/db_server'
+Num = Union[int, float]
 
-REALTIME_RAW_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/realtime/raw/'
-REALTIME_PARSED_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/realtime/parsed/'
-STATIC_TMP_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/static/tmp/'
-STATIC_RAW_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/static/raw/'
-STATIC_PARSED_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/static/parsed/'
-STATIC_ZIP_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/static/zip/'
-
-LOG_PATH = f'/var/log/{PACKAGE_NAME}/db_server'
-LOG_LEVEL = logging.INFO
-
-IP = '127.0.0.1'
-PORT = 45654
-
-REALTIME_FREQ = 15
-REALTIME_TIMEOUT = 4
-MAX_ATTEMPTS = 3
-
-
-
-#####################################
-# TRANSIT TYPES / METHODS / CLASSES #
-#####################################
 ShortHash = NewType('ShortHash', int)
 
 StationHash  = NewType('StationHash', ShortHash)    # unique hash of station id  # noqa
@@ -56,9 +34,85 @@ TravelTime   = NewType('TravelTime', int)           # number of seconds         
 TransferTime = NewType('TransferTime', int)         # number of seconds          # noqa
 TimeDiff = NewType('TimeDiff', int)                 # number of seconds
 
+TripStatus = NewType('TripStatus', int)
+STOPPED, DELAYED, ON_TIME = list(map(TripStatus, range(3)))
+
+
+#####################################
+#             CONSTANTS             #
+#####################################
+LOG_LEVEL: str
+
+SOCKETIO_PORT: int
+SOCKETIO_IP: str = '127.0.0.1'
+
+STATIC_PATH: str = f'/data/static/'
+REALTIME_PATH: str = f'/data/realtime/'
+
+REALTIME_FREQ: Num
+REALTIME_TIMEOUT: Num
+REALTIME_MAX_ATTEMPTS: int
+
+MTA_API_KEY: str
+
+
+#####################################
+#            ENVIRONMENT            #
+#####################################
+try:
+    LOG_LEVEL             =     os.environ['PARSER_LOG_LEVEL']               # 'INFO'   # noqa
+    SOCKETIO_PORT         = int(os.environ['PARSER_SOCKETIO_SERVER_PORT'])   # 45654    # noqa
+    REALTIME_FREQ         = int(os.environ['PARSER_LOG_LEVEL'])              # 15       # noqa
+    REALTIME_TIMEOUT      = int(os.environ['REALTIME_TIMEOUT'])              # 3.2      # noqa
+    REALTIME_MAX_ATTEMPTS = int(os.environ['REALTIME_MAX_ATTEMPTS'])         # 3        # noqa
+    MTA_API_KEY           =     os.environ['MTA_API_KEY']                    # <32-digit alphanumeric string> # noqa
+
+except KeyError:
+    print('''ERROR: the following environmental variables must be set:
+        PARSER_SOCKETIO_SERVER_PORT: int
+        PARSER_LOG_LEVEL: str (one of 'CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG', 'NOTSET')
+        REALTIME_FREQ: int (seconds)
+        REALTIME_TIMEOUT: int (seconds)
+        REALTIME_MAX_ATTEMPTS: int (seconds)
+        MTA_API_KEY: str (32-digit alphanumeric)''', file=sys.stderr)
+    exit()
+
+try:
+    assert REALTIME_FREQ > REALTIME_TIMEOUT * REALTIME_MAX_ATTEMPTS
+except AssertionError:
+    print('WARNING: REALTIME_TIMEOUT * REALTIME_MAX_ATTEMPTS > REALTIME_FREQ\nDefault values substituted.', file=sys.stderr)
+    REALTIME_FREQ, REALTIME_TIMEOUT, REALTIME_MAX_ATTEMPTS = 15, 3.2, 3
+
+
+#####################################
+#           LOGGING SETUP           #
+#####################################
+_log_format = '%(asctime)s.%(msecs)03d %(levelname)s %(message)s'
+_log_date_format = '%Y-%m-%d %H:%M:%S'
+_log_formatter = logging.Formatter(fmt=_log_format, datefmt=_log_date_format)
+
+logging.config.dictConfig({
+    'class': logging.StreamHandler,
+    'formatter': _log_formatter,
+    'level': LOG_LEVEL
+})
+
+log = logging.getLogger('parser')
+
+
+#####################################
+#         UTILITY METHODS           #
+#####################################
+def checksum(fname):
+    hash_md5 = hashlib.md5()
+    with open(fname, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_md5.update(chunk)
+    return hash_md5.hexdigest()
+
 hasher = pyhash.super_fast_hash()
 def short_hash(input_: Any, type_hint: Type[SpecifiedHash]) -> SpecifiedHash:
-    """ Returns a unique (TODO: collision handling!) hash of a station, route, or trip id
+    """ Returns a unique (TODO: collision handling!) int32 hash of a station, route, or trip id
     Examples:
         short_hash('101', StationHash) returns a short hash with type hint StationHash
         short_hash('1', RouteHash) returns a short hash with type hint RouteHash
@@ -69,10 +123,9 @@ def short_hash(input_: Any, type_hint: Type[SpecifiedHash]) -> SpecifiedHash:
     return typed_hash
 
 
-
-TripStatus = NewType('TripStatus', int)
-STOPPED, DELAYED, ON_TIME = list(map(TripStatus, range(3)))
-
+#####################################
+#      TRANSIT DATA STRUCTURES      #
+#####################################
 class Branch(NamedTuple):
     route: RouteHash
     final_station: StationHash
@@ -131,7 +184,6 @@ class RealtimeData(StaticData):
     trips: Dict[TripHash, Trip]
 
 
-
 @dataclass
 class TripDiff:
     deleted: List[TripHash] = field(default_factory=list)
@@ -164,6 +216,9 @@ class UpdateFailed(Exception):
     pass
 
 
+#####################################
+#            MISC CLASSES           #
+#####################################
 class StaticJSONEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, set):
@@ -222,65 +277,17 @@ class StaticJSONDecoder(json.JSONDecoder):
             '<class \'util.RouteInfo\'>': RouteInfo,
             '<class \'util.Station\'>': Station,
             '<class \'util.Trip\'>': Trip,
-            '<class \'util.StaticData\'>': StaticData,
-        }
+            '<class \'util.StaticData\'>': StaticData}
         try:
             _type = _type_dict[obj['_type']]
             data_dict = self.keys_to_ints(obj['value'])
-            # if _type == Station:
-            #    del(data_dict['arrivals'])
             return _type(**data_dict)
         except IndexError:
             return obj
 
 
-#####################################
-#           LOGGING SETUP           #
-#####################################
-def log_setup(loggers: list):
-    """ Creates paths and files for loggers, given a list of logger objects
-    """
-    # create log path if possible
-    if not os.path.exists(LOG_PATH):
-        print(f'Creating log path: {LOG_PATH}')
-        try:
-            os.makedirs(LOG_PATH)
-        except PermissionError:
-            print(f'ERROR: Don\'t have permission to create log path: {LOG_PATH}')
-            exit()
-
-    # set the format for log messages
-    log_format = '%(asctime)s.%(msecs)03d %(levelname)s %(message)s'
-    log_date_format = '%Y-%m-%d %H:%M:%S'
-    log_formatter = logging.Formatter(fmt=log_format, datefmt=log_date_format)
-
-    # initialize the logger objects (passed in the 'loggers' param)
-    for logger_obj in loggers:
-        _log_file = f'{LOG_PATH}/{logger_obj.name}.log'
-        try:
-            _file_handler = logging.FileHandler(_log_file)
-            _file_handler.setFormatter(log_formatter)
-        except PermissionError:
-            print(f'ERROR: Don\'t have permission to create log file: {_log_file}')
-            exit()
-        logger_obj.setLevel(LOG_LEVEL)
-        logger_obj.addHandler(_file_handler)
-
-
-parser_logger = logging.getLogger('parser')
-server_logger = logging.getLogger('server')
-log_setup([parser_logger, server_logger])
-
-
 class TimeLogger:
-    """ Convenient little way to log how long something takes. Usage:
-
-    with TimeLogger() as _tl:
-        # BLOCK 1
-        _tl.log_time()
-        # BLOCK 2
-        _tl.log_time()
-        # BLOCK 3
+    """ Convenient little way to log how long something takes.
     """
     def __init__(self):
         self.times = []
@@ -297,13 +304,38 @@ class TimeLogger:
         while len(self.times) > 0:
             time_, block_name = self.times.pop(0)
             block_time = time_ - prev_time
-            parser_logger.debug('%s took %s seconds', block_name, block_time)
+            log.debug('%s took %s seconds', block_name, block_time)
             prev_time = time_
 
 
-def checksum(fname):
-    hash_md5 = hashlib.md5()
-    with open(fname, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            hash_md5.update(chunk)
-    return hash_md5.hexdigest()
+
+#####################################
+#         GTFS CONFIGURATION        #
+#####################################
+class GTFSConf(NamedTuple):
+    name: str
+    static_url: str
+    realtime_urls: Dict[str, str]
+
+LIST_OF_FILES = [
+    'agency.txt',
+    'calendar_dates.txt',
+    'calendar.txt',
+    'route_stops_with_names.txt',
+    'routes.txt',
+    'shapes.txt',
+    'stop_times.txt',
+    'stops.txt',
+    'transfers.txt',
+    'trips.txt'
+]
+
+_base_url = 'http://datamine.mta.info/mta_esi.php'
+_feed_ids = sorted(['1', '2', '11', '16', '21', '26', '31', '36', '51'], key=int)
+_url_dict = {feed_id: f'{_base_url}?key={MTA_API_KEY}&feed_id={feed_id}' for feed_id in _feed_ids}
+
+GTFS_CONF = GTFSConf(
+    name='MTA_subway',
+    static_url='http://web.mta.info/developers/data/nyct/subway/google_transit.zip',
+    realtime_urls=_url_dict
+)

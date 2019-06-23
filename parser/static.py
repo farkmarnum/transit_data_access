@@ -45,14 +45,14 @@ class StaticHandler(object):
             os.makedirs(raw_path, exist_ok=True)
             os.makedirs(u.STATIC_ZIP_PATH, exist_ok=True)
         except PermissionError:
-            u.parser_logger.error('Don\'t have permission to write to %s or %s', tmp_path, raw_path)
+            u.log.error('parser: Don\'t have permission to write to %s or %s', tmp_path, raw_path)
             raise u.UpdateFailed('PermissionError')
 
-        u.parser_logger.info('Downloading GTFS static data from %s to %s', self.url, zip_filepath)
+        u.log.info('parser: Downloading GTFS static data from %s to %s', self.url, zip_filepath)
         try:
             new_data = requests.get(self.url, allow_redirects=True, timeout=5)
         except requests.exceptions.RequestException as err:
-            u.parser_logger.error('%s: Failed to connect to %s\n', err, self.url)
+            u.log.error('parser: %s: Failed to connect to %s\n', err, self.url)
             raise u.UpdateFailed('Connection failure, couldn\'t get feed')
 
         if has_static_data:
@@ -67,21 +67,21 @@ class StaticHandler(object):
         if has_static_data:
             no_new_data = (u.checksum(zip_filepath) == u.checksum(old_zip_filepath))
             os.remove(old_zip_filepath)
-            u.parser_logger.info('removing %s', old_zip_filepath)
+            u.log.info('parser: removing %s', old_zip_filepath)
             if no_new_data:
                 raise u.UpdateFailed('Static data checksum matches previously parsed static data. No new data!')
 
-        u.parser_logger.info('Extracting zip to %s', tmp_path)
+        u.log.info('parser: Extracting zip to %s', tmp_path)
         try:
             with zipfile.ZipFile(zip_filepath, "r") as zip_ref:
                 zip_ref.extractall(tmp_path)
         except zipfile.BadZipFile as err:
                 raise u.UpdateFailed(err)
 
-        u.parser_logger.info('Deleting %s to make room for new static data', raw_path)
+        u.log.info('parser: Deleting %s to make room for new static data', raw_path)
         shutil.rmtree(raw_path)
 
-        u.parser_logger.info('Moving new data from %s to %s', tmp_path, raw_path)
+        u.log.info('parser: Moving new data from %s to %s', tmp_path, raw_path)
         os.rename(tmp_path, raw_path)
 
         self.merge_trips_and_stops()
@@ -108,7 +108,7 @@ class StaticHandler(object):
             'route_id',
             'stop_sequence'
         ]
-        u.parser_logger.info("Cross referencing route, stop, and trip information...")
+        u.log.info("Cross referencing route, stop, and trip information...")
 
         trips_csv = self.locate_csv('trips')
         stops_csv = self.locate_csv('stops')
@@ -120,7 +120,7 @@ class StaticHandler(object):
 
         stop_times['stop_sequence'] = stop_times['stop_sequence'].astype(int)
 
-        u.parser_logger.info("Loaded trips, stops, and stop_times into DataFrames")
+        u.log.info("Loaded trips, stops, and stop_times into DataFrames")
 
         composite = pd.merge(trips, stop_times, how='inner', on='trip_id')
         composite = pd.merge(composite, stops, how='inner', on='stop_id')
@@ -129,7 +129,7 @@ class StaticHandler(object):
 
         rswn_csv = self.locate_csv('route_stops_with_names')
         composite.to_csv(rswn_csv, index=False)
-        u.parser_logger.info('%s created', rswn_csv)
+        u.log.info('parser: %s created', rswn_csv)
 
 
     def load_station_info(self) -> None:
@@ -188,7 +188,7 @@ class StaticHandler(object):
                     _to   = self.data.stationhash_lookup[row['to_stop_id']]  # noqa
                     self.data.transfers[_from][_to] = _min_transfer_time
                 else:
-                    print('transfer_type != 2  ——  what do we do?!!')
+                    u.log.error('parser: transfer_type != 2  ——  what do we do?!!')
 
 
     def parse(self) -> None:
@@ -206,34 +206,34 @@ class StaticHandler(object):
         try:
             with open(json_path + 'static.json', 'w') as out_file:
                 json.dump(self.data, out_file, cls=u.StaticJSONEncoder)
-            u.parser_logger.info('Wrote parsed static data to %sstatic.json', json_path)
+            u.log.info('parser: Wrote parsed static data to %sstatic.json', json_path)
 
         except OSError as err:
             if attempt != 0:
-                u.parser_logger.error('Unable to write to %sstatic.json', json_path)
+                u.log.error('parser: Unable to write to %sstatic.json', json_path)
                 raise u.UpdateFailed(err)
 
-            u.parser_logger.info('%sstatic.json does not exist, attempting to create it', json_path)
+            u.log.info('parser: %sstatic.json does not exist, attempting to create it', json_path)
 
             try:
                 os.makedirs(json_path)
             except PermissionError as err:
-                u.parser_logger.error('Don\'t have permission to create %s', json_path)
+                u.log.error('parser: Don\'t have permission to create %s', json_path)
                 raise u.UpdateFailed(err)
             except FileExistsError as err:
-                u.parser_logger.error('The file %sstatic.json exists, no permission to overwrite', json_path)
+                u.log.error('parser: The file %sstatic.json exists, no permission to overwrite', json_path)
                 raise u.UpdateFailed(err)
 
             self.serialize(attempt=attempt + 1)
 
     def update(self):
-        u.parser_logger.info('~~~~~~~~~~ Running STATIC.py ~~~~~~~~~~')
+        u.log.info('parser: ~~~~~~~~~~ Running STATIC.py ~~~~~~~~~~')
         try:
             self.get_feed()
             self.parse()
             self.serialize()
         except u.UpdateFailed as err:
-            u.parser_logger.error(err)
+            u.log.error(err)
 
     def __init__(self) -> None:
         self.url = GTFS_CONF.static_url

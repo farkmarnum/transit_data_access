@@ -3,7 +3,6 @@
 import time
 import os
 from typing import List, Dict, Tuple, NamedTuple, NewType, Union, Any, Optional  # noqa
-from bisect import bisect_left
 import warnings
 import json
 import eventlet
@@ -63,7 +62,7 @@ class RealtimeFeedHandler:
                 self.result = FetchResult(FETCH_FAILED, error=f'TIMEOUT of {err}')
 
         if attempt + 1 < u.MAX_ATTEMPTS:
-            u.parser_logger.debug('Fetch failed for %s, trying again', self.id_)
+            u.log.debug('parser: Fetch failed for %s, trying again', self.id_)
             self.fetch(attempt=attempt + 1)
 
     def __init__(self, url, id_):
@@ -99,18 +98,18 @@ class RealtimeManager():
     def fetch_all(self) -> None:
         """get all new feeds, check each, and combine
         """
-        u.parser_logger.debug('Checking feeds!')
+        u.log.debug('parser: Checking feeds!')
         for fh in self.feed_handlers:
             self.request_pool.spawn(fh.fetch)
         self.request_pool.waitall()
 
         for fh in self.feed_handlers:
             if fh.result.status not in [NEW_FEED, OLD_FEED]:
-                u.parser_logger.error('Encountered %s when fetching feed %s', fh.result.error, fh.id_)
+                u.log.error('parser: Encountered %s when fetching feed %s', fh.result.error, fh.id_)
 
         # self.average_realtime_timestamp = int(sum([fh.latest_timestamp for fh in self.feed_handlers]) / len(self.feed_handlers))
         new_feeds = sum([int(fh.result.status == NEW_FEED) for fh in self.feed_handlers])
-        u.parser_logger.info('%s new feeds', new_feeds)
+        u.log.info('parser: %s new feeds', new_feeds)
         if new_feeds < 1:
             raise u.UpdateFailed('No new feeds.')
 
@@ -168,7 +167,7 @@ class RealtimeManager():
                     try:
                         station_hash = self.current_data.stationhash_lookup[stop_time_update.stop_id]
                     except KeyError:
-                        u.parser_logger.debug('KeyError for %s', stop_time_update.stop_id)
+                        u.log.debug('parser: KeyError for %s', stop_time_update.stop_id)
                         continue
 
                     arrival_time = u.ArrivalTime(stop_time_update.arrival.time)
@@ -210,7 +209,7 @@ class RealtimeManager():
         try:
             with open(json_path + outfile, 'w') as out_file:
                 out_file.write(data_str)
-            u.parser_logger.debug('Wrote parsed static data to %s', json_path + outfile)
+            u.log.debug('parser: Wrote parsed static data to %s', json_path + outfile)
 
             with bz2.open(json_path + outfile + '.bz2', 'wb') as f:
                 b = bytes(data_str, 'utf-8')
@@ -218,18 +217,18 @@ class RealtimeManager():
 
         except (OSError, FileNotFoundError) as err:
             if attempt != 0:
-                u.parser_logger.error('Unable to write to %s', json_path + outfile)
+                u.log.error('parser: Unable to write to %s', json_path + outfile)
                 raise u.UpdateFailed(err)
 
-            u.parser_logger.info('%s does not exist, attempting to create it', json_path + outfile)
+            u.log.info('parser: %s does not exist, attempting to create it', json_path + outfile)
 
             try:
                 os.makedirs(json_path)
             except PermissionError as err:
-                u.parser_logger.error('Don\'t have permission to create %s', json_path)
+                u.log.error('parser: Don\'t have permission to create %s', json_path)
                 raise u.UpdateFailed(err)
             except FileExistsError as err:
-                u.parser_logger.error('The file %s exists, no permission to overwrite', json_path + outfile)
+                u.log.error('parser: The file %s exists, no permission to overwrite', json_path + outfile)
                 raise u.UpdateFailed(err)
 
             self.serialize_to_JSON(attempt=attempt + 1)
@@ -333,7 +332,7 @@ class RealtimeManager():
             outfile.write(data_out)
         with bz2.open(u.REALTIME_PARSED_PATH + 'data_full.protobuf' + '.bz2', 'wb') as f:
             f.write(bz2.compress(data_out, compresslevel=9))
-        u.parser_logger.debug('Serialized full_data to protobuf')
+        u.log.debug('parser: Serialized full_data to protobuf')
         """
 
         # return bz2.compress(data_out, compresslevel=9)
@@ -388,7 +387,7 @@ class RealtimeManager():
             outfile.write(data_out)
         with bz2.open(u.REALTIME_PARSED_PATH + 'data_diff.protobuf' + '.bz2', 'wb') as f:
                 f.write(bz2.compress(data_out, compresslevel=9))
-        u.parser_logger.debug('Serialized update_data to protobuf')
+        u.log.debug('parser: Serialized update_data to protobuf')
         """
         compressed_protobuf = bz2.compress(proto_update.SerializeToString(), compresslevel=9)
         return compressed_protobuf
@@ -412,9 +411,6 @@ class RealtimeManager():
                 self.full_to_protobuf_bz2()
                 self.all_diff_to_protobuf_bz2()
 
-                # print('data dict from realtime:', {k: int(len(v) / 1000) for k, v in self.data_serialized_bz2.items()})
-                # print('diff dict from realtime:', {k: int(len(v) / 1000) for k, v in self.diff_serialized_bz2.items()})
-
                 if self.db_server:
                     self.db_server.push(
                         current_timestamp=self.current_timestamp,
@@ -424,16 +420,14 @@ class RealtimeManager():
 
             except u.UpdateFailed as err:
                 self.current_data = tmp_data_placeholder
-                u.parser_logger.error(err)
+                u.log.error(err)
                 if not self.current_data:
                     if self.initial_merge_attempts < self.max_initial_merge_attempts:
                         eventlet.sleep(5)
                         self.initial_merge_attempts += 1
                         self.update()
                     else:
-                        u.parser_logger.error('Couldn\'t get all feeds, exiting after %s attempts', self.max_initial_merge_attempts)
-                        print(f'Couldn\'t get all feeds, exiting after {self.max_initial_merge_attempts} attempts')
-                        print(err)
+                        u.log.error('parser: Couldn\'t get all feeds, exiting after %s attempts.\n%s', self.max_initial_merge_attempts, err)
                         exit()
 
     def run(self) -> None:
@@ -444,11 +438,11 @@ class RealtimeManager():
             eventlet.sleep(u.REALTIME_FREQ - _t_diff)
 
     def start(self):
-        u.parser_logger.info('~~~~~~~~~~ Running realtime parser ~~~~~~~~~~')
+        u.log.info('parser: ~~~~~~~~~~ Running realtime parser ~~~~~~~~~~')
         self.parser_thread = eventlet.spawn(self.run)
 
     def stop(self):
-        u.parser_logger.info('~~~~~~~~~~ Stopping realtime parser ~~~~~~~~~~')
+        u.log.info('parser: ~~~~~~~~~~ Stopping realtime parser ~~~~~~~~~~')
         self.parser_thread.kill()
 
 if __name__ == "__main__":

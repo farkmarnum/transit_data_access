@@ -22,16 +22,16 @@ class DatabaseServer:
         self.app = socketio.WSGIApp(self.server)
 
     def connect(self, sid, environ):
-        u.server_logger.info('Client connected: %s', sid)
+        u.log.info('socketio_server: Client connected: %s', sid)
 
     def client_response(self, sid, data):
-        u.server_logger.info('Client %s sent: %s', sid, data)
+        u.log.info('socketio_server: Client %s sent: %s', sid, data)
 
     def disconnect(self, sid):
-        u.server_logger.info('Client disconnected: %s', sid)
+        u.log.info('socketio_server: Client disconnected: %s', sid)
 
     def push(self, current_timestamp: int, data_full: bytes, data_diffs: Dict[int, bytes]) -> None:
-        u.server_logger.info('Pushing the realime data to web_server')
+        u.log.info('socketio_server: Pushing the realime data to web_server')
         """
         with open(u.REALTIME_PARSED_PATH + 'data_full.protobuf.bz2', 'rb') as full_infile, \
                 open(u.REALTIME_PARSED_PATH + 'data_update.protobuf.bz2', 'rb') as update_infile:
@@ -49,11 +49,11 @@ class DatabaseServer:
         eventlet.wsgi.server(eventlet.listen((u.IP, u.PORT)), self.app, log=u.server_logger, log_format=WSGI_LOG_FORMAT)
 
     def start(self):
-        u.server_logger.info('Starting eventlet server @ %s:%s', u.IP, u.PORT)
+        u.log.info('socketio_server: Starting eventlet server @ %s:%s', u.IP, u.PORT)
         self.server_thread = eventlet.spawn(self.server_process)
 
     def stop(self):
-        u.server_logger.info('Stopping eventlet server')
+        u.log.info('socketio_server: Stopping eventlet server')
         self.server_thread.kill()
 
 

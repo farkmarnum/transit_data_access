@@ -17,7 +17,7 @@ def scheduler(db_server) -> None:
     """ Uses schedule package to run:
         - the static parse every day at 3:30am
     """
-    u.parser_logger.info('Starting scheduler')
+    u.log.info('parser: Starting scheduler')
     schedule.every().day.at("03:30").do(eventlet.spawn, static_parse)
     while True:
         schedule.run_pending()
@@ -26,8 +26,6 @@ def scheduler(db_server) -> None:
 def start() -> None:
     """ Starts server, then starts scheduler for parsing. Stops server after interupt.
     """
-    print(f'Logging in {u.LOG_PATH}')
-
     db_server = server.DatabaseServer()
     db_server.start()
 
