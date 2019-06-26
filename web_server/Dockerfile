@@ -1,6 +1,5 @@
 ARG PYTHON_VERSION=3.7
 
-
 FROM python:${PYTHON_VERSION}-slim
 
 COPY requirements.txt ./requirements.txt

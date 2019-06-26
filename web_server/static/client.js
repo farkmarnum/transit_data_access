@@ -14,8 +14,10 @@ function formatBytes (bytes, decimals) {
 }
 
 var domain = '192.168.99.100';
-var port = '9000';
-var socket = io(`http://${domain}:${port}/socket.io`, { autoConnect: false });
+var port = '80';
+var socket = io(`http://${domain}:${port}/socket.io`, {
+  autoConnect: false
+});
 
 var latestTimestamp = 0;
 

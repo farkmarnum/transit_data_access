@@ -87,7 +87,8 @@ class WebServer:
         self.flask_app.config['TEMPLATES_AUTO_RELOAD'] = True
         self.flask_app.add_url_rule(rule='/', view_func=(lambda: f'Hello world!'))
 
-        self.web_server_socket = socketio.Server(async_mode='eventlet')
+        mgr = socketio.RedisManager(f'redis://{u.REDIS_HOST}:{u.REDIS_PORT}')
+        self.web_server_socket = socketio.Server(async_mode='eventlet', client_manager=mgr, logger=u.log, engineio_logger=u.log)
         self.web_server_socket.register_namespace(
             WebServerSocketNamespace(
                 namespace='/socket.io',

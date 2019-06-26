@@ -5,3 +5,4 @@ requests==2.22.0
 dataclasses==0.6
 typing==3.7.4
 Flask==1.0.3
+redis==3.2.1

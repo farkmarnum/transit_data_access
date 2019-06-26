@@ -11,8 +11,8 @@ PARSER_SOCKETIO_HOST: str = os.environ.get('PARSER_SOCKETIO_HOST', 'parser')
 PARSER_SOCKETIO_PORT: int = int(os.environ.get('PARSER_SOCKETIO_PORT', 45654))
 SOCKETIO_CONECTION_MAX_ATTEMPTS = 5
 
-# REDIS_HOST: str = os.environ.get('REDIS_HOST', 'redis_server')
-# REDIS_PORT: int = int(os.environ.get('REDIS_PORT', 6379))
+REDIS_HOST: str = os.environ.get('REDIS_HOST', 'redis_server')
+REDIS_PORT: int = int(os.environ.get('REDIS_PORT', 6379))
 
 WEB_SERVER_HOST = '0.0.0.0'
 WEB_SERVER_PORT = 9000
