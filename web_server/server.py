@@ -10,7 +10,6 @@ eventlet.monkey_patch()
 
 WSGI_LOG_FORMAT = '%(client_ip)s %(request_line)s %(status_code)s %(body_length)s %(wall_seconds).6f'
 SOCKETIO_URL = f'http://{u.PARSER_SOCKETIO_HOST}:{u.PARSER_SOCKETIO_PORT}'
-SOCKETIO_URL = f'http://192.168.99.100:{u.PARSER_SOCKETIO_PORT}'
 
 
 class SocketToParserNamespace(socketio.ClientNamespace):

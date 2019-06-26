@@ -7,12 +7,14 @@ services:
       - "6379:6379"
   parser:
     build: ./parser
+    image: farkmarnum/tda-parser:latest
     ports:
       - "45654:45654"
     depends_on:
       - redis_server
   web_server:
     build: ./web_server
+    image: farkmarnum/tda-web_server:latest
     ports:
       - "9000:9000"
     depends_on:

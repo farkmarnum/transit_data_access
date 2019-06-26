@@ -1,13 +1,6 @@
 ARG PYTHON_VERSION=3.7
 
 
-# FROM python:${PYTHON_VERSION} as python-build
-# WORKDIR /wheels
-# COPY requirements.txt /wheels/requirements.txt
-# RUN pip install --upgrade pip \
-# && pip wheel -r /wheels/requirements.txt
-
-
 FROM python:${PYTHON_VERSION}-slim
 
 COPY requirements.txt ./requirements.txt
