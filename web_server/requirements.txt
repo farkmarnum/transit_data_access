@@ -1,0 +1,7 @@
+eventlet==0.25.0
+python-socketio==4.0.3
+websocket-client==0.56.0
+requests==2.22.0
+dataclasses==0.6
+typing==3.7.4
+Flask==1.0.3

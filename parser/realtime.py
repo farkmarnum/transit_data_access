@@ -1,7 +1,7 @@
 """ Downloads realtime GTFS data, checks if it's new, parses it, and stores it
 """
+import sys
 import time
-import os
 from typing import List, Dict, Tuple, NamedTuple, NewType, Union, Any, Optional  # noqa
 import warnings
 import json
@@ -14,7 +14,6 @@ from google.transit.gtfs_realtime_pb2 import FeedMessage    # type: ignore
 import transit_data_access_pb2    # type: ignore
 from google.protobuf.message import DecodeError
 import util as u    # type: ignore
-from gtfs_conf import GTFS_CONF    # type: ignore
 from server import DatabaseServer    # type: ignore
 
 TIME_DIFF_THRESHOLD = 3
@@ -42,13 +41,15 @@ class RealtimeFeedHandler:
             warnings.filterwarnings(action='error', category=RuntimeWarning)
             try:
                 with request.urlopen(self.url) as response:
+                    _raw = response.read()
                     feed_message = FeedMessage()
-                    feed_message.ParseFromString(response.read())
+                    feed_message.ParseFromString(_raw)
                     timestamp = feed_message.header.timestamp
                     if timestamp >= self.latest_timestamp + TIME_DIFF_THRESHOLD:
                         self.result = FetchResult(NEW_FEED, timestamp=timestamp)
                         self.prev_feed, self.latest_feed, self.latest_timestamp = \
                             self.latest_feed, feed_message, timestamp
+                        u.redis_server.hset('realtime_feeds', self.id_, _raw)
                     else:
                         self.result = FetchResult(OLD_FEED)
                     return
@@ -61,9 +62,21 @@ class RealtimeFeedHandler:
             except eventlet.Timeout as err:
                 self.result = FetchResult(FETCH_FAILED, error=f'TIMEOUT of {err}')
 
-        if attempt + 1 < u.MAX_ATTEMPTS:
+        if attempt + 1 < u.REALTIME_MAX_ATTEMPTS:
             u.log.debug('parser: Fetch failed for %s, trying again', self.id_)
             self.fetch(attempt=attempt + 1)
+
+    def restore_feed_from_redis(self):
+        _raw = u.redis_server.hget('realtime_feeds', self.id_)
+        if not _raw:
+            return
+
+        _feed = FeedMessage()
+        try:
+            _feed.ParseFromString(_raw)
+            self.latest_feed = _feed
+        except (DecodeError, SystemError, RuntimeWarning) as err:
+            u.log.error('%s: unable to parse feed %s restored from redis', err, self.id_)
 
     def __init__(self, url, id_):
         self.url: str = url
@@ -72,6 +85,8 @@ class RealtimeFeedHandler:
         self.latest_timestamp: int = 0
         self.latest_feed: FeedMessage = None
         self.prev_feed: FeedMessage = None
+
+        self.restore_feed_from_redis()
 
 
 class RealtimeManager():
@@ -82,18 +97,43 @@ class RealtimeManager():
         self.parser_thread = None
         self.initial_merge_attempts = 0
         self.max_initial_merge_attempts = 10
-        self.request_pool = eventlet.GreenPool(len(GTFS_CONF.realtime_urls))
-        self.feed_handlers = [RealtimeFeedHandler(url, id_) for id_, url in GTFS_CONF.realtime_urls.items()]
+        self.request_pool = eventlet.GreenPool(len(u.GTFS_CONF.realtime_urls))
+        self.feed_handlers = [RealtimeFeedHandler(url, id_) for id_, url in u.GTFS_CONF.realtime_urls.items()]
 
         self.feed: FeedMessage = None
-        self.current_data: u.RealtimeData = None  # type: ignore
         self.current_timestamp: Timestamp = Timestamp(0)
+        self.current_data: u.RealtimeData = None  # type: ignore
+        self.current_data_json: str = ''
+        self.current_data_bz2: bytes = b''
+
+        self.diff_dict: Dict[Timestamp, u.DataDiff] = {}
+        self.diff_dict_bz2: Dict[Timestamp, bytes] = {}
 
         self.data_dict: Dict[Timestamp, u.RealtimeData] = {}
-        self.diff_dict: Dict[Timestamp, u.DataDiff] = {}
 
-        self.data_serialized_bz2: Dict[Timestamp, bytes] = {}
-        self.diff_serialized_bz2: Dict[Timestamp, bytes] = {}
+        _t = time.time()
+        self.load_data_dict_from_redis()
+        print(f'load_data_dict_from_redis took {time.time() - _t:.4f} seconds')
+
+
+    def load_data_dict_from_redis(self):
+        if not u.redis_server.exists('realtime_data_dict'):
+            u.log.debug('No realtime_data_dict key in Redis')
+            return
+
+        _redis_data_dict_timestamps = u.redis_server.hkeys('realtime_data_dict')
+        _oldest_timestamp_desired = time.time() - u.REALTIME_DATA_DICT_CAP * u.REALTIME_FREQ
+        _outdated_timestamps = [t for t in _redis_data_dict_timestamps if float(t) < _oldest_timestamp_desired]
+        u.log.info(_outdated_timestamps)
+        if _outdated_timestamps:
+            u.redis_server.hdel('realtime_data_dict', *_outdated_timestamps)
+
+        data_json_dict = u.redis_server.hgetall('realtime_data_dict')
+        u.log.debug('realtime_data_dict loaded from Redis, len is %s', len(data_json_dict))
+
+        for timestamp, json_str in data_json_dict.items():
+            self.data_dict[int(timestamp.decode('utf-8'))] = json.loads(json_str, cls=u.RealtimeJSONDecoder)
+
 
     def fetch_all(self) -> None:
         """get all new feeds, check each, and combine
@@ -131,7 +171,7 @@ class RealtimeManager():
     def load_static(self) -> None:
         """Loads the static.json file into self.current_data
         """
-        static_json = u.STATIC_PARSED_PATH + 'static.json'
+        static_json = f'{u.STATIC_PATH}/parsed/static.json'
         with open(static_json, mode='r') as static_json_file:
             static_data = json.loads(static_json_file.read(), cls=u.StaticJSONDecoder)
             self.current_timestamp = Timestamp(int(time.time()))
@@ -144,8 +184,7 @@ class RealtimeManager():
                 stationhash_lookup={str(k): v for k, v in static_data.stationhash_lookup.items()},
                 transfers={int(k): {int(_k): _v for _k, _v in v.items()} for k, v in static_data.transfers.items()},
                 realtime_timestamp=self.current_timestamp,
-                trips={}
-            )
+                trips={})
 
     def parse(self) -> None:
         for elem in self.feed.entity:
@@ -183,55 +222,35 @@ class RealtimeManager():
                     trip_hash = u.short_hash(elem.vehicle.trip.trip_id, u.TripHash)
                     self.current_data.trips[trip_hash].status = u.STOPPED
 
-        # self.serialize_to_JSON(self.current_data, 'realtime.json')
+        self.serialize_to_JSON()
 
 
     def load_data_and_diffs(self) -> None:
         self.data_dict[self.current_timestamp] = self.current_data
-        if len(self.data_dict) > 20:
+        if len(self.data_dict) > u.REALTIME_DATA_DICT_CAP:
             del self.data_dict[min(self.data_dict)]
-        assert len(self.data_dict) <= 20
+        assert len(self.data_dict) <= u.REALTIME_DATA_DICT_CAP
 
-        # tmp_placeholder_diff_dict, self.diff_dict = self.diff_dict, {}
-        self.diff_dict = {}
+        # TODO !!! optimize this with piping
+        u.redis_server.hset('realtime_data_dict', self.current_timestamp, self.current_data_json)
+        if u.redis_server.hlen('realtime_data_dict') > u.REALTIME_DATA_DICT_CAP:
+            u.redis_server.hdel('realtime_data_dict', min(u.redis_server.hkeys('realtime_data_dict')))
+        assert u.redis_server.hlen('realtime_data_dict') <= u.REALTIME_DATA_DICT_CAP
 
+        new_diff_dict = {}
         for timestamp in (set(self.data_dict) - {self.current_timestamp}):
-            self.diff_dict[timestamp] = self.diff(old_data=self.data_dict[timestamp], new_data=self.current_data)
+            new_diff_dict[timestamp] = self.diff(old_data=self.data_dict[timestamp], new_data=self.current_data)
 
-        # del tmp_placeholder_diff_dict  # TODO! actually handle exceptions and use this
+        self.diff_dict = new_diff_dict
 
-    def serialize_to_JSON(self, data, outfile, attempt=0):
+
+    def serialize_to_JSON(self):
         """ Stores data in outfile with custom JSON encoder u.RealtimeJSONEncoder
         """
-        json_path = u.REALTIME_PARSED_PATH
+        self.current_data_json = json.dumps(self.current_data, cls=u.RealtimeJSONEncoder)
 
-        data_str = json.dumps(data, cls=u.RealtimeJSONEncoder)
-        try:
-            with open(json_path + outfile, 'w') as out_file:
-                out_file.write(data_str)
-            u.log.debug('parser: Wrote parsed static data to %s', json_path + outfile)
-
-            with bz2.open(json_path + outfile + '.bz2', 'wb') as f:
-                b = bytes(data_str, 'utf-8')
-                f.write(bz2.compress(b, compresslevel=9))
-
-        except (OSError, FileNotFoundError) as err:
-            if attempt != 0:
-                u.log.error('parser: Unable to write to %s', json_path + outfile)
-                raise u.UpdateFailed(err)
-
-            u.log.info('parser: %s does not exist, attempting to create it', json_path + outfile)
-
-            try:
-                os.makedirs(json_path)
-            except PermissionError as err:
-                u.log.error('parser: Don\'t have permission to create %s', json_path)
-                raise u.UpdateFailed(err)
-            except FileExistsError as err:
-                u.log.error('parser: The file %s exists, no permission to overwrite', json_path + outfile)
-                raise u.UpdateFailed(err)
-
-            self.serialize_to_JSON(attempt=attempt + 1)
+        with open(u.REALTIME_PATH + '/parsed/realtime.json', 'w') as _out_stream:
+            _out_stream.write(self.current_data_json)
 
 
     def diff(self, old_data: u.RealtimeData, new_data: u.RealtimeData) -> u.DataDiff:
@@ -285,6 +304,7 @@ class RealtimeManager():
 
         return data_diff
 
+
     def full_to_protobuf_bz2(self) -> None:
         """ doc
         """
@@ -326,20 +346,9 @@ class RealtimeManager():
             for station_hash, arrival_time in trip.arrivals.items():
                 proto_full.trips[trip_hash].arrivals[station_hash] = arrival_time
 
-        compressed_protobuf = bz2.compress(proto_full.SerializeToString(), compresslevel=9)
-        """
-        with open(u.REALTIME_PARSED_PATH + 'data_full.protobuf', 'wb') as outfile:
-            outfile.write(data_out)
-        with bz2.open(u.REALTIME_PARSED_PATH + 'data_full.protobuf' + '.bz2', 'wb') as f:
-            f.write(bz2.compress(data_out, compresslevel=9))
-        u.log.debug('parser: Serialized full_data to protobuf')
-        """
+        self.current_data_bz2 = bz2.compress(proto_full.SerializeToString(), compresslevel=9)
 
-        # return bz2.compress(data_out, compresslevel=9)
-        self.data_serialized_bz2[self.current_timestamp] = compressed_protobuf
-        if len(self.data_serialized_bz2) > 20:
-            del self.data_serialized_bz2[min(self.data_serialized_bz2)]
-        assert len(self.data_serialized_bz2) <= 20
+        u.log.info('full: %fKB', sys.getsizeof(self.current_data_bz2) / 1024)
 
 
 
@@ -381,42 +390,44 @@ class RealtimeManager():
             proto_update.branch[trip_hash].route_hash = branch.route
             proto_update.branch[trip_hash].final_station = branch.final_station
 
-        """
-        data_out = proto_update.SerializeToString()
-        with open(u.REALTIME_PARSED_PATH + 'data_diff.protobuf', 'wb') as outfile:
-            outfile.write(data_out)
-        with bz2.open(u.REALTIME_PARSED_PATH + 'data_diff.protobuf' + '.bz2', 'wb') as f:
-                f.write(bz2.compress(data_out, compresslevel=9))
-        u.log.debug('parser: Serialized update_data to protobuf')
-        """
         compressed_protobuf = bz2.compress(proto_update.SerializeToString(), compresslevel=9)
         return compressed_protobuf
 
 
     def all_diff_to_protobuf_bz2(self):
-        for timestamp, diff in self.diff_dict.items():
-            self.diff_serialized_bz2[timestamp] = self.diff_to_protobuf_bz2(diff)
+        for timestamp in sorted(self.diff_dict.keys()):
+            diff = self.diff_dict[timestamp]
+            _bz2 = self.diff_to_protobuf_bz2(diff)
+            u.log.info('update %s: %fKB', timestamp, sys.getsizeof(_bz2) / 1024)
+            self.diff_dict_bz2[timestamp] = _bz2
+
 
 
     def update(self) -> None:
         with u.TimeLogger() as _tl:
             try:
                 tmp_data_placeholder = self.current_data
-
                 self.fetch_all()
+                _tl.tlog('fetch_all')
                 self.merge_feeds()
+                _tl.tlog('merge_feeds')
                 self.load_static()
+                _tl.tlog('load_static')
                 self.parse()
+                _tl.tlog('parse')
                 self.load_data_and_diffs()
+                _tl.tlog('load_data_and_diffs')
                 self.full_to_protobuf_bz2()
+                _tl.tlog('full_to_protobuf_bz2')
                 self.all_diff_to_protobuf_bz2()
+                _tl.tlog('all_diff_to_protobuf_bz2')
 
                 if self.db_server:
                     self.db_server.push(
                         current_timestamp=self.current_timestamp,
-                        data_full=self.data_serialized_bz2[self.current_timestamp],
-                        data_diffs=self.diff_serialized_bz2)
-                _tl.tlog('realtime update')
+                        data_full=self.current_data_bz2,
+                        data_diffs=self.diff_dict_bz2)
+                _tl.tlog('push')
 
             except u.UpdateFailed as err:
                 self.current_data = tmp_data_placeholder

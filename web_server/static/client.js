@@ -13,8 +13,8 @@ function formatBytes (bytes, decimals) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
-var domain = '127.0.0.1';
-var port = '80';
+var domain = '192.168.99.100';
+var port = '9000';
 var socket = io(`http://${domain}:${port}/socket.io`, { autoConnect: false });
 
 var latestTimestamp = 0;
@@ -43,6 +43,7 @@ socket.on('data_update', function (data) {
 
 socket.open();
 console.log('socket opened');
+var socketIsOpen = true;
 
 const readline = require('readline');
 readline.emitKeypressEvents(process.stdin);
@@ -51,11 +52,13 @@ process.stdin.setRawMode(true);
 process.stdin.on('keypress', (key, data) => {
   if (data.ctrl && data.name === 'c') {
     process.exit();
-  } else if (key === 'c') {
+  } else if (key === 'c' && socketIsOpen) {
     socket.close();
+    socketIsOpen = false;
     console.log('closing socket');
-  } else if (key === 'o') {
+  } else if (key === 'o' && !socketIsOpen) {
     socket.open();
+    socketIsOpen = true;
     console.log('opening socket');
   }
 });

@@ -1,0 +1,20 @@
+version: '3'
+
+services:
+  redis_server:
+    image: redis
+    ports:
+      - "6379:6379"
+  parser:
+    build: ./parser
+    ports:
+      - "45654:45654"
+    depends_on:
+      - redis_server
+  web_server:
+    build: ./web_server
+    ports:
+      - "9000:9000"
+    depends_on:
+      - redis_server
+      - parser

@@ -9,80 +9,55 @@ import csv
 import zipfile
 import json
 import pandas as pd
+import redis
 import util as u  # type: ignore
-from gtfs_conf import GTFS_CONF, LIST_OF_FILES  # type: ignore
 
 
 class StaticHandler(object):
     """docstring for StaticHandler
     """
 
-    def has_static_data(self):
-        """Checks if static_data_path is populated with the csv files in LIST_OF_FILES
-        Returns a bool
-        """
-        all_files_are_loaded = True
-        for file_ in LIST_OF_FILES:
-            all_files_are_loaded *= os.path.isfile(u.STATIC_RAW_PATH + file_)
-        return all_files_are_loaded
+    def has_static_feed(self):
+        try:
+            _in_redis = u.redis_server.exists('static_json')
+        except redis.ResponseError:
+            _in_redis = False
+
+        _in_json = os.path.exists(f'{u.STATIC_PATH}/parsed/static.json')
+        return _in_json or _in_redis
+
 
     def get_feed(self) -> None:
         """Downloads new static GTFS data, checks if different than existing data,
         unzips, and then generates additional csv files:
 
-            if successful, it then deletes {data_path}/static/GTFS/ and moves the new data there
         merge_trips_and_stops combines trips, stops, and stop_times to make route_stops_with_names
         load_time_between_stops calculates time b/w each pair of adjacent stops using stop_times
         """
-        has_static_data = self.has_static_data()
-        tmp_path = u.STATIC_TMP_PATH
-        raw_path = u.STATIC_RAW_PATH
-        zip_filepath = u.STATIC_ZIP_PATH + 'static_data.zip'
-        old_zip_filepath = u.STATIC_ZIP_PATH + 'static_data_OLD.zip'
-
+        u.log.info('parser: Downloading GTFS static data from %s', self.url)
         try:
-            os.makedirs(tmp_path, exist_ok=True)
-            os.makedirs(raw_path, exist_ok=True)
-            os.makedirs(u.STATIC_ZIP_PATH, exist_ok=True)
-        except PermissionError:
-            u.log.error('parser: Don\'t have permission to write to %s or %s', tmp_path, raw_path)
-            raise u.UpdateFailed('PermissionError')
-
-        u.log.info('parser: Downloading GTFS static data from %s to %s', self.url, zip_filepath)
-        try:
-            new_data = requests.get(self.url, allow_redirects=True, timeout=5)
+            new_data = requests.get(self.url, allow_redirects=True, timeout=10)
         except requests.exceptions.RequestException as err:
-            u.log.error('parser: %s: Failed to connect to %s\n', err, self.url)
-            raise u.UpdateFailed('Connection failure, couldn\'t get feed')
+            raise u.UpdateFailed(f'{err}, failed to connect to {self.url}')
 
-        if has_static_data:
-            try:
-                shutil.move(zip_filepath, old_zip_filepath)
-            except FileNotFoundError:
-                has_static_data = False
+        _zipfile = f'{u.STATIC_PATH}/static_data.zip'
+        with open(_zipfile, 'wb') as zip_out_stream:
+            zip_out_stream.write(new_data.content)
 
-        with open(zip_filepath, 'wb') as zip_outfile:
-            zip_outfile.write(new_data.content)
+        self.current_checksum = u.checksum(_zipfile)
 
-        if has_static_data:
-            no_new_data = (u.checksum(zip_filepath) == u.checksum(old_zip_filepath))
-            os.remove(old_zip_filepath)
-            u.log.info('parser: removing %s', old_zip_filepath)
-            if no_new_data:
+        if self.has_static_feed():
+            if self.current_checksum == self.latest_checksum:
                 raise u.UpdateFailed('Static data checksum matches previously parsed static data. No new data!')
 
-        u.log.info('parser: Extracting zip to %s', tmp_path)
+        _rawpath = f'{u.STATIC_PATH}/raw'
+        shutil.rmtree(_rawpath, ignore_errors=True)
+        u.log.info('parser: Extracting static GTFS zip')
         try:
-            with zipfile.ZipFile(zip_filepath, "r") as zip_ref:
-                zip_ref.extractall(tmp_path)
+            with zipfile.ZipFile(_zipfile, "r") as zip_ref:
+                zip_ref.extractall(_rawpath)
         except zipfile.BadZipFile as err:
                 raise u.UpdateFailed(err)
-
-        u.log.info('parser: Deleting %s to make room for new static data', raw_path)
-        shutil.rmtree(raw_path)
-
-        u.log.info('parser: Moving new data from %s to %s', tmp_path, raw_path)
-        os.rename(tmp_path, raw_path)
 
         self.merge_trips_and_stops()
 
@@ -90,7 +65,7 @@ class StaticHandler(object):
     def locate_csv(self, name: str) -> str:
         """Generates the path/filname for the csv given the name & gtfs_settings
         """
-        return u.STATIC_RAW_PATH + name + '.txt'
+        return f'{u.STATIC_PATH}/raw/{name}.txt'
 
 
     def merge_trips_and_stops(self):
@@ -199,46 +174,36 @@ class StaticHandler(object):
 
 
     def serialize(self, attempt=0) -> None:
-        """ Stores self.data in u.STATIC_PARSED_PATH+'static.json'
+        """ Stores self.data in JSON format
         """
-        json_path = u.STATIC_PARSED_PATH
+        _jsonfile = f'{u.STATIC_PATH}/parsed/static.json'
 
-        try:
-            with open(json_path + 'static.json', 'w') as out_file:
-                json.dump(self.data, out_file, cls=u.StaticJSONEncoder)
-            u.log.info('parser: Wrote parsed static data to %sstatic.json', json_path)
+        # try:
+        with open(_jsonfile, 'w') as out_file:
+            json.dump(self.data, out_file, cls=u.StaticJSONEncoder)
+        u.log.info('parser: Wrote parsed static data JSON to %s', _jsonfile)
 
-        except OSError as err:
-            if attempt != 0:
-                u.log.error('parser: Unable to write to %sstatic.json', json_path)
-                raise u.UpdateFailed(err)
-
-            u.log.info('parser: %sstatic.json does not exist, attempting to create it', json_path)
-
-            try:
-                os.makedirs(json_path)
-            except PermissionError as err:
-                u.log.error('parser: Don\'t have permission to create %s', json_path)
-                raise u.UpdateFailed(err)
-            except FileExistsError as err:
-                u.log.error('parser: The file %sstatic.json exists, no permission to overwrite', json_path)
-                raise u.UpdateFailed(err)
-
-            self.serialize(attempt=attempt + 1)
 
     def update(self):
         u.log.info('parser: ~~~~~~~~~~ Running STATIC.py ~~~~~~~~~~')
         try:
+            try:
+                self.latest_checksum = u.redis_server.get('latest_static_GTFS_checksum').decode('utf-8')
+            except AttributeError:
+                self.latest_checksum = None
             self.get_feed()
             self.parse()
             self.serialize()
+            u.redis_server.set('latest_static_GTFS_checksum', self.current_checksum)
         except u.UpdateFailed as err:
             u.log.error(err)
 
     def __init__(self) -> None:
-        self.url = GTFS_CONF.static_url
+        self.current_checksum = None
+        self.latest_checksum = None
+        self.url: str = u.GTFS_CONF.static_url
         self.data: u.StaticData = u.StaticData(
-            name=GTFS_CONF.name,
+            name=u.GTFS_CONF.name,
             static_timestamp=0,
             routes={},
             stations={},
