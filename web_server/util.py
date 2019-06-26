@@ -1,6 +1,7 @@
 import os
 import logging
 import logging.config
+import redis
 
 PACKAGE_NAME = 'transit_data_access'
 DATA_PATH = f'/data/'
@@ -43,3 +44,5 @@ logging.config.dictConfig({
 })
 
 log = logging.getLogger('web')
+
+redis_server = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0)
