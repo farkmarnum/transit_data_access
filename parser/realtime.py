@@ -124,7 +124,7 @@ class RealtimeManager():
         _redis_data_dict_timestamps = u.redis_server.hkeys('realtime_data_dict')
         _oldest_timestamp_desired = time.time() - u.REALTIME_DATA_DICT_CAP * u.REALTIME_FREQ
         _outdated_timestamps = [t for t in _redis_data_dict_timestamps if float(t) < _oldest_timestamp_desired]
-        u.log.info(_outdated_timestamps)
+        u.log.debug('removing these timestamps from redis since they\'re too old: %s', _outdated_timestamps)
         if _outdated_timestamps:
             u.redis_server.hdel('realtime_data_dict', *_outdated_timestamps)
 
@@ -348,7 +348,7 @@ class RealtimeManager():
 
         self.current_data_bz2 = bz2.compress(proto_full.SerializeToString(), compresslevel=9)
 
-        u.log.info('full: %fKB', sys.getsizeof(self.current_data_bz2) / 1024)
+        u.log.debug('full: %fKB', sys.getsizeof(self.current_data_bz2) / 1024)
 
 
 
@@ -398,7 +398,7 @@ class RealtimeManager():
         for timestamp in sorted(self.diff_dict.keys()):
             diff = self.diff_dict[timestamp]
             _bz2 = self.diff_to_protobuf_bz2(diff)
-            u.log.info('update %s: %fKB', timestamp, sys.getsizeof(_bz2) / 1024)
+            u.log.debug('update %s: %fKB', timestamp, sys.getsizeof(_bz2) / 1024)
             self.diff_dict_bz2[timestamp] = _bz2
 
 

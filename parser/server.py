@@ -23,13 +23,13 @@ class DatabaseServer:
         u.log.info('socketio_server: Client connected: %s', sid)
 
     def client_response(self, sid, data):
-        u.log.info('socketio_server: Client %s sent: %s', sid, data)
+        u.log.debug('socketio_server: Client %s sent: %s', sid, data)
 
     def disconnect(self, sid):
         u.log.info('socketio_server: Client disconnected: %s', sid)
 
     def push(self, current_timestamp: int, data_full: bytes, data_diffs: Dict[int, bytes]) -> None:
-        u.log.info('socketio_server: Pushing the realime data to web_server')
+        u.log.debug('socketio_server: Pushing the realime data to web_server')
 
         self.server.emit('new_data', {
             'current_timestamp': current_timestamp,
@@ -38,7 +38,12 @@ class DatabaseServer:
         }, namespace='/socket.io')
 
     def server_process(self):
-        eventlet.wsgi.server(eventlet.listen((u.PARSER_SOCKETIO_HOST, u.PARSER_SOCKETIO_PORT)), self.app, log=u.log, log_format='%(client_ip)s %(request_line)s %(status_code)s %(body_length)s %(wall_seconds).6f')
+        eventlet.wsgi.server(
+            eventlet.listen((u.PARSER_SOCKETIO_HOST, u.PARSER_SOCKETIO_PORT)),
+            self.app,
+            log_output=False,
+            log=u.log,
+            log_format='%(client_ip)s %(request_line)s %(status_code)s %(body_length)s %(wall_seconds).6f')
 
     def start(self):
         u.log.info('socketio_server: Starting eventlet server @ %s:%s', u.PARSER_SOCKETIO_HOST, u.PARSER_SOCKETIO_PORT)

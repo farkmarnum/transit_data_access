@@ -385,7 +385,7 @@ class TimeLogger:
         while len(self.times) > 0:
             time_, block_name = self.times.pop(0)
             block_time = time_ - prev_time
-            log.info('%s took %s seconds', block_name, block_time)
+            log.debug('%s took %s seconds', block_name, block_time)
             prev_time = time_
 
 

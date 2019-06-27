@@ -12,9 +12,9 @@ RUN pip install --upgrade pip && \
 COPY . /app
 WORKDIR /app
 
-ENV LOG_LEVEL='INFO' \
-	REDIS_HOST='redis_server' \
+ENV REDIS_HOST='redis_server' \
 	PARSER_SOCKETIO_HOST='parser' \
-	PYTHONUNBUFFERED=1
+	PYTHONUNBUFFERED=1 \
+	LOG_LEVEL='INFO'
 
 CMD python ./main.py

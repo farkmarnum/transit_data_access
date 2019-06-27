@@ -5,50 +5,35 @@ import socketio   # type: ignore
 from flask import Flask      # type: ignore
 import util as u  # type: ignore
 
-DELIMITER = chr(30)
 
 eventlet.monkey_patch()
 
-WSGI_LOG_FORMAT = '%(client_ip)s %(request_line)s %(status_code)s %(body_length)s %(wall_seconds).6f'
 
+WSGI_LOG_FORMAT = '%(client_ip)s %(request_line)s %(status_code)s %(body_length)s %(wall_seconds).6f'
 
 SID = NewType('SID', str)
 ClientID = NewType('ClientID', str)
 
-
 @dataclass
 class WebClient:
-    sid: SID = SID('')
+    sid: SID
     connected: bool = True
     last_successful_timestamp: int = 0
-
-    @property
-    def serialized(self) -> str:
-        return f'{self.sid}{DELIMITER}{int(self.connected)}{DELIMITER}{self.last_successful_timestamp}'
-
-class WebClientFromStr(WebClient):
-    def __init__(self, in_str: str):
-        _arg_list = in_str.split(DELIMITER)
-        sid = SID(_arg_list[0])
-        connected = (_arg_list[1] == '1')
-        last_successful_timestamp = int(_arg_list[2])
-
-        super(WebClientFromStr, self).__init__(sid, connected, last_successful_timestamp)
 
 
 class SocketToParserNamespace(socketio.ClientNamespace):
     def on_connect(self):
-        u.log.info('Connected!')
+        u.log.debug('Connected to parser')
 
     def on_disconnect(self):
-        u.log.info('Disconnected!')
+        u.log.debug('Disconnected from parser')
 
     def on_new_data(self, data):
         self.emit('client_response', 'Received new data. Thanks!')
         if not data:
             u.log.error('new_data event, but no data attached')
             return
-        u.log.info('Received new data!')
+        u.log.debug('Received new data from parser')
         self.web_server.load_new_data(
             current_timestamp=int(data['current_timestamp']),
             data_full=data['data_full'],
@@ -64,41 +49,54 @@ class WebServerSocketNamespace(socketio.Namespace):
         u.log.info('New connection with sid %s from %s. Waiting for client_id', sid, environ['REMOTE_ADDR'])
 
     def on_set_client_id(self, sid: SID, data) -> None:
-        if not data['client_id']:
+        try:
+            client_id = data['client_id']
+        except KeyError:
             u.log.error('set_client_id message lacks client_id')
-            return
-        client_id = ClientID(data['client_id'])
-        client = self.web_server.get_client(client_id)
-        client.sid = sid
 
-        self.web_server.store_client(client_id, client)
-        self.web_server.set_client_id_for_sid(sid, client_id)
+        try:
+            old_sid = self.web_server.clients[client_id].sid
+
+            self.web_server.clients[client_id].connected = True
+            self.web_server.clients[client_id].sid = sid
+            del self.web_server.client_id_for_sid[old_sid]
+            u.log.debug('OLD CLIENT REJOINED')
+        except KeyError:
+            u.log.debug('NEW CLIENT')
+            self.web_server.clients[client_id] = WebClient(sid=sid)
+
+        self.web_server.client_id_for_sid[sid] = client_id
         u.log.info('set_client for client_id %s and sid %s', client_id, sid)
 
     def on_disconnect(self, sid) -> None:
         u.log.info('Client %s disconnected from server', sid)
-        client_id = self.web_server.get_client_id_from_sid(sid)
-        client = self.web_server.get_client(client_id)
-        client.connected = False
-        self.web_server.store_client(client_id, client)
+        try:
+            client_id = self.web_server.client_id_for_sid[sid]
+        except KeyError:
+            u.log.error('can\'t find sid %s in client_id_for_sid', sid)
+            return
 
-    def on_data_received(self, sid, data):
-        # print()
-        # u.log.info(u.redis_server.keys())
+        self.web_server.clients[client_id].connected = False
+
+    def on_data_received(self, sid, data) -> None:
         client_id = ClientID(data['client_id'])
-        if not client_id:
-            u.log.error('on_data_received message lacks client_id')
-            return
-
-        client = self.web_server.get_client(client_id)
-        if not client.sid:
-            u.log.error('on_data_received message client_id has no record')
-            return
+        client = self.web_server.clients[client_id]
 
         client.last_successful_timestamp = int(data['client_latest_timestamp'])
-        self.web_server.store_client(client_id, client)
+        u.log.debug('Data received by sid %s, client_id %s! timestamp: %s', sid, client_id, data['client_latest_timestamp'])
 
-        u.log.info('Data received by sid %s, client_id %s! timestamp: %s', sid, client_id, data['client_latest_timestamp'])
+    def on_request_full(self, sid, data) -> None:
+        client_id = ClientID(data['client_id'])
+        try:
+            client = self.web_server.clients[client_id]
+        except KeyError:
+            u.log.error('client %s sent request_full, but that id is not in clients. Adding an entry', client_id)
+            self.web_server.clients[client_id] = WebClient(sid=sid)
+            self.web_server.client_id_for_sid[sid] = client_id
+
+        client.last_successful_timestamp = 0  # << not really necessary? (TODO)
+        self.web_server.send_full(client.sid)
+
 
     def __init__(self, namespace, web_server):
         self.namespace = namespace
@@ -117,17 +115,14 @@ class WebServer:
         self.flask_app.config['TEMPLATES_AUTO_RELOAD'] = True
         self.flask_app.add_url_rule(rule='/', view_func=(lambda: f'Hello world!'))
 
-        self.web_server_socket = socketio.Server(
-            async_mode='eventlet',
-            # client_manager=socketio.RedisManager(f'redis://{u.REDIS_HOST}:{u.REDIS_PORT}'),  # TODO
-            # logger=u.log,
-            # engineio_logger=u.log
-        )
+        self.web_server_socket = socketio.Server(async_mode='eventlet')
         self.web_server_socket.register_namespace(
             WebServerSocketNamespace(
                 namespace='/socket.io',
                 web_server=self))
-        self.sid_to_client_id: Dict[SID, ClientID] = {}
+
+        self.clients: Dict[ClientID, WebClient] = {}
+        self.client_id_for_sid: Dict[SID, ClientID] = {}
 
         self.data_full: bytes = b''
         self.data_diffs: Dict[int, bytes] = {}
@@ -135,36 +130,6 @@ class WebServer:
 
         self.pool = eventlet.GreenPool(size=10000)
 
-    def get_client_id_from_sid(self, sid: SID) -> ClientID:
-        _bytes = u.redis_server.hget('web_server-client_id_from_sid', sid)
-        if _bytes:
-            return ClientID(_bytes.decode('utf-8'))
-        else:
-            raise KeyError
-
-    def set_client_id_for_sid(self, sid: SID, client_id: ClientID) -> None:
-        return u.redis_server.hset('web_server-client_id_from_sid', sid, client_id)
-
-    def get_all_clients(self) -> dict:
-        _raw_client_dict = u.redis_server.hgetall('web_server-clients')
-        return {client_id: WebClientFromStr(_bytes.decode('utf-8')) for client_id, _bytes in _raw_client_dict.items()}
-
-    # def get_client_id_list(self) -> list:
-    #    return u.redis_server.hkeys('web_server-clients')
-
-    def get_client(self, client_id) -> WebClient:
-        _bytes = u.redis_server.hget('web_server-clients', client_id)
-        if _bytes:
-            client = WebClientFromStr(_bytes.decode('utf-8'))
-            print('got client:', client)
-            return client
-        else:
-            return WebClient()
-
-    def store_client(self, client_id: ClientID, client: WebClient) -> None:
-        client_str = client.serialized
-        print('setting client_str:', client_str)
-        u.redis_server.hset(f'web_server-clients', client_id, client_str)
 
     def connect_to_parser(self) -> None:
         _socketio_url = f'http://{u.PARSER_SOCKETIO_HOST}:{u.PARSER_SOCKETIO_PORT}'
@@ -185,8 +150,9 @@ class WebServer:
         eventlet.wsgi.server(
             eventlet.listen((u.WEB_SERVER_HOST, u.WEB_SERVER_PORT)),
             socketio.WSGIApp(self.web_server_socket, self.flask_app),
-            # log=u.log,
-            # log_format=WSGI_LOG_FORMAT
+            log_output=False,
+            log=u.log,
+            log_format=WSGI_LOG_FORMAT
         )
 
     def start(self) -> None:
@@ -203,9 +169,7 @@ class WebServer:
         self.current_timestamp = current_timestamp
         self.data_full = data_full
         self.data_diffs = {int(k): v for k, v in data_diffs.items()}
-        for client_id, client in self.get_all_clients().items():
-            print()
-            print(client_id, client)
+        for client_id, client in self.clients.items():
             if client.connected:
                 self.pool.spawn(self.send_necessary_data, client_id)
 
@@ -218,22 +182,23 @@ class WebServer:
             },
             namespace='/socket.io',
             room=sid)
-        u.log.info('Sent full to %s', sid)
+        u.log.debug('Sent full to %s', sid)
 
     def send_update(self, sid: SID, last_successful_timestamp: int) -> None:
         self.web_server_socket.emit(
             'data_update', {
-                "timestamp": self.current_timestamp,
+                "timestamp_to": self.current_timestamp,
+                "timestamp_from": last_successful_timestamp,
                 "data_update": self.data_diffs[last_successful_timestamp]
             },
             namespace='/socket.io',
             room=sid)
-        u.log.info('Sent update to %s', sid)
+        u.log.debug('Sent update to %s', sid)
 
     def send_necessary_data(self, client_id: ClientID) -> None:
-        u.log.info('send_necessary_data for client_id %s', client_id)
+        u.log.debug('send_necessary_data for client_id %s', client_id)
 
-        client = self.get_client(client_id)
+        client = self.clients[client_id]
         timestamp = client.last_successful_timestamp
         if (not timestamp) or (timestamp not in self.data_diffs):
             self.send_full(client.sid)

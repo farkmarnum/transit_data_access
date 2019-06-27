@@ -17,10 +17,11 @@ RUN pip install --upgrade pip && \
 	rm -rf /root/.cache/pip/*
 COPY . /app
 WORKDIR /app
-ENV LOG_LEVEL='WARNING' \
-	MTA_API_KEY='f775a76bd1960c98831b3c2b06c19bb5' \
+ENV MTA_API_KEY='f775a76bd1960c98831b3c2b06c19bb5' \
 	REDIS_HOST='redis_server' \
 	PARSER_SOCKETIO_PORT=45654 \
-	PYTHONUNBUFFERED=1
+	PYTHONUNBUFFERED=1 \
+	LOG_LEVEL='INFO'
+
 
 CMD python ./main.py
