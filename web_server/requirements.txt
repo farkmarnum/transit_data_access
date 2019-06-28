@@ -1,8 +1,6 @@
-eventlet==0.25.0
-python-socketio==4.0.3
-python-socketio[asyncio_client]
 requests==2.22.0
 dataclasses==0.6
 typing==3.7.4
 redis==3.2.1
 aiohttp==3.5.4
+websockets==7.0

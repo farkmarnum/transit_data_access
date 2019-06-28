@@ -1,14 +1,12 @@
 import time
 from dataclasses import dataclass
 from typing import Dict, Any, NewType
-# import eventlet
-import socketio   # type: ignore
-# from flask import Flask      # type: ignore
-# import aiohttp
-# import asyncio
+import asyncio
 from aiohttp import web
+import websockets
 
 import util as u  # type: ignore
+
 
 
 
@@ -27,7 +25,7 @@ class WebClient:
     connected: bool = True
     last_successful_timestamp: int = 0
 
-
+"""
 class SocketToParserNamespace(socketio.AsyncClientNamespace):
     async def on_connect(self):
         u.log.debug('Connected to parser')
@@ -49,6 +47,21 @@ class SocketToParserNamespace(socketio.AsyncClientNamespace):
     def __init__(self, namespace, web_server):
         self.namespace = namespace
         self.web_server = web_server
+"""
+
+async def web_server_ws_handler(websocket, path):
+    name = await websocket.recv()
+    print(f"< {name}")
+
+    greeting = f"Hello {name}!"
+
+    await websocket.send(greeting)
+    print(f"> {greeting}")
+
+start_server = websockets.serve(web_server_ws_handler, u.WEB_SERVER_HOST, u.WEB_SERVER_PORT)
+
+asyncio.get_event_loop().run_until_complete(start_server)
+asyncio.get_event_loop().run_forever()
 
 
 class WebServerSocketNamespace(socketio.AsyncNamespace):
