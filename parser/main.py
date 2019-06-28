@@ -21,7 +21,7 @@ def scheduler(db_server) -> None:
     schedule.every().day.at("03:30").do(eventlet.spawn, static_parse)
     while True:
         schedule.run_pending()
-        eventlet.sleep(0.5)
+        eventlet.sleep(5)
 
 def start() -> None:
     """ Starts server, then starts scheduler for parsing. Stops server after interupt.

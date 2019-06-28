@@ -19,29 +19,35 @@ function formatBytes (bytes, decimals) {
 }
 
 class Client {
-  constructor () {
-    var uniqueId = crypto.randomBytes(64).toString('base64');
+  constructor (id_) {
+    var uniqueId = id_;
     console.log(`generated unique id: ${uniqueId}`);
 
     var domain = '192.168.99.100';
-    var port = '80';
+    var port = '9000';
     var socket = io(`http://${domain}:${port}/socket.io?unique_id=${uniqueId}`, {
       autoConnect: false
     });
 
     var latestTimestamp = 0;
+    var _t = 0;
 
     socket.on('connect', function () {
+      console.log((Date.now() - _t) / 1000);
       socket.emit('set_client_id', { 'client_id': uniqueId });
+      /*
       if (latestTimestamp === 0) {
-        sleep(250).then(() => {
-          socket.emit('request_full', { 'client_id': uniqueId });
-        });
+        // sleep(250).then(() => {
+        socket.emit('request_full', { 'client_id': uniqueId });
+        // _t = Date.now();
+        // });
       }
+      */
       console.log('connected!');
     });
 
     socket.on('data_full', function (data) {
+      // .log((Date.now() - _t) / 1000);
       console.log(data.timestamp, formatBytes(data.data_full.byteLength), uniqueId.slice(0, 5));
       latestTimestamp = data.timestamp;
       socket.emit('data_received', { 'client_id': uniqueId, 'client_latest_timestamp': latestTimestamp });
@@ -60,11 +66,21 @@ class Client {
     });
 
     socket.open();
+    _t = Date.now();
   }
 };
 
+var numOfClients = process.argv.slice(2);
+var ids = {};
+for (var i = 0; i < numOfClients; i++) {
+  ids[i] = crypto.randomBytes(64).toString('base64');
+};
+
 var clients = [];
-for (var i = 0; i < 100; i++) {
-  var newClient = new Client();
-  clients.push(newClient);
+async function createClient (id_) {
+  clients.push(new Client(id_));
+}
+
+for (i = 0; i < numOfClients; i++) {
+  createClient(ids[i]);
 };

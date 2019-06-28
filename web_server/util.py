@@ -1,3 +1,4 @@
+import time
 import os
 import logging
 import logging.config
@@ -46,3 +47,24 @@ logging.config.dictConfig({
 log = logging.getLogger('web')
 
 redis_server = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0)
+
+class TimeLogger:
+    """ Convenient little way to log how long something takes.
+    """
+    def __init__(self):
+        self.times = []
+
+    def __enter__(self):
+        self.tlog()
+        return self
+
+    def tlog(self, block_name=''):
+        self.times.append((time.time(), block_name))
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        prev_time, _ = self.times.pop(0)
+        while len(self.times) > 0:
+            time_, block_name = self.times.pop(0)
+            block_time = time_ - prev_time
+            log.info('%s took %s seconds', block_name, block_time)
+            prev_time = time_

@@ -1,18 +1,25 @@
+import time
 from dataclasses import dataclass
 from typing import Dict, Any, NewType
-import eventlet
+# import eventlet
 import socketio   # type: ignore
-from flask import Flask      # type: ignore
+# from flask import Flask      # type: ignore
+# import aiohttp
+# import asyncio
+from aiohttp import web
+
 import util as u  # type: ignore
 
 
-eventlet.monkey_patch()
+
+# eventlet.monkey_patch()
 
 
-WSGI_LOG_FORMAT = '%(client_ip)s %(request_line)s %(status_code)s %(body_length)s %(wall_seconds).6f'
+# WSGI_LOG_FORMAT = '%(client_ip)s %(request_line)s %(status_code)s %(body_length)s %(wall_seconds).6f'
 
 SID = NewType('SID', str)
 ClientID = NewType('ClientID', str)
+
 
 @dataclass
 class WebClient:
@@ -21,15 +28,15 @@ class WebClient:
     last_successful_timestamp: int = 0
 
 
-class SocketToParserNamespace(socketio.ClientNamespace):
-    def on_connect(self):
+class SocketToParserNamespace(socketio.AsyncClientNamespace):
+    async def on_connect(self):
         u.log.debug('Connected to parser')
 
-    def on_disconnect(self):
+    async def on_disconnect(self):
         u.log.debug('Disconnected from parser')
 
-    def on_new_data(self, data):
-        self.emit('client_response', 'Received new data. Thanks!')
+    async def on_new_data(self, data):
+        await self.emit('client_response', 'Received new data. Thanks!')
         if not data:
             u.log.error('new_data event, but no data attached')
             return
@@ -44,11 +51,11 @@ class SocketToParserNamespace(socketio.ClientNamespace):
         self.web_server = web_server
 
 
-class WebServerSocketNamespace(socketio.Namespace):
-    def on_connect(self, sid, environ: Any) -> None:
+class WebServerSocketNamespace(socketio.AsyncNamespace):
+    async def on_connect(self, sid, environ: Any) -> None:
         u.log.info('New connection with sid %s from %s. Waiting for client_id', sid, environ['REMOTE_ADDR'])
 
-    def on_set_client_id(self, sid: SID, data) -> None:
+    async def on_set_client_id(self, sid: SID, data) -> None:
         try:
             client_id = data['client_id']
         except KeyError:
@@ -68,7 +75,7 @@ class WebServerSocketNamespace(socketio.Namespace):
         self.web_server.client_id_for_sid[sid] = client_id
         u.log.info('set_client for client_id %s and sid %s', client_id, sid)
 
-    def on_disconnect(self, sid) -> None:
+    async def on_disconnect(self, sid) -> None:
         u.log.info('Client %s disconnected from server', sid)
         try:
             client_id = self.web_server.client_id_for_sid[sid]
@@ -78,14 +85,14 @@ class WebServerSocketNamespace(socketio.Namespace):
 
         self.web_server.clients[client_id].connected = False
 
-    def on_data_received(self, sid, data) -> None:
+    async def on_data_received(self, sid, data) -> None:
         client_id = ClientID(data['client_id'])
         client = self.web_server.clients[client_id]
 
         client.last_successful_timestamp = int(data['client_latest_timestamp'])
         u.log.debug('Data received by sid %s, client_id %s! timestamp: %s', sid, client_id, data['client_latest_timestamp'])
 
-    def on_request_full(self, sid, data) -> None:
+    async def on_request_full(self, sid, data) -> None:
         client_id = ClientID(data['client_id'])
         try:
             client = self.web_server.clients[client_id]
@@ -95,7 +102,7 @@ class WebServerSocketNamespace(socketio.Namespace):
             self.web_server.client_id_for_sid[sid] = client_id
 
         client.last_successful_timestamp = 0  # << not really necessary? (TODO)
-        self.web_server.send_full(client.sid)
+        await self.web_server.send_full(client.sid)
 
 
     def __init__(self, namespace, web_server):
@@ -104,22 +111,19 @@ class WebServerSocketNamespace(socketio.Namespace):
 
 
 class WebServer:
-    def __init__(self) -> None:
-        self.parser_socketio_client = socketio.Client(logger=False, engineio_logger=False)
-        self.parser_socketio_client.register_namespace(
-            SocketToParserNamespace(
-                namespace='/socket.io',
-                web_server=self))
+    def __init__(self):
+        self.parser_socketio_client = socketio.AsyncClient(logger=False, engineio_logger=False)
+        socket_to_parser_namespace = SocketToParserNamespace(namespace='/socket.io', web_server=self)
+        self.parser_socketio_client.register_namespace(socket_to_parser_namespace)
 
-        self.flask_app = Flask(__name__)
-        self.flask_app.config['TEMPLATES_AUTO_RELOAD'] = True
-        self.flask_app.add_url_rule(rule='/', view_func=(lambda: f'Hello world!'))
+        self.app = web.Application()
+        self.app.add_routes([web.get('/', self.index)])
 
-        self.web_server_socket = socketio.Server(async_mode='eventlet')
-        self.web_server_socket.register_namespace(
-            WebServerSocketNamespace(
-                namespace='/socket.io',
-                web_server=self))
+        self.web_server_socket = socketio.AsyncServer(async_mode='aiohttp', async_handlers=True)
+        web_server_socket_namespace = WebServerSocketNamespace(namespace='/socket.io', web_server=self)
+        self.web_server_socket.register_namespace(web_server_socket_namespace)
+
+        self.web_server_socket.attach(self.app)
 
         self.clients: Dict[ClientID, WebClient] = {}
         self.client_id_for_sid: Dict[SID, ClientID] = {}
@@ -128,9 +132,15 @@ class WebServer:
         self.data_diffs: Dict[int, bytes] = {}
         self.current_timestamp: int = 0
 
-        self.pool = eventlet.GreenPool(size=10000)
+        self.time_refs_for_sid: Dict[SID, int] = {}
 
+        # self.loop = asyncio.get_event_loop()
 
+    async def index(self, request):
+        text = "Hello world!"
+        return web.Response(text=text)
+
+    """
     def connect_to_parser(self) -> None:
         _socketio_url = f'http://{u.PARSER_SOCKETIO_HOST}:{u.PARSER_SOCKETIO_PORT}'
         u.log.info('attempting to connect to %s', _socketio_url)
@@ -142,65 +152,77 @@ class WebServer:
                 break
             except socketio.exceptions.ConnectionError:
                 attempt += 1
-                eventlet.sleep(2)
+                asyncio.sleep(2)
         else:
             raise socketio.exceptions.ConnectionError
-
-    def server_process(self) -> None:
-        eventlet.wsgi.server(
-            eventlet.listen((u.WEB_SERVER_HOST, u.WEB_SERVER_PORT)),
-            socketio.WSGIApp(self.web_server_socket, self.flask_app),
-            log_output=False,
-            log=u.log,
-            log_format=WSGI_LOG_FORMAT
-        )
+    """
 
     def start(self) -> None:
         u.log.info('Starting WebServer and connecting to parser')
-        self.connect_to_parser()
-        self.server_thread = eventlet.spawn(self.server_process)
+        # self.connect_to_parser()
+        web.run_app(self.app, host=u.WEB_SERVER_HOST, port=u.WEB_SERVER_PORT, backlog=1000)
 
     def stop(self) -> None:
-        self.parser_socketio_client.disconnect()
-        self.server_thread.kill()
+        # self.server_thread.kill()
+        # self.parser_socketio_client.disconnect()
+        pass
 
-    def load_new_data(self, current_timestamp: int, data_full: bytes, data_diffs: Dict[int, bytes]) -> None:
+    async def load_new_data(self, current_timestamp: int, data_full: bytes, data_diffs: Dict[int, bytes]) -> None:
         u.log.info('Loading new data.')
         self.current_timestamp = current_timestamp
         self.data_full = data_full
         self.data_diffs = {int(k): v for k, v in data_diffs.items()}
-        for client_id, client in self.clients.items():
-            if client.connected:
-                self.pool.spawn(self.send_necessary_data, client_id)
 
-    def send_full(self, sid: SID) -> None:
-        self.web_server_socket.emit(
+        connecteds, disconnecteds = 0, 0
+        with u.TimeLogger() as _t:
+            for client_id, client in self.clients.items():
+                if client.connected:
+                    connecteds += 1
+                    # self.pool.spawn(self.send_necessary_data, client_id)
+                    await self.send_necessary_data(client_id)
+                else:
+                    disconnecteds += 1
+
+            u.log.info('\n connected clients = %d\ndisconnected clients = %d', connecteds, disconnecteds)
+            _t.tlog('LOAD NEW DATA for loop')
+
+            # self.pool.waitall()
+            # _t.tlog('LOAD NEW DATA waitall')
+
+    async def send_full(self, sid: SID) -> None:
+        _t = time.time()
+        await self.web_server_socket.emit(
             'data_full',
             {
                 "timestamp": self.current_timestamp,
                 "data_full": self.data_full
+                # "data_full": "placeholder"
             },
             namespace='/socket.io',
             room=sid)
+        u.log.info('send_full time = %f', time.time() - _t)
         u.log.debug('Sent full to %s', sid)
 
-    def send_update(self, sid: SID, last_successful_timestamp: int) -> None:
-        self.web_server_socket.emit(
+    async def send_update(self, sid: SID, last_successful_timestamp: int) -> None:
+        # _t = time.time()
+        await self.web_server_socket.emit(
             'data_update', {
                 "timestamp_to": self.current_timestamp,
                 "timestamp_from": last_successful_timestamp,
                 "data_update": self.data_diffs[last_successful_timestamp]
+                # "data_update": "placeholder"
             },
             namespace='/socket.io',
             room=sid)
+        # u.log.info('send_update time = %f', time.time() - _t)
         u.log.debug('Sent update to %s', sid)
 
-    def send_necessary_data(self, client_id: ClientID) -> None:
+    async def send_necessary_data(self, client_id: ClientID) -> None:
         u.log.debug('send_necessary_data for client_id %s', client_id)
 
         client = self.clients[client_id]
         timestamp = client.last_successful_timestamp
         if (not timestamp) or (timestamp not in self.data_diffs):
-            self.send_full(client.sid)
+            await self.send_full(client.sid)
         else:
-            self.send_update(client.sid, timestamp)
+            await self.send_update(client.sid, timestamp)
