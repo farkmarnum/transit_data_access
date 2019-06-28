@@ -24,7 +24,6 @@ var port = '9000';
 var messageCount = 0;
 
 var _t;
-var ready = false;
 
 class Client {
   constructor (id_) {
@@ -35,6 +34,7 @@ class Client {
 
     var upcomingMessageBinaryLength = 0;
     var upcomingMessageTimestamp = 0;
+    var lastSuccessfulTimestamp = 0;
 
     socket.onopen = () => {
       console.log('connected!');
@@ -43,28 +43,37 @@ class Client {
           "type": "set_client_id",
           "client_id": "${uniqueId}"
         }`);
-      sleep(10).then(() => {
-        socket.emit(`{"type": "request_full", "client_id": "${uniqueId}"}`);
-      });
+      socket.send(`
+        {
+          "type": "request_full",
+          "client_id": "${uniqueId}"}
+        `);
     };
 
     socket.onmessage = msg => {
-      if (ready) {
-        if (messageCount === 0) {
-          _t = Date.now();
+      var data = msg.data;
+      if (typeof data === 'string') {
+        console.log(uniqueId, 'string message received');
+        var parsed = JSON.parse(data);
+        console.log(parsed);
+        if (parsed.type === 'data_full') {
+          upcomingMessageTimestamp = parsed.timestamp;
+          upcomingMessageBinaryLength = parsed.data_size;
         }
-        messageCount++;
-        if (messageCount >= numOfClients) {
-          console.log((Date.now() - _t) / 1000);
-          messageCount = 0;
-          _t = Date.now();
-        }
-        // console.log(uniqueId, 'message received');
-        if (msg instanceof String) {
-          var parsed = JSON.parse(msg);
-          console.log(parsed);
-        } else if (msg instanceof Buffer) {
-          console.log('binary message received with size: ', formatBytes(msg.byteLength));
+      } else if (data instanceof Buffer) {
+        var dataSize = data.byteLength;
+        if (dataSize === upcomingMessageBinaryLength) {
+          console.log('success!');
+          lastSuccessfulTimestamp = upcomingMessageTimestamp;
+          /*
+          socket.send(`
+          {
+            "type": "data_received",
+            "last_successful_timestamp": "${lastSuccessfulTimestamp}"
+          }`);
+          */
+        } else {
+          console.log('binary message received with size: ', dataSize, ' but upcomingMessageBinaryLength is ', upcomingMessageBinaryLength);
         }
       }
     };
@@ -85,5 +94,3 @@ async function createClient (id_) {
 for (i = 0; i < numOfClients; i++) {
   createClient(ids[i]);
 };
-
-ready = true;

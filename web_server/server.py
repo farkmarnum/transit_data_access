@@ -1,4 +1,4 @@
-# import time
+import time
 from dataclasses import dataclass
 from typing import Dict, NewType
 import asyncio
@@ -42,9 +42,9 @@ async def websocket_server_handler(websocket, path):
                 # u.log.info('data_received by %s', client_id)
 
             elif msg_dict['type'] == 'request_full':
-                await websocket.send('{"type": "data_full"}')
                 clients[client_id].last_successful_timestamp = 0
-                # u.log.info('request_full from %s', client_id)
+                await send_to_client(client_id)
+                u.log.info('request_full from %s', client_id)
 
         elif isinstance(msg, bytes):
             u.log.info('it\'s bytes!')
@@ -65,14 +65,19 @@ async def send_to_client(client_id):
         return
     await client.socket.send(ujson.dumps({
         'type': 'data_full',
-        'data_size': 1234
+        'timestamp': 12345000,
+        'data_size': 20
     }))
+    await client.socket.send(
+        bytes(20)
+    )
     # u.log.info('sent to %s', client_id)
 
 async def parser_client():
     u.log.info('starting parser_client')
     while True:
         await asyncio.sleep(10)
+        _t = time.time()
         u.log.info('sending out the messages!')
         total_sent = 0
         for client_id, client in clients.items():
@@ -80,6 +85,7 @@ async def parser_client():
                 total_sent += 1
                 asyncio.ensure_future(send_to_client(client_id))
 
+        u.log.info('took %f', time.time() - _t)
         u.log.info('sent %d messages', total_sent)
 
 
