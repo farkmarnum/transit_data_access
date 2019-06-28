@@ -1,4 +1,4 @@
-import asyncio
+# import asyncio
 import server
 
-asyncio.run(server.main())
+server.main()

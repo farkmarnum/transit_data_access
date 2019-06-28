@@ -27,7 +27,7 @@ def start() -> None:
     """ Starts server, then starts scheduler for parsing. Stops server after interupt.
     """
     db_server = server.DatabaseServer()
-    db_server.start()
+    eventlet.spawn(db_server.run)
 
     static_parse()
     realtime_manager = realtime.RealtimeManager(db_server)
