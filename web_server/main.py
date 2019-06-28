@@ -1,5 +1,4 @@
-from server import WebServer  # type: ignore
+import asyncio
+import server
 
-if __name__ == "__main__":
-    web_server = WebServer()
-    web_server.start()
+asyncio.run(server.main())

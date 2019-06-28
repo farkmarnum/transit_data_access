@@ -1,13 +1,15 @@
 ARG PYTHON_VERSION=3.7
 
-FROM python:${PYTHON_VERSION}-slim
+FROM python:${PYTHON_VERSION}-alpine
 
 COPY requirements.txt ./requirements.txt
 
-RUN pip install --upgrade pip && \
+RUN apk add --no-cache build-base && \
+	pip install --upgrade pip && \
 	pip install --upgrade setuptools && \
 	pip install -r ./requirements.txt && \
-	rm -rf /root/.cache/pip/*
+	rm -rf /root/.cache/pip/* && \
+  	rm -rf /var/cache/apk/*
 
 COPY . /app
 WORKDIR /app

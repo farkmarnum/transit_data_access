@@ -21,7 +21,7 @@ function formatBytes (bytes, decimals) {
 var uniqueId = crypto.randomBytes(64).toString('base64');
 console.log(`generated unique id: ${uniqueId}`);
 
-var domain = '192.168.99.100';
+// var domain = '192.168.99.100';
 var port = '9000';
 var socket = io(`http://${domain}:${port}/socket.io?unique_id=${uniqueId}`, {
   autoConnect: false
