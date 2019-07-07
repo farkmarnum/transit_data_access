@@ -1,48 +1,78 @@
-import logging
+import time
 import os
+import logging
+import logging.config
+import asyncio
+import aioredis  # type: ignore
+
+
 
 PACKAGE_NAME = 'transit_data_access'
-DATA_PATH = f'/data/{PACKAGE_NAME}/web_server'
+DATA_PATH = f'/data/'
 
-LOG_PATH = f'/var/log/{PACKAGE_NAME}/web_server'
-LOG_LEVEL = logging.INFO
+LOG_LEVEL: str = os.environ.get('LOG_LEVEL', 'INFO')
 
-DB_IP = '127.0.0.1'
-DB_PORT = 45654
+PARSER_SOCKETIO_HOST: str = os.environ.get('PARSER_SOCKETIO_HOST', 'parser')
+PARSER_SOCKETIO_PORT: int = int(os.environ.get('PARSER_SOCKETIO_PORT', 45654))
+SOCKETIO_CONECTION_MAX_ATTEMPTS = 5
 
-WEB_IP = '127.0.0.1'
-WEB_SERVER_FIRST_PORT = 9000
-# NUMBER_OF_WEB_SERVERS = 5
+REDIS_HOST: str = os.environ.get('REDIS_HOST', 'redis_server')
+REDIS_PORT: int = int(os.environ.get('REDIS_PORT', 6379))
 
-def log_setup(loggers: list):
-    """ Creates paths and files for loggers, given a list of logger objects
+# WEB_SERVER_HOST = '127.0.0.1'
+WEB_SERVER_HOST = '0.0.0.0'
+WEB_SERVER_PORT = 9000
+
+logging.config.dictConfig({
+    'version': 1,
+    'formatters': {
+        'verbose': {
+            'format': '%(levelname)s %(asctime)s.%(msecs)03d %(module)s %(message)s',
+            'datefmt': '%Y-%m-%d %H:%M:%S'
+        },
+        'simple': {
+            'format': '%(levelname)s %(message)s'
+        },
+    },
+    'handlers': {
+        'stream': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose'
+        },
+    },
+    'loggers': {
+        'web': {
+            'level': LOG_LEVEL,
+            'handlers': ['stream']
+        }
+    }
+})
+
+log = logging.getLogger('web')
+
+async def redis_connect():
+    return await aioredis.Redis(f'redis://{REDIS_HOST}:{REDIS_PORT}')
+
+redis_server: aioredis.Redis = asyncio.get_event_loop().run_until_complete(redis_connect())
+
+
+class TimeLogger:
+    """ Convenient little way to log how long something takes.
     """
-    # create log path if possible
-    if not os.path.exists(LOG_PATH):
-        print(f'Creating log path: {LOG_PATH}')
-        try:
-            os.makedirs(LOG_PATH)
-        except PermissionError:
-            print(f'ERROR: Don\'t have permission to create log path: {LOG_PATH}')
-            exit()
+    def __init__(self):
+        self.times = []
 
-    # set the format for log messages
-    log_format = '%(asctime)s.%(msecs)03d %(levelname)s %(message)s'
-    log_date_format = '%Y-%m-%d %H:%M:%S'
-    log_formatter = logging.Formatter(fmt=log_format, datefmt=log_date_format)
+    def __enter__(self):
+        self.tlog()
+        return self
 
-    # initialize the logger objects (passed in the 'loggers' param)
-    for logger_obj in loggers:
-        _log_file = f'{LOG_PATH}/{logger_obj.name}.log'
-        try:
-            _file_handler = logging.FileHandler(_log_file)
-            _file_handler.setFormatter(log_formatter)
-        except PermissionError:
-            print(f'ERROR: Don\'t have permission to create log file: {_log_file}')
-            exit()
-        logger_obj.setLevel(LOG_LEVEL)
-        logger_obj.addHandler(_file_handler)
+    def tlog(self, block_name=''):
+        self.times.append((time.time(), block_name))
 
-
-server_logger = logging.getLogger('server')
-log_setup([server_logger])
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        prev_time, _ = self.times.pop(0)
+        while len(self.times) > 0:
+            time_, block_name = self.times.pop(0)
+            block_time = time_ - prev_time
+            log.info('%s took %s seconds', block_name, block_time)
+            prev_time = time_

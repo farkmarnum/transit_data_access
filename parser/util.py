@@ -1,48 +1,43 @@
 """ This contains all utility functions and package variables.
 """
 import os
+import sys
 from typing import \
     NamedTuple, List, Set, Dict, DefaultDict, \
     Type, TypeVar, NewType, \
-    Any, Optional
+    Any, Optional, Union
 from collections import defaultdict
 import time
 import json
+import asyncio
 import logging
+import logging.config
 from dataclasses import dataclass, is_dataclass, field
 import pyhash  # type: ignore
 import hashlib
-from gtfs_conf import GTFS_CONF  # type: ignore
+
+loop = asyncio.get_event_loop()
+
+
+os.makedirs('/data/static/parsed', exist_ok=True)
+os.makedirs('/data/realtime/parsed', exist_ok=True)
 
 
 #####################################
-#             CONSTANTS             #
+#            CUSTOM TYPES           #
 #####################################
-PACKAGE_NAME = 'transit_data_access'
-DATA_PATH = f'/data/{PACKAGE_NAME}/db_server'
+Num = Union[int, float]
 
-REALTIME_RAW_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/realtime/raw/'
-REALTIME_PARSED_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/realtime/parsed/'
-STATIC_TMP_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/static/tmp/'
-STATIC_RAW_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/static/raw/'
-STATIC_PARSED_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/static/parsed/'
-STATIC_ZIP_PATH = f'{DATA_PATH}/{GTFS_CONF.name}/static/zip/'
+def to_num(_str: Any) -> Num:
+    try:
+        return int(_str)
+    except ValueError:
+        try:
+            return float(_str)
+        except ValueError as err:
+            print(f'{_str} cannot be converted to int or float', file=sys.stderr)
+            raise ValueError(err)
 
-LOG_PATH = f'/var/log/{PACKAGE_NAME}/db_server'
-LOG_LEVEL = logging.INFO
-
-IP = '127.0.0.1'
-PORT = 45654
-
-REALTIME_FREQ = 15
-REALTIME_TIMEOUT = 4
-MAX_ATTEMPTS = 3
-
-
-
-#####################################
-# TRANSIT TYPES / METHODS / CLASSES #
-#####################################
 ShortHash = NewType('ShortHash', int)
 
 StationHash  = NewType('StationHash', ShortHash)    # unique hash of station id  # noqa
@@ -56,9 +51,94 @@ TravelTime   = NewType('TravelTime', int)           # number of seconds         
 TransferTime = NewType('TransferTime', int)         # number of seconds          # noqa
 TimeDiff = NewType('TimeDiff', int)                 # number of seconds
 
+TripStatus = NewType('TripStatus', int)
+STOPPED, DELAYED, ON_TIME = list(map(TripStatus, range(3)))
+
+
+#####################################
+#          CONSTANTS / ENV          #
+#####################################
+LOG_LEVEL: str = os.environ.get('LOG_LEVEL', 'INFO')
+
+PARSER_SOCKETIO_HOST: str = os.environ.get('PARSER_SOCKETIO_HOST', '0.0.0.0')
+PARSER_SOCKETIO_PORT: int = int(os.environ.get('PARSER_SOCKETIO_PORT', 45654))
+
+STATIC_PATH: str = f'/data/static'
+REALTIME_PATH: str = f'/data/realtime'
+
+REALTIME_FREQ: Num = to_num(os.environ.get('REALTIME_FREQ', 15))
+REALTIME_TIMEOUT: Num = to_num(os.environ.get('REALTIME_TIMEOUT', 3.2))
+REALTIME_MAX_ATTEMPTS: int = int(os.environ.get('REALTIME_MAX_ATTEMPTS', 3))
+
+REALTIME_DATA_DICT_CAP: int = int(os.environ.get('REALTIME_DATA_DICT_CAP', 20))
+
+MTA_API_KEY: str
+MTA_REALTIME_BASE_URL: str = os.environ.get('MTA_REALTIME_BASE_URL', 'http://datamine.mta.info/mta_esi.php')
+MTA_STATIC_URL: str = os.environ.get('MTA_STATIC_URL', 'http://web.mta.info/developers/data/nyct/subway/google_transit.zip')
+
+REDIS_HOST: str
+REDIS_PORT: int = 6379
+
+BRANCH_SERIALIZED_SENTINEL_CHAR = chr(30)
+
+try:
+    REDIS_HOST = os.environ['REDIS_HOST']
+    MTA_API_KEY = os.environ['MTA_API_KEY']
+except KeyError:
+    print('ERROR: MTA_API_KEY not set as env variable', file=sys.stderr)
+    exit()
+
+try:
+    assert REALTIME_FREQ > REALTIME_TIMEOUT * REALTIME_MAX_ATTEMPTS
+except AssertionError:
+    print('WARNING: REALTIME_TIMEOUT * REALTIME_MAX_ATTEMPTS > REALTIME_FREQ\nDefault values substituted.', file=sys.stderr)
+    REALTIME_FREQ, REALTIME_TIMEOUT, REALTIME_MAX_ATTEMPTS = 15, 3.2, 3
+
+
+#####################################
+#              LOGGING              #
+#####################################
+logging.config.dictConfig({
+    'version': 1,
+    'formatters': {
+        'verbose': {
+            'format': '%(levelname)s %(asctime)s.%(msecs)03d %(module)s %(message)s',
+            'datefmt': '%Y-%m-%d %H:%M:%S'
+        },
+        'simple': {
+            'format': '%(levelname)s %(message)s'
+        },
+    },
+    'handlers': {
+        'stream': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose'
+        },
+    },
+    'loggers': {
+        'parser': {
+            'level': LOG_LEVEL,
+            'handlers': ['stream']
+        }
+    }
+})
+
+log = logging.getLogger('parser')
+
+
+#####################################
+#         UTILITY METHODS           #
+#####################################
+def checksum(fname):
+    hash_md5 = hashlib.md5()
+    with open(fname, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_md5.update(chunk)
+    return hash_md5.hexdigest()
+
 hasher = pyhash.super_fast_hash()
 def short_hash(input_: Any, type_hint: Type[SpecifiedHash]) -> SpecifiedHash:
-    """ Returns a unique (TODO: collision handling!) hash of a station, route, or trip id
+    """ Returns a unique (TODO: collision handling!) int32 hash of a station, route, or trip id
     Examples:
         short_hash('101', StationHash) returns a short hash with type hint StationHash
         short_hash('1', RouteHash) returns a short hash with type hint RouteHash
@@ -69,15 +149,14 @@ def short_hash(input_: Any, type_hint: Type[SpecifiedHash]) -> SpecifiedHash:
     return typed_hash
 
 
-
-TripStatus = NewType('TripStatus', int)
-STOPPED, DELAYED, ON_TIME = list(map(TripStatus, range(3)))
-
+#####################################
+#      TRANSIT DATA STRUCTURES      #
+#####################################
 class Branch(NamedTuple):
     route: RouteHash
     final_station: StationHash
     def serialize(self) -> str:
-        return f'{self.route},{self.final_station}'
+        return f'{self.route}{BRANCH_SERIALIZED_SENTINEL_CHAR}{self.final_station}'
 
 class StationArrival(NamedTuple):
     arrival_time: ArrivalTime
@@ -131,7 +210,6 @@ class RealtimeData(StaticData):
     trips: Dict[TripHash, Trip]
 
 
-
 @dataclass
 class TripDiff:
     deleted: List[TripHash] = field(default_factory=list)
@@ -164,7 +242,12 @@ class UpdateFailed(Exception):
     pass
 
 
+#####################################
+#            MISC CLASSES           #
+#####################################
 class StaticJSONEncoder(json.JSONEncoder):
+    """ This is for encoding the parsed static data to JSON
+    """
     def default(self, obj):
         if isinstance(obj, set):
             return list(obj)
@@ -176,27 +259,9 @@ class StaticJSONEncoder(json.JSONEncoder):
             return custom_obj
         return json.JSONEncoder.default(self, obj)
 
-
-class RealtimeJSONEncoder(json.JSONEncoder):
-    def fix_branch_keys(self, dict_: dict) -> dict:
-        data_dict = {}
-        for k, v in dict_.items():
-            if isinstance(v, dict):
-                v = self.fix_branch_keys(v)
-            if isinstance(k, Branch):
-                k = k.serialize()
-            data_dict[k] = v
-        return data_dict
-
-    def default(self, obj):
-        if isinstance(obj, set):
-            return list(obj)
-        if is_dataclass(obj):
-            return self.fix_branch_keys(obj.__dict__)
-        return json.JSONEncoder.default(self, obj)
-
-
 class StaticJSONDecoder(json.JSONDecoder):
+    """ This is for decoding (in realtime.py) the JSON-ized static parsed data
+    """
     def __init__(self, *args, **kwargs):
         json.JSONDecoder.__init__(self, object_hook=self.object_hook, *args, **kwargs)
 
@@ -222,65 +287,84 @@ class StaticJSONDecoder(json.JSONDecoder):
             '<class \'util.RouteInfo\'>': RouteInfo,
             '<class \'util.Station\'>': Station,
             '<class \'util.Trip\'>': Trip,
-            '<class \'util.StaticData\'>': StaticData,
-        }
+            '<class \'util.StaticData\'>': StaticData}
         try:
             _type = _type_dict[obj['_type']]
             data_dict = self.keys_to_ints(obj['value'])
-            # if _type == Station:
-            #    del(data_dict['arrivals'])
             return _type(**data_dict)
         except IndexError:
             return obj
 
 
-#####################################
-#           LOGGING SETUP           #
-#####################################
-def log_setup(loggers: list):
-    """ Creates paths and files for loggers, given a list of logger objects
+class RealtimeJSONEncoder(json.JSONEncoder):
+    """ This is for encoding the parsed realtime data to JSON
     """
-    # create log path if possible
-    if not os.path.exists(LOG_PATH):
-        print(f'Creating log path: {LOG_PATH}')
+    """
+    def fix_branches(self, dict_: dict) -> dict:
+        data_dict = {}
+        for k, v in dict_.items():
+            if isinstance(v, dict):
+                v = self.fix_branch_keys(v)
+            elif isinstance(v, Branch):
+                v = v.serialize()
+            data_dict[k] = v
+        return data_dict
+    """
+
+    def default(self, obj):
+        if isinstance(obj, set):
+            return list(obj)
+        if is_dataclass(obj):
+            custom_obj = {
+                "_type": str(type(obj)),
+                "value": obj.__dict__
+            }
+            return custom_obj
+        return json.JSONEncoder.default(self, obj)
+
+class RealtimeJSONDecoder(json.JSONDecoder):
+    """ This is for decoding (in realtime.py, with data from redis) the JSON-ized parsed realtime data
+    """
+    def __init__(self, *args, **kwargs):
+        json.JSONDecoder.__init__(self, object_hook=self.object_hook, *args, **kwargs)
+
+    def fix_keys(self, dict_: dict) -> dict:
+        data_dict = {}
+        for k, v in dict_.items():
+            if BRANCH_SERIALIZED_SENTINEL_CHAR in k:
+                k = Branch(*k.split(BRANCH_SERIALIZED_SENTINEL_CHAR))
+            if isinstance(v, dict):
+                data_dict[k] = self.fix_keys(v)
+            else:
+                try:
+                    data_dict[int(k)] = v
+                except ValueError:
+                    data_dict[k] = v
+        return data_dict
+
+    def object_hook(self, obj):
+        if '_type' not in obj:
+            return obj
+
+        _type_dict = {
+            '<class \'util.RealtimeData\'>': RealtimeData,
+            '<class \'util.RouteInfo\'>': RouteInfo,
+            '<class \'util.StationArrival\'>': StationArrival,
+            '<class \'util.RouteInfo\'>': RouteInfo,
+            '<class \'util.Station\'>': Station,
+            '<class \'util.Trip\'>': Trip,
+            '<class \'util.StaticData\'>': StaticData}
+
         try:
-            os.makedirs(LOG_PATH)
-        except PermissionError:
-            print(f'ERROR: Don\'t have permission to create log path: {LOG_PATH}')
-            exit()
-
-    # set the format for log messages
-    log_format = '%(asctime)s.%(msecs)03d %(levelname)s %(message)s'
-    log_date_format = '%Y-%m-%d %H:%M:%S'
-    log_formatter = logging.Formatter(fmt=log_format, datefmt=log_date_format)
-
-    # initialize the logger objects (passed in the 'loggers' param)
-    for logger_obj in loggers:
-        _log_file = f'{LOG_PATH}/{logger_obj.name}.log'
-        try:
-            _file_handler = logging.FileHandler(_log_file)
-            _file_handler.setFormatter(log_formatter)
-        except PermissionError:
-            print(f'ERROR: Don\'t have permission to create log file: {_log_file}')
-            exit()
-        logger_obj.setLevel(LOG_LEVEL)
-        logger_obj.addHandler(_file_handler)
-
-
-parser_logger = logging.getLogger('parser')
-server_logger = logging.getLogger('server')
-log_setup([parser_logger, server_logger])
+            _type = _type_dict[obj['_type']]
+            data_dict = self.fix_keys(obj['value'])
+            return _type(**data_dict)
+        except IndexError:
+            return obj
 
 
 class TimeLogger:
-    """ Convenient little way to log how long something takes. Usage:
-
-    with TimeLogger() as _tl:
-        # BLOCK 1
-        _tl.log_time()
-        # BLOCK 2
-        _tl.log_time()
-        # BLOCK 3
+    """ Convenient little way to log how long something takes.
     """
     def __init__(self):
         self.times = []
@@ -297,13 +381,38 @@ class TimeLogger:
         while len(self.times) > 0:
             time_, block_name = self.times.pop(0)
             block_time = time_ - prev_time
-            parser_logger.debug('%s took %s seconds', block_name, block_time)
+            log.debug('%s took %s seconds', block_name, block_time)
             prev_time = time_
 
 
-def checksum(fname):
-    hash_md5 = hashlib.md5()
-    with open(fname, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            hash_md5.update(chunk)
-    return hash_md5.hexdigest()
+
+#####################################
+#         GTFS CONFIGURATION        #
+#####################################
+class GTFSConf(NamedTuple):
+    name: str
+    static_url: str
+    realtime_urls: Dict[str, str]
+
+LIST_OF_FILES = [
+    'agency.txt',
+    'calendar_dates.txt',
+    'calendar.txt',
+    'route_stops_with_names.txt',
+    'routes.txt',
+    'shapes.txt',
+    'stop_times.txt',
+    'stops.txt',
+    'transfers.txt',
+    'trips.txt'
+]
+
+_base_url = MTA_REALTIME_BASE_URL
+_feed_ids = sorted(['1', '2', '11', '16', '21', '26', '31', '36', '51'], key=int)
+_url_dict = {feed_id: f'{_base_url}?key={MTA_API_KEY}&feed_id={feed_id}' for feed_id in _feed_ids}
+
+GTFS_CONF = GTFSConf(
+    name='MTA_subway',
+    static_url=MTA_STATIC_URL,
+    realtime_urls=_url_dict
+)

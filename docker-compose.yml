@@ -1,0 +1,37 @@
+version: '3'
+
+services:
+  redis_server:
+    build: ./redis
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
+    ports:
+      - "6379:6379"
+
+  parser:
+    build: ./parser
+    ports:
+      - "45654:45654"
+
+  web_server1:
+    build: ./web_server
+    ports:
+      - "9000:9000"
+  # web_server2:
+  #   build: ./web_server
+  # web_server3:
+  #   build: ./web_server
+  # web_server4:
+  #   build: ./web_server
+
+  # nginx:
+  #   image: nginx
+  #   ports:
+  #     - "80:80"
+  #   volumes:
+  #     - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+  #   depends_on:
+  #     - web_server1
+  #     - web_server2
+  #     - web_server3
+  #     - web_server4

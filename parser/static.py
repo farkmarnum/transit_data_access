@@ -1,7 +1,8 @@
 """ downloads static GTFS data, checks if it's new, parses it, and stores it
 """
+# import os
+from contextlib import suppress
 import time
-import os
 from collections import defaultdict
 import requests
 import shutil
@@ -9,89 +10,70 @@ import csv
 import zipfile
 import json
 import pandas as pd
+from redis import ResponseError
 import util as u  # type: ignore
-from gtfs_conf import GTFS_CONF, LIST_OF_FILES  # type: ignore
 
 
 class StaticHandler(object):
     """docstring for StaticHandler
     """
-
-    def has_static_data(self):
-        """Checks if static_data_path is populated with the csv files in LIST_OF_FILES
-        Returns a bool
-        """
-        all_files_are_loaded = True
-        for file_ in LIST_OF_FILES:
-            all_files_are_loaded *= os.path.isfile(u.STATIC_RAW_PATH + file_)
-        return all_files_are_loaded
+    def __init__(self, redis_server) -> None:
+        self.redis_server = redis_server
+        self.current_checksum = None
+        self.latest_checksum = None
+        self.url: str = u.GTFS_CONF.static_url
+        self.data: u.StaticData = u.StaticData(
+            name=u.GTFS_CONF.name,
+            static_timestamp=0,
+            routes={},
+            stations={},
+            routehash_lookup={},
+            stationhash_lookup={},
+            transfers=defaultdict(dict)
+        )
+        self.data.static_timestamp = 0
+        self.data_json_str: str = ''
 
     def get_feed(self) -> None:
         """Downloads new static GTFS data, checks if different than existing data,
         unzips, and then generates additional csv files:
 
-            if successful, it then deletes {data_path}/static/GTFS/ and moves the new data there
         merge_trips_and_stops combines trips, stops, and stop_times to make route_stops_with_names
         load_time_between_stops calculates time b/w each pair of adjacent stops using stop_times
         """
-        has_static_data = self.has_static_data()
-        tmp_path = u.STATIC_TMP_PATH
-        raw_path = u.STATIC_RAW_PATH
-        zip_filepath = u.STATIC_ZIP_PATH + 'static_data.zip'
-        old_zip_filepath = u.STATIC_ZIP_PATH + 'static_data_OLD.zip'
-
+        u.log.info('parser: Downloading GTFS static data from %s', self.url)
         try:
-            os.makedirs(tmp_path, exist_ok=True)
-            os.makedirs(raw_path, exist_ok=True)
-            os.makedirs(u.STATIC_ZIP_PATH, exist_ok=True)
-        except PermissionError:
-            u.parser_logger.error('Don\'t have permission to write to %s or %s', tmp_path, raw_path)
-            raise u.UpdateFailed('PermissionError')
-
-        u.parser_logger.info('Downloading GTFS static data from %s to %s', self.url, zip_filepath)
-        try:
-            new_data = requests.get(self.url, allow_redirects=True, timeout=5)
+            new_data = requests.get(self.url, allow_redirects=True, timeout=10)
         except requests.exceptions.RequestException as err:
-            u.parser_logger.error('%s: Failed to connect to %s\n', err, self.url)
-            raise u.UpdateFailed('Connection failure, couldn\'t get feed')
+            raise u.UpdateFailed(f'{err}, failed to connect to {self.url}')
 
-        if has_static_data:
-            try:
-                shutil.move(zip_filepath, old_zip_filepath)
-            except FileNotFoundError:
-                has_static_data = False
+        _zipfile = f'{u.STATIC_PATH}/static_data.zip'
+        with open(_zipfile, 'wb') as zip_out_stream:
+            zip_out_stream.write(new_data.content)
 
-        with open(zip_filepath, 'wb') as zip_outfile:
-            zip_outfile.write(new_data.content)
+        self.current_checksum = u.checksum(_zipfile)
 
-        if has_static_data:
-            no_new_data = (u.checksum(zip_filepath) == u.checksum(old_zip_filepath))
-            os.remove(old_zip_filepath)
-            u.parser_logger.info('removing %s', old_zip_filepath)
-            if no_new_data:
-                raise u.UpdateFailed('Static data checksum matches previously parsed static data. No new data!')
+        with suppress(ResponseError):
+            if self.redis_server.exists('static_json'):
+                if self.current_checksum == self.latest_checksum:
+                    raise u.UpdateFailed(
+                        'Static data checksum matches previously parsed static data. No new data!')
 
-        u.parser_logger.info('Extracting zip to %s', tmp_path)
+        _rawpath = f'{u.STATIC_PATH}/raw'
+        shutil.rmtree(_rawpath, ignore_errors=True)
+        u.log.info('parser: Extracting static GTFS zip')
         try:
-            with zipfile.ZipFile(zip_filepath, "r") as zip_ref:
-                zip_ref.extractall(tmp_path)
+            with zipfile.ZipFile(_zipfile, "r") as zip_ref:
+                zip_ref.extractall(_rawpath)
         except zipfile.BadZipFile as err:
                 raise u.UpdateFailed(err)
 
-        u.parser_logger.info('Deleting %s to make room for new static data', raw_path)
-        shutil.rmtree(raw_path)
-
-        u.parser_logger.info('Moving new data from %s to %s', tmp_path, raw_path)
-        os.rename(tmp_path, raw_path)
-
         self.merge_trips_and_stops()
-
 
     def locate_csv(self, name: str) -> str:
         """Generates the path/filname for the csv given the name & gtfs_settings
         """
-        return u.STATIC_RAW_PATH + name + '.txt'
-
+        return f'{u.STATIC_PATH}/raw/{name}.txt'
 
     def merge_trips_and_stops(self):
         """Combines trips.csv stops.csv and stop_times.csv into locate_csv('route_stops_with_names')
@@ -108,7 +90,7 @@ class StaticHandler(object):
             'route_id',
             'stop_sequence'
         ]
-        u.parser_logger.info("Cross referencing route, stop, and trip information...")
+        u.log.info("Cross referencing route, stop, and trip information...")
 
         trips_csv = self.locate_csv('trips')
         stops_csv = self.locate_csv('stops')
@@ -120,7 +102,7 @@ class StaticHandler(object):
 
         stop_times['stop_sequence'] = stop_times['stop_sequence'].astype(int)
 
-        u.parser_logger.info("Loaded trips, stops, and stop_times into DataFrames")
+        u.log.info("Loaded trips, stops, and stop_times into DataFrames")
 
         composite = pd.merge(trips, stop_times, how='inner', on='trip_id')
         composite = pd.merge(composite, stops, how='inner', on='stop_id')
@@ -129,8 +111,7 @@ class StaticHandler(object):
 
         rswn_csv = self.locate_csv('route_stops_with_names')
         composite.to_csv(rswn_csv, index=False)
-        u.parser_logger.info('%s created', rswn_csv)
-
+        u.log.info('parser: %s created', rswn_csv)
 
     def load_station_info(self) -> None:
         """ Loads info for each station
@@ -151,7 +132,6 @@ class StaticHandler(object):
                 else:
                     station_hash = u.short_hash(parent_station, u.StationHash)
                     self.data.stationhash_lookup[stop_id] = station_hash
-
 
     def load_route_info(self) -> None:
         """ Loads info for each route
@@ -177,7 +157,6 @@ class StaticHandler(object):
                 station_hash = self.data.stationhash_lookup[row['stop_id']]
                 self.data.routes[route_hash].stations.add(station_hash)
 
-
     def load_transfers(self):
         with open(self.locate_csv('transfers'), mode='r') as transfers_file:
             transfers_csv_reader = csv.DictReader(transfers_file)
@@ -188,8 +167,7 @@ class StaticHandler(object):
                     _to   = self.data.stationhash_lookup[row['to_stop_id']]  # noqa
                     self.data.transfers[_from][_to] = _min_transfer_time
                 else:
-                    print('transfer_type != 2  ——  what do we do?!!')
-
+                    u.log.error('parser: transfer_type != 2  ——  what do we do?!!')
 
     def parse(self) -> None:
         self.load_station_info()
@@ -197,58 +175,29 @@ class StaticHandler(object):
         self.load_transfers()
         self.data.static_timestamp = int(time.time())
 
-
     def serialize(self, attempt=0) -> None:
-        """ Stores self.data in u.STATIC_PARSED_PATH+'static.json'
+        """ Stores self.data in JSON format
         """
-        json_path = u.STATIC_PARSED_PATH
+        _jsonfile = f'{u.STATIC_PATH}/parsed/static.json'
+        self.data_json_str = json.dumps(self.data, cls=u.StaticJSONEncoder)
 
-        try:
-            with open(json_path + 'static.json', 'w') as out_file:
-                json.dump(self.data, out_file, cls=u.StaticJSONEncoder)
-            u.parser_logger.info('Wrote parsed static data to %sstatic.json', json_path)
+        with open(_jsonfile, 'w') as out_file:
+            out_file.write(self.data_json_str)
+        u.log.info('parser: Wrote parsed static data JSON to %s', _jsonfile)
 
-        except OSError as err:
-            if attempt != 0:
-                u.parser_logger.error('Unable to write to %sstatic.json', json_path)
-                raise u.UpdateFailed(err)
-
-            u.parser_logger.info('%sstatic.json does not exist, attempting to create it', json_path)
-
-            try:
-                os.makedirs(json_path)
-            except PermissionError as err:
-                u.parser_logger.error('Don\'t have permission to create %s', json_path)
-                raise u.UpdateFailed(err)
-            except FileExistsError as err:
-                u.parser_logger.error('The file %sstatic.json exists, no permission to overwrite', json_path)
-                raise u.UpdateFailed(err)
-
-            self.serialize(attempt=attempt + 1)
 
     def update(self):
-        u.parser_logger.info('~~~~~~~~~~ Running STATIC.py ~~~~~~~~~~')
+        u.log.info('parser: ~~~~~~~~~~ Running STATIC.py ~~~~~~~~~~')
         try:
+            try:
+                self.latest_checksum = self.redis_server.get('static:latest_checksum').decode('utf-8')
+            except AttributeError:
+                self.latest_checksum = None
             self.get_feed()
             self.parse()
             self.serialize()
+            # TODO!!! improve with piping:
+            self.redis_server.set('static:latest_checksum', self.current_checksum)
+            self.redis_server.set('static:json_full', self.data_json_str)
         except u.UpdateFailed as err:
-            u.parser_logger.error(err)
-
-    def __init__(self) -> None:
-        self.url = GTFS_CONF.static_url
-        self.data: u.StaticData = u.StaticData(
-            name=GTFS_CONF.name,
-            static_timestamp=0,
-            routes={},
-            stations={},
-            routehash_lookup={},
-            stationhash_lookup={},
-            transfers=defaultdict(dict)
-        )
-        self.data.static_timestamp = 0
-
-
-if __name__ == '__main__':
-    sh = StaticHandler()
-    sh.update()
+            u.log.error(err)
