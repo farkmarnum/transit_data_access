@@ -1,47 +1,48 @@
 """ This script manages the database server
 """
-import eventlet   # noqa
-import schedule   # type: ignore
-import util as u  # type: ignore
-import server     # type: ignore
+import time
+from typing import Dict
+import redis
 import static     # type: ignore
 import realtime   # type: ignore
+import util as u  # type: ignore
 
-def static_parse() -> None:
-    """ Fetches static feed, handles errors, and parses if new (which stores it in a file).
-    """
-    static_handler = static.StaticHandler()
-    static_handler.update()
 
-def scheduler(db_server) -> None:
-    """ Uses schedule package to run:
-        - the static parse every day at 3:30am
-    """
-    u.log.info('parser: Starting scheduler')
-    schedule.every().day.at("03:30").do(eventlet.spawn, static_parse)
+class RedisHandler:
+    def __init__(self) -> None:
+        self.server: redis.Redis = redis.Redis(host=u.REDIS_HOST, port=u.REDIS_PORT, db=0)
+
+    def realtime_push(self, current_timestamp: int, data_full: bytes, data_diffs: Dict[int, bytes]) -> None:
+        u.log.debug('Pushing the realime data to redis_server')
+
+        self.server.set('realtime:current_timestamp', current_timestamp)
+        self.server.set('realtime:data_full', data_full)
+        if data_diffs:
+            self.server.hmset('realtime:data_diffs', data_diffs)
+
+        self.server.publish('realtime_updates', 'new_data')
+
+def main_loop() -> None:
+    redis_handler = RedisHandler()
+    redis_server = redis_handler.server
+
+    realtime_manager = realtime.RealtimeManager(redis_handler)
+    time_for_next_static_parse = time_for_next_realtime_parse = time.time()
+
     while True:
-        schedule.run_pending()
-        eventlet.sleep(5)
+        if time.time() > time_for_next_static_parse:
+            u.log.debug('initiating static parse')
+            static_handler = static.StaticHandler(redis_server)
+            static_handler.update()
+            del static_handler
+            time_for_next_static_parse += (60 * 60 * 24)
 
-def start() -> None:
-    """ Starts server, then starts scheduler for parsing. Stops server after interupt.
-    """
-    db_server = server.DatabaseServer()
-    eventlet.spawn(db_server.run)
+        if time.time() > time_for_next_realtime_parse:
+            u.log.debug('initiating realtime parse')
+            realtime_manager.update()
+            time_for_next_realtime_parse += 15
 
-    static_parse()
-    realtime_manager = realtime.RealtimeManager(db_server)
-    realtime_manager.start()
-
-    eventlet.spawn(scheduler, db_server)
-    while True:
-        try:
-            eventlet.sleep(1)
-        except KeyboardInterrupt:
-            print('\nKeyboardInterrupt, exiting')
-            break
-    db_server.stop()
-    realtime_manager.stop()
+        time.sleep(1)
 
 if __name__ == "__main__":
-    start()
+    main_loop()

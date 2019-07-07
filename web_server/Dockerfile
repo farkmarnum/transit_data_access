@@ -19,4 +19,4 @@ ENV REDIS_HOST='redis_server' \
 	PYTHONUNBUFFERED=1 \
 	LOG_LEVEL='INFO'
 
-CMD python ./main.py
+CMD python ./server.py

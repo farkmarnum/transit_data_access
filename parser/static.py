@@ -1,7 +1,8 @@
 """ downloads static GTFS data, checks if it's new, parses it, and stores it
 """
+# import os
+from contextlib import suppress
 import time
-import os
 from collections import defaultdict
 import requests
 import shutil
@@ -9,23 +10,29 @@ import csv
 import zipfile
 import json
 import pandas as pd
-import redis
+from redis import ResponseError
 import util as u  # type: ignore
 
 
 class StaticHandler(object):
     """docstring for StaticHandler
     """
-
-    def has_static_feed(self):
-        try:
-            _in_redis = u.redis_server.exists('static_json')
-        except redis.ResponseError:
-            _in_redis = False
-
-        _in_json = os.path.exists(f'{u.STATIC_PATH}/parsed/static.json')
-        return _in_json or _in_redis
-
+    def __init__(self, redis_server) -> None:
+        self.redis_server = redis_server
+        self.current_checksum = None
+        self.latest_checksum = None
+        self.url: str = u.GTFS_CONF.static_url
+        self.data: u.StaticData = u.StaticData(
+            name=u.GTFS_CONF.name,
+            static_timestamp=0,
+            routes={},
+            stations={},
+            routehash_lookup={},
+            stationhash_lookup={},
+            transfers=defaultdict(dict)
+        )
+        self.data.static_timestamp = 0
+        self.data_json_str: str = ''
 
     def get_feed(self) -> None:
         """Downloads new static GTFS data, checks if different than existing data,
@@ -46,9 +53,11 @@ class StaticHandler(object):
 
         self.current_checksum = u.checksum(_zipfile)
 
-        if self.has_static_feed():
-            if self.current_checksum == self.latest_checksum:
-                raise u.UpdateFailed('Static data checksum matches previously parsed static data. No new data!')
+        with suppress(ResponseError):
+            if self.redis_server.exists('static_json'):
+                if self.current_checksum == self.latest_checksum:
+                    raise u.UpdateFailed(
+                        'Static data checksum matches previously parsed static data. No new data!')
 
         _rawpath = f'{u.STATIC_PATH}/raw'
         shutil.rmtree(_rawpath, ignore_errors=True)
@@ -61,12 +70,10 @@ class StaticHandler(object):
 
         self.merge_trips_and_stops()
 
-
     def locate_csv(self, name: str) -> str:
         """Generates the path/filname for the csv given the name & gtfs_settings
         """
         return f'{u.STATIC_PATH}/raw/{name}.txt'
-
 
     def merge_trips_and_stops(self):
         """Combines trips.csv stops.csv and stop_times.csv into locate_csv('route_stops_with_names')
@@ -106,7 +113,6 @@ class StaticHandler(object):
         composite.to_csv(rswn_csv, index=False)
         u.log.info('parser: %s created', rswn_csv)
 
-
     def load_station_info(self) -> None:
         """ Loads info for each station
         """
@@ -126,7 +132,6 @@ class StaticHandler(object):
                 else:
                     station_hash = u.short_hash(parent_station, u.StationHash)
                     self.data.stationhash_lookup[stop_id] = station_hash
-
 
     def load_route_info(self) -> None:
         """ Loads info for each route
@@ -152,7 +157,6 @@ class StaticHandler(object):
                 station_hash = self.data.stationhash_lookup[row['stop_id']]
                 self.data.routes[route_hash].stations.add(station_hash)
 
-
     def load_transfers(self):
         with open(self.locate_csv('transfers'), mode='r') as transfers_file:
             transfers_csv_reader = csv.DictReader(transfers_file)
@@ -165,22 +169,20 @@ class StaticHandler(object):
                 else:
                     u.log.error('parser: transfer_type != 2  ——  what do we do?!!')
 
-
     def parse(self) -> None:
         self.load_station_info()
         self.load_route_info()
         self.load_transfers()
         self.data.static_timestamp = int(time.time())
 
-
     def serialize(self, attempt=0) -> None:
         """ Stores self.data in JSON format
         """
         _jsonfile = f'{u.STATIC_PATH}/parsed/static.json'
+        self.data_json_str = json.dumps(self.data, cls=u.StaticJSONEncoder)
 
-        # try:
         with open(_jsonfile, 'w') as out_file:
-            json.dump(self.data, out_file, cls=u.StaticJSONEncoder)
+            out_file.write(self.data_json_str)
         u.log.info('parser: Wrote parsed static data JSON to %s', _jsonfile)
 
 
@@ -188,32 +190,14 @@ class StaticHandler(object):
         u.log.info('parser: ~~~~~~~~~~ Running STATIC.py ~~~~~~~~~~')
         try:
             try:
-                self.latest_checksum = u.redis_server.get('latest_static_GTFS_checksum').decode('utf-8')
+                self.latest_checksum = self.redis_server.get('static:latest_checksum').decode('utf-8')
             except AttributeError:
                 self.latest_checksum = None
             self.get_feed()
             self.parse()
             self.serialize()
-            u.redis_server.set('latest_static_GTFS_checksum', self.current_checksum)
+            # TODO!!! improve with piping:
+            self.redis_server.set('static:latest_checksum', self.current_checksum)
+            self.redis_server.set('static:json_full', self.data_json_str)
         except u.UpdateFailed as err:
             u.log.error(err)
-
-    def __init__(self) -> None:
-        self.current_checksum = None
-        self.latest_checksum = None
-        self.url: str = u.GTFS_CONF.static_url
-        self.data: u.StaticData = u.StaticData(
-            name=u.GTFS_CONF.name,
-            static_timestamp=0,
-            routes={},
-            stations={},
-            routehash_lookup={},
-            stationhash_lookup={},
-            transfers=defaultdict(dict)
-        )
-        self.data.static_timestamp = 0
-
-
-if __name__ == '__main__':
-    sh = StaticHandler()
-    sh.update()

@@ -1,6 +1,5 @@
 redis==3.2.1
 pandas==0.24.2
-schedule==0.6.0
 pyhash==0.9.3
 dataclasses==0.6
 typing==3.7.4
@@ -10,10 +9,8 @@ protobuf==3.8.0
 certifi==2019.6.16
 chardet==3.0.4
 idna==2.8
-python-engineio==3.8.1
-python-socketio==4.1.0
 requests==2.22.0
-eventlet==0.25.0
 six==1.12.0
 urllib3==1.25.3
-websocket-client==0.56.0
+websockets==7.0
+aiohttp==3.5.4

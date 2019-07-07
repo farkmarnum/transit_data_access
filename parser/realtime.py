@@ -2,21 +2,20 @@
 """
 import sys
 import time
-from typing import List, Dict, Tuple, NamedTuple, NewType, Union, Any, Optional  # noqa
-import warnings
+from typing import Dict, NamedTuple, NewType, Union
 import json
-import eventlet
 import bz2
-from eventlet.green.urllib.error import URLError
-from eventlet.green.urllib import request
-# from google.transit import gtfs_realtime_pb2
+import redis
+import asyncio
+import aiohttp  # type: ignore
+import concurrent.futures
 from google.transit.gtfs_realtime_pb2 import FeedMessage    # type: ignore
-import transit_data_access_pb2    # type: ignore
 from google.protobuf.message import DecodeError
-import util as u    # type: ignore
-from server import DatabaseServer    # type: ignore
+import transit_data_access_pb2      # type: ignore
+import static                       # type: ignore
+import util as u                    # type: ignore
 
-TIME_DIFF_THRESHOLD = 3
+TIME_DIFF_THRESHOLD: int = 3
 
 
 FetchStatus = NewType('FetchStatus', int)
@@ -27,47 +26,58 @@ Timestamp = NewType('Timestamp', int)
 class FetchResult(NamedTuple):
     status: FetchStatus
     timestamp: int = 0
-    error: str = ''
+    error: Union[Exception, str, None] = None
 
 
 class RealtimeFeedHandler:
     """ TODO: docstring
     """
+    def __init__(self, url: str, id_: str, redis_server: redis.Redis) -> None:
+        self.url = url
+        self.id_ = id_
+        self.redis_server = redis_server
+        self.result: FetchResult = FetchResult(NONE)
+        self.latest_timestamp: int = 0
+        self.latest_feed: FeedMessage = None
+        self.prev_feed: FeedMessage = None
 
-    def fetch(self, attempt=0):
+    async def fetch(self, thread_pool_excecutor: concurrent.futures.ThreadPoolExecutor, attempt: int = 0) -> None:
         """ Fetches url, updates class attributes with feed info.
         """
-        with warnings.catch_warnings(), eventlet.Timeout(u.REALTIME_TIMEOUT):
-            warnings.filterwarnings(action='error', category=RuntimeWarning)
-            try:
-                with request.urlopen(self.url) as response:
-                    _raw = response.read()
+        try:
+            realtime_timeout = aiohttp.ClientTimeout(total=u.REALTIME_TIMEOUT)
+            async with aiohttp.ClientSession(timeout=realtime_timeout) as session:
+                async with session.get(self.url) as response:
+                    _raw = await response.read()
                     feed_message = FeedMessage()
-                    feed_message.ParseFromString(_raw)
-                    timestamp = feed_message.header.timestamp
+
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(thread_pool_excecutor, feed_message.ParseFromString, _raw)
+
+                    timestamp: int = feed_message.header.timestamp
                     if timestamp >= self.latest_timestamp + TIME_DIFF_THRESHOLD:
                         self.result = FetchResult(NEW_FEED, timestamp=timestamp)
                         self.prev_feed, self.latest_feed, self.latest_timestamp = \
                             self.latest_feed, feed_message, timestamp
-                        u.redis_server.hset('realtime_feeds', self.id_, _raw)
+                        self.redis_server.hset('realtime:feeds', self.id_, _raw)
                     else:
                         self.result = FetchResult(OLD_FEED)
                     return
-            except (URLError, OSError) as err:
-                self.result = FetchResult(FETCH_FAILED, error=err)
-            except (DecodeError, SystemError) as err:
-                self.result = FetchResult(DECODE_FAILED, error=err)
-            except RuntimeWarning as err:
-                self.result = FetchResult(RUNTIME_WARNING, error=err)
-            except eventlet.Timeout as err:
-                self.result = FetchResult(FETCH_FAILED, error=f'TIMEOUT of {err}')
+        except OSError as err:
+            self.result = FetchResult(FETCH_FAILED, error=err)
+        except (DecodeError, SystemError) as err:
+            self.result = FetchResult(DECODE_FAILED, error=err)
+        except RuntimeWarning as err:
+            self.result = FetchResult(RUNTIME_WARNING, error=err)
+        except asyncio.TimeoutError as err:
+            self.result = FetchResult(FETCH_FAILED, error=f'TIMEOUT of {err}')
 
         if attempt + 1 < u.REALTIME_MAX_ATTEMPTS:
             u.log.debug('parser: Fetch failed for %s, trying again', self.id_)
-            self.fetch(attempt=attempt + 1)
+            self.fetch(attempt=attempt + 1, thread_pool_excecutor=thread_pool_excecutor)
 
-    def restore_feed_from_redis(self):
-        _raw = u.redis_server.hget('realtime_feeds', self.id_)
+    def restore_feed_from_redis(self) -> None:
+        _raw = self.redis_server.hget('realtime:feeds', self.id_)
         if not _raw:
             return
 
@@ -75,73 +85,65 @@ class RealtimeFeedHandler:
         try:
             _feed.ParseFromString(_raw)
             self.latest_feed = _feed
+            self.latest_timestamp = _feed.header.timestamp
         except (DecodeError, SystemError, RuntimeWarning) as err:
             u.log.error('%s: unable to parse feed %s restored from redis', err, self.id_)
 
-    def __init__(self, url, id_):
-        self.url: str = url
-        self.id_: str = id_
-        self.result: FetchResult = FetchResult(NONE)
-        self.latest_timestamp: int = 0
-        self.latest_feed: FeedMessage = None
-        self.prev_feed: FeedMessage = None
-
-        self.restore_feed_from_redis()
 
 
 class RealtimeManager():
     """docstring for RealtimeManager
     """
-    def __init__(self, db_server: DatabaseServer = None) -> None:
-        self.db_server = db_server
-        self.parser_thread = None
+    def __init__(self, redis_handler) -> None:
         self.initial_merge_attempts = 0
         self.max_initial_merge_attempts = 10
-        self.request_pool = eventlet.GreenPool(len(u.GTFS_CONF.realtime_urls))
-        self.feed_handlers = [RealtimeFeedHandler(url, id_) for id_, url in u.GTFS_CONF.realtime_urls.items()]
-
+        self.redis_handler = redis_handler
+        self.redis_server = redis_handler.server
         self.feed: FeedMessage = None
         self.current_timestamp: Timestamp = Timestamp(0)
         self.current_data: u.RealtimeData = None  # type: ignore
         self.current_data_json: str = ''
         self.current_data_bz2: bytes = b''
+        self.data_dict: Dict[Timestamp, u.RealtimeData] = {}
 
         self.diff_dict: Dict[Timestamp, u.DataDiff] = {}
         self.diff_dict_bz2: Dict[Timestamp, bytes] = {}
 
-        self.data_dict: Dict[Timestamp, u.RealtimeData] = {}
+        self.feed_handlers = [RealtimeFeedHandler(url, id_, self.redis_server) for id_, url in u.GTFS_CONF.realtime_urls.items()]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(self.feed_handlers)) as executor:
+            _tasks = [executor.submit(fh.restore_feed_from_redis) for fh in self.feed_handlers]
+            concurrent.futures.wait(_tasks)
 
-        _t = time.time()
         self.load_data_dict_from_redis()
-        print(f'load_data_dict_from_redis took {time.time() - _t:.4f} seconds')
 
 
     def load_data_dict_from_redis(self):
-        if not u.redis_server.exists('realtime_data_dict'):
-            u.log.debug('No realtime_data_dict key in Redis')
+        if not self.redis_server.exists('realtime_data_dict'):
+            u.log.info('No realtime_data_dict key in Redis')
             return
 
-        _redis_data_dict_timestamps = u.redis_server.hkeys('realtime_data_dict')
+        _redis_data_dict_timestamps = self.redis_server.hkeys('realtime_data_dict')
         _oldest_timestamp_desired = time.time() - u.REALTIME_DATA_DICT_CAP * u.REALTIME_FREQ
         _outdated_timestamps = [t for t in _redis_data_dict_timestamps if float(t) < _oldest_timestamp_desired]
         u.log.debug('removing these timestamps from redis since they\'re too old: %s', _outdated_timestamps)
         if _outdated_timestamps:
-            u.redis_server.hdel('realtime_data_dict', *_outdated_timestamps)
+            self.redis_server.hdel('realtime_data_dict', *_outdated_timestamps)
 
-        data_json_dict = u.redis_server.hgetall('realtime_data_dict')
+        data_json_dict = self.redis_server.hgetall('realtime_data_dict')
         u.log.debug('realtime_data_dict loaded from Redis, len is %s', len(data_json_dict))
 
         for timestamp, json_str in data_json_dict.items():
             self.data_dict[int(timestamp.decode('utf-8'))] = json.loads(json_str, cls=u.RealtimeJSONDecoder)
 
 
-    def fetch_all(self) -> None:
+    async def fetch_all(self) -> None:
         """get all new feeds, check each, and combine
         """
-        u.log.debug('parser: Checking feeds!')
-        for fh in self.feed_handlers:
-            self.request_pool.spawn(fh.fetch)
-        self.request_pool.waitall()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(self.feed_handlers)) as executor:
+            u.log.debug('parser: Checking feeds!')
+            await asyncio.gather(
+                *[fh.fetch(thread_pool_excecutor=executor) for fh in self.feed_handlers]
+            )
 
         for fh in self.feed_handlers:
             if fh.result.status not in [NEW_FEED, OLD_FEED]:
@@ -166,25 +168,33 @@ class RealtimeManager():
                 except (ValueError, TypeError) as err:
                     raise u.UpdateFailed('Could not merge feed', fh.id_, err)
 
-            self.feed = full_feed
+        self.feed = full_feed
 
     def load_static(self) -> None:
         """Loads the static.json file into self.current_data
         """
-        static_json = f'{u.STATIC_PATH}/parsed/static.json'
-        with open(static_json, mode='r') as static_json_file:
-            static_data = json.loads(static_json_file.read(), cls=u.StaticJSONDecoder)
-            self.current_timestamp = Timestamp(int(time.time()))
-            self.current_data = u.RealtimeData(
-                name=static_data.name,
-                static_timestamp=static_data.static_timestamp,
-                routes=static_data.routes,
-                stations=static_data.stations,
-                routehash_lookup={str(k): v for k, v in static_data.routehash_lookup.items()},
-                stationhash_lookup={str(k): v for k, v in static_data.stationhash_lookup.items()},
-                transfers={int(k): {int(_k): _v for _k, _v in v.items()} for k, v in static_data.transfers.items()},
-                realtime_timestamp=self.current_timestamp,
-                trips={})
+        try:
+            static_json_str = self.redis_server.get('static:json_full').decode('utf-8')
+            u.log.debug('got static from redis!')
+        except AttributeError:
+            u.log.warning('STATIC NOT FOUND, running static parser')
+            sh = static.StaticHandler(self.redis_server)
+            sh.update()
+            static_json_str = self.redis_server.get('static:json_full').decode('utf-8')
+            del sh
+
+        static_data = json.loads(static_json_str, cls=u.StaticJSONDecoder)
+        self.current_timestamp = Timestamp(int(time.time()))
+        self.current_data = u.RealtimeData(
+            name=static_data.name,
+            static_timestamp=static_data.static_timestamp,
+            routes=static_data.routes,
+            stations=static_data.stations,
+            routehash_lookup={str(k): v for k, v in static_data.routehash_lookup.items()},
+            stationhash_lookup={str(k): v for k, v in static_data.stationhash_lookup.items()},
+            transfers={int(k): {int(_k): _v for _k, _v in v.items()} for k, v in static_data.transfers.items()},
+            realtime_timestamp=self.current_timestamp,
+            trips={})
 
     def parse(self) -> None:
         for elem in self.feed.entity:
@@ -232,10 +242,10 @@ class RealtimeManager():
         assert len(self.data_dict) <= u.REALTIME_DATA_DICT_CAP
 
         # TODO !!! optimize this with piping
-        u.redis_server.hset('realtime_data_dict', self.current_timestamp, self.current_data_json)
-        if u.redis_server.hlen('realtime_data_dict') > u.REALTIME_DATA_DICT_CAP:
-            u.redis_server.hdel('realtime_data_dict', min(u.redis_server.hkeys('realtime_data_dict')))
-        assert u.redis_server.hlen('realtime_data_dict') <= u.REALTIME_DATA_DICT_CAP
+        self.redis_server.hset('realtime_data_dict', self.current_timestamp, self.current_data_json)
+        if self.redis_server.hlen('realtime_data_dict') > u.REALTIME_DATA_DICT_CAP:
+            self.redis_server.hdel('realtime_data_dict', min(self.redis_server.hkeys('realtime_data_dict')))
+        assert self.redis_server.hlen('realtime_data_dict') <= u.REALTIME_DATA_DICT_CAP
 
         new_diff_dict = {}
         for timestamp in (set(self.data_dict) - {self.current_timestamp}):
@@ -407,7 +417,7 @@ class RealtimeManager():
         with u.TimeLogger() as _tl:
             try:
                 tmp_data_placeholder = self.current_data
-                self.fetch_all()
+                asyncio.get_event_loop().run_until_complete(self.fetch_all())
                 _tl.tlog('fetch_all')
                 self.merge_feeds()
                 _tl.tlog('merge_feeds')
@@ -422,42 +432,20 @@ class RealtimeManager():
                 self.all_diff_to_protobuf_bz2()
                 _tl.tlog('all_diff_to_protobuf_bz2')
 
-                if self.db_server:
-                    self.db_server.push(
-                        current_timestamp=self.current_timestamp,
-                        data_full=self.current_data_bz2,
-                        data_diffs=self.diff_dict_bz2)
-                _tl.tlog('push')
+                self.redis_handler.realtime_push(
+                    current_timestamp=self.current_timestamp,
+                    data_full=self.current_data_bz2,
+                    data_diffs=self.diff_dict_bz2)
+                _tl.tlog('realtime_push')
 
             except u.UpdateFailed as err:
                 self.current_data = tmp_data_placeholder
                 u.log.error(err)
                 if not self.current_data:
                     if self.initial_merge_attempts < self.max_initial_merge_attempts:
-                        eventlet.sleep(5)
+                        time.sleep(5)
                         self.initial_merge_attempts += 1
                         self.update()
                     else:
                         u.log.error('parser: Couldn\'t get all feeds, exiting after %s attempts.\n%s', self.max_initial_merge_attempts, err)
                         exit()
-
-    def run(self) -> None:
-        while True:
-            _t = time.time()
-            self.update()
-            _t_diff = time.time() - _t
-            eventlet.sleep(u.REALTIME_FREQ - _t_diff)
-
-    def start(self):
-        u.log.info('parser: ~~~~~~~~~~ Running realtime parser ~~~~~~~~~~')
-        self.parser_thread = eventlet.spawn(self.run)
-
-    def stop(self):
-        u.log.info('parser: ~~~~~~~~~~ Stopping realtime parser ~~~~~~~~~~')
-        self.parser_thread.kill()
-
-if __name__ == "__main__":
-    rm = RealtimeManager()
-    rm.start()
-    while True:
-        eventlet.sleep(2)

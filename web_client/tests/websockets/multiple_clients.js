@@ -30,7 +30,7 @@ class Client {
     var uniqueId = id_;
     console.log(`generated unique id: ${uniqueId}`);
 
-    const socket = new WebSocket(`ws://${domain}:${port}`);
+    const socket = new WebSocket(`ws://${domain}:${port}/ws?unique_id=${uniqueId}`);
 
     var upcomingMessageBinaryLength = 0;
     var upcomingMessageTimestamp = 0;
@@ -50,32 +50,41 @@ class Client {
         `);
     };
 
-    socket.onmessage = msg => {
+    socket.onmessage = (msg) => {
       var data = msg.data;
       if (typeof data === 'string') {
-        console.log(uniqueId, 'string message received');
+        // console.log(uniqueId, 'string message received');
         var parsed = JSON.parse(data);
-        console.log(parsed);
+        // console.log(parsed);
         if (parsed.type === 'data_full') {
+          process.stdout.write('F');
+          // console.log('data_full received');
           upcomingMessageTimestamp = parsed.timestamp;
           upcomingMessageBinaryLength = parsed.data_size;
+        } else if (parsed.type === 'data_update') {
+          process.stdout.write('U');
+          // console.log('data_update received');
+          upcomingMessageTimestamp = parsed.timestamp_to;
+          upcomingMessageBinaryLength = parsed.data_size;
+          if (lastSuccessfulTimestamp !== parsed.timestamp_from) {
+            // console.log('hm, something is wrong with timestamp_from');
+          }
         }
       } else if (data instanceof Buffer) {
+        process.stdout.write('B');
         var dataSize = data.byteLength;
-        if (dataSize === upcomingMessageBinaryLength) {
-          console.log('success!');
-          lastSuccessfulTimestamp = upcomingMessageTimestamp;
-          /*
-          socket.send(`
+        // console.log(`binary message received with size: ${dataSize} (upcomingMessageBinaryLength is ${upcomingMessageBinaryLength})`);
+        if (dataSize !== upcomingMessageBinaryLength) {
+          console.log('dataSize - upcomingMessageBinaryLength is a difference of: ', dataSize - upcomingMessageBinaryLength);
+        }
+        lastSuccessfulTimestamp = upcomingMessageTimestamp;
+        socket.send(`
           {
             "type": "data_received",
-            "last_successful_timestamp": "${lastSuccessfulTimestamp}"
+            "client_id": "${uniqueId}",
+            "last_successful_timestamp": "${lastSuccessfulTimestamp}",
           }`);
-          */
-        } else {
-          console.log('binary message received with size: ', dataSize, ' but upcomingMessageBinaryLength is ', upcomingMessageBinaryLength);
-        }
-      }
+      };
     };
   }
 }

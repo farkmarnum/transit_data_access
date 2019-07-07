@@ -9,12 +9,14 @@ from typing import \
 from collections import defaultdict
 import time
 import json
-import redis
+import asyncio
 import logging
 import logging.config
 from dataclasses import dataclass, is_dataclass, field
 import pyhash  # type: ignore
 import hashlib
+
+loop = asyncio.get_event_loop()
 
 
 os.makedirs('/data/static/parsed', exist_ok=True)
@@ -122,12 +124,6 @@ logging.config.dictConfig({
 })
 
 log = logging.getLogger('parser')
-
-
-#####################################
-#               REDIS               #
-#####################################
-redis_server = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0)
 
 
 #####################################

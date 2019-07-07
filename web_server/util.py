@@ -2,7 +2,10 @@ import time
 import os
 import logging
 import logging.config
-import redis
+import asyncio
+import aioredis  # type: ignore
+
+
 
 PACKAGE_NAME = 'transit_data_access'
 DATA_PATH = f'/data/'
@@ -16,6 +19,7 @@ SOCKETIO_CONECTION_MAX_ATTEMPTS = 5
 REDIS_HOST: str = os.environ.get('REDIS_HOST', 'redis_server')
 REDIS_PORT: int = int(os.environ.get('REDIS_PORT', 6379))
 
+# WEB_SERVER_HOST = '127.0.0.1'
 WEB_SERVER_HOST = '0.0.0.0'
 WEB_SERVER_PORT = 9000
 
@@ -46,7 +50,11 @@ logging.config.dictConfig({
 
 log = logging.getLogger('web')
 
-redis_server = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0)
+async def redis_connect():
+    return await aioredis.Redis(f'redis://{REDIS_HOST}:{REDIS_PORT}')
+
+redis_server: aioredis.Redis = asyncio.get_event_loop().run_until_complete(redis_connect())
+
 
 class TimeLogger:
     """ Convenient little way to log how long something takes.
