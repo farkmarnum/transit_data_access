@@ -10,19 +10,29 @@ services:
 
   parser:
     build: ./parser
+    depends_on:
+      - redis_server
     ports:
       - "45654:45654"
 
   web_server1:
     build: ./web_server
+    depends_on:
+      - redis_server
     ports:
       - "9000:9000"
   # web_server2:
   #   build: ./web_server
+  #   depends_on:
+  #     - redis_server
   # web_server3:
   #   build: ./web_server
+  #   depends_on:
+  #     - redis_server
   # web_server4:
   #   build: ./web_server
+  #   depends_on:
+  #     - redis_server
 
   # nginx:
   #   image: nginx

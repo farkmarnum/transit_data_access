@@ -2,9 +2,6 @@ import time
 import os
 import logging
 import logging.config
-import asyncio
-import aioredis  # type: ignore
-
 
 
 PACKAGE_NAME = 'transit_data_access'
@@ -49,11 +46,6 @@ logging.config.dictConfig({
 })
 
 log = logging.getLogger('web')
-
-async def redis_connect():
-    return await aioredis.Redis(f'redis://{REDIS_HOST}:{REDIS_PORT}')
-
-redis_server: aioredis.Redis = asyncio.get_event_loop().run_until_complete(redis_connect())
 
 
 class TimeLogger:

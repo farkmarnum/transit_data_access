@@ -74,7 +74,7 @@ class RealtimeFeedHandler:
 
         if attempt + 1 < u.REALTIME_MAX_ATTEMPTS:
             u.log.debug('parser: Fetch failed for %s, trying again', self.id_)
-            self.fetch(attempt=attempt + 1, thread_pool_excecutor=thread_pool_excecutor)
+            await self.fetch(attempt=attempt + 1, thread_pool_excecutor=thread_pool_excecutor)
 
     def restore_feed_from_redis(self) -> None:
         _raw = self.redis_server.hget('realtime:feeds', self.id_)
