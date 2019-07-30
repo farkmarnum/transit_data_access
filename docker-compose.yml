@@ -3,24 +3,36 @@ version: '3'
 services:
   redis_server:
     build: ./redis
-    volumes:
-      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
+    image: "redis:latest"
     ports:
       - "6379:6379"
 
   parser:
     build: ./parser
+    image: "parser:latest"
     depends_on:
       - redis_server
     ports:
       - "45654:45654"
+    env_file:
+      - config/docker.env
 
-  web_server1:
-    build: ./web_server
+  web_server:
+    # build: ./web_server --> use Makefile!
+    image: "web_server:latest"
     depends_on:
       - redis_server
     ports:
-      - "9000:9000"
+      - "80:9000"
+    env_file:
+      - config/docker.env
+
+  # web_server1:
+  #   build: ./web_server
+  #   depends_on:
+  #     - redis_server
+  #   ports:
+  #     - "9000:9000"
   # web_server2:
   #   build: ./web_server
   #   depends_on:
