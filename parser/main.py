@@ -10,7 +10,7 @@ import util as u  # type: ignore
 
 class RedisHandler:
     def __init__(self) -> None:
-        self.server: redis.Redis = redis.Redis(host=u.REDIS_HOST, port=u.REDIS_PORT, db=0)
+        self.server: redis.Redis = redis.Redis(host=u.REDIS_HOSTNAME, port=u.REDIS_PORT, db=0)
 
     def realtime_push(self, current_timestamp: int, data_full: bytes, data_diffs: Dict[int, bytes]) -> None:
         u.log.debug('Pushing the realime data to redis_server')

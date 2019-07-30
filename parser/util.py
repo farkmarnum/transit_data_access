@@ -79,11 +79,11 @@ REDIS_PORT: int  # 6379
 BRANCH_SERIALIZED_SENTINEL_CHAR = chr(30)
 
 try:
-    REDIS_HOST = os.environ['REDIS_HOST']
+    REDIS_HOSTNAME = os.environ['REDIS_HOSTNAME']
     REDIS_PORT = int(os.environ['REDIS_PORT'])
     MTA_API_KEY = os.environ['MTA_API_KEY']
 except KeyError:
-    print('ERROR: necessary environment variables (REDIS_HOST & REDIS_PORT & MTA_API_KEY) not set', file=sys.stderr)
+    print('ERROR: necessary environment variables (REDIS_HOSTNAME & REDIS_PORT & MTA_API_KEY) not set', file=sys.stderr)
     exit()
 
 try:

@@ -3,16 +3,27 @@ version: '3'
 services:
   redis_server:
     build: ./redis
-    image: "redis:latest"
+    # image: "redis:latest"
     ports:
       - "6379:6379"
 
   parser:
+    env_file:
+      - ./config/docker.env
     build: ./parser
-    image: "parser:latest"
+    # image: "parser:latest"
     depends_on:
       - redis_server
     ports:
       - "45654:45654"
+
+  web_server:
     env_file:
-      - config/docker.env
+      - ./config/docker.env
+    build: ./web_server
+    # image: "web_server:latest"
+    depends_on:
+      - redis_server
+      - parser
+    ports:
+      - "8000:8000"
