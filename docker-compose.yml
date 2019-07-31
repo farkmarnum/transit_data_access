@@ -17,13 +17,13 @@ services:
     ports:
       - "45654:45654"
 
-  web_server:
-    env_file:
-      - ./config/docker.env
-    build: ./web_server
-    # image: "web_server:latest"
-    depends_on:
-      - redis_server
-      - parser
-    ports:
-      - "8000:8000"
+  # web_server:
+  #   env_file:
+  #     - ./config/docker.env
+  #   build: ./web_server
+  #   # image: "web_server:latest"
+  #   depends_on:
+  #     - redis_server
+  #     - parser
+  #   ports:
+  #     - "8000:8000"

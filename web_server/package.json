@@ -10,7 +10,10 @@
   "author": "Mark Farnum",
   "license": "GPL-3.0-or-later",
   "dependencies": {
-    "express": "^4.17.1"
+    "date-format": "^2.1.0",
+    "ioredis": "^4.11.2",
+    "pako": "^1.0.10",
+    "protobufjs": "^6.8.8"
   },
   "devDependencies": {
     "@types/express": "^4.17.0",

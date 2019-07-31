@@ -4,7 +4,7 @@ import sys
 import time
 from typing import Dict, NamedTuple, NewType, Union
 import json
-import bz2
+import zlib
 import redis
 import asyncio
 import aiohttp  # type: ignore
@@ -16,7 +16,7 @@ import static                       # type: ignore
 import util as u                    # type: ignore
 
 TIME_DIFF_THRESHOLD: int = 3
-
+COMPRESSION_LEVEL = 9
 
 FetchStatus = NewType('FetchStatus', int)
 NONE, NEW_FEED, OLD_FEED, FETCH_FAILED, DECODE_FAILED, RUNTIME_WARNING = list(map(FetchStatus, range(6)))
@@ -103,11 +103,11 @@ class RealtimeManager():
         self.current_timestamp: Timestamp = Timestamp(0)
         self.current_data: u.RealtimeData = None  # type: ignore
         self.current_data_json: str = ''
-        self.current_data_bz2: bytes = b''
+        self.current_data_zlib: bytes = b''
         self.data_dict: Dict[Timestamp, u.RealtimeData] = {}
 
         self.diff_dict: Dict[Timestamp, u.DataDiff] = {}
-        self.diff_dict_bz2: Dict[Timestamp, bytes] = {}
+        self.diff_dict_zlib: Dict[Timestamp, bytes] = {}
 
         self.feed_handlers = [RealtimeFeedHandler(url, id_, self.redis_server) for id_, url in u.GTFS_CONF.realtime_urls.items()]
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(self.feed_handlers)) as executor:
@@ -205,8 +205,12 @@ class RealtimeManager():
                 if not len(elem.trip_update.stop_time_update):
                     continue
                 last_stop_id = elem.trip_update.stop_time_update[-1].stop_id
-                final_station = self.current_data.stationhash_lookup[last_stop_id]
-                if not final_station:
+                try:
+                    final_station = self.current_data.stationhash_lookup[last_stop_id]
+                    if not final_station:
+                        continue
+                except KeyError as err:
+                    u.log.error(err)
                     continue
                 branch = u.Branch(route_hash, final_station)
                 self.current_data.trips[trip_hash] = u.Trip(id_=trip_hash, branch=branch)
@@ -315,7 +319,7 @@ class RealtimeManager():
         return data_diff
 
 
-    def full_to_protobuf_bz2(self) -> None:
+    def full_to_protobuf_zlib(self) -> None:
         """ doc
         """
         data_full = self.current_data
@@ -356,13 +360,13 @@ class RealtimeManager():
             for station_hash, arrival_time in trip.arrivals.items():
                 proto_full.trips[trip_hash].arrivals[station_hash] = arrival_time
 
-        self.current_data_bz2 = bz2.compress(proto_full.SerializeToString(), compresslevel=9)
+        self.current_data_zlib = zlib.compress(proto_full.SerializeToString(), level=COMPRESSION_LEVEL)
 
-        u.log.debug('full: %fKB', sys.getsizeof(self.current_data_bz2) / 1024)
+        u.log.debug('full: %fKB', sys.getsizeof(self.current_data_zlib) / 1024)
 
 
 
-    def diff_to_protobuf_bz2(self, data_diff: u.DataDiff) -> bytes:
+    def diff_to_protobuf_zlib(self, data_diff: u.DataDiff) -> bytes:
         """ doc
         """
         proto_update = transit_data_access_pb2.DataUpdate()
@@ -400,16 +404,16 @@ class RealtimeManager():
             proto_update.branch[trip_hash].route_hash = branch.route
             proto_update.branch[trip_hash].final_station = branch.final_station
 
-        compressed_protobuf = bz2.compress(proto_update.SerializeToString(), compresslevel=9)
+        compressed_protobuf = zlib.compress(proto_update.SerializeToString(), level=COMPRESSION_LEVEL)
         return compressed_protobuf
 
 
-    def all_diff_to_protobuf_bz2(self):
+    def all_diff_to_protobuf_zlib(self):
         for timestamp in sorted(self.diff_dict.keys()):
             diff = self.diff_dict[timestamp]
-            _bz2 = self.diff_to_protobuf_bz2(diff)
-            u.log.debug('update %s: %fKB', timestamp, sys.getsizeof(_bz2) / 1024)
-            self.diff_dict_bz2[timestamp] = _bz2
+            _zlib = self.diff_to_protobuf_zlib(diff)
+            u.log.debug('update %s: %fKB', timestamp, sys.getsizeof(_zlib) / 1024)
+            self.diff_dict_zlib[timestamp] = _zlib
 
 
 
@@ -427,15 +431,15 @@ class RealtimeManager():
                 _tl.tlog('parse')
                 self.load_data_and_diffs()
                 _tl.tlog('load_data_and_diffs')
-                self.full_to_protobuf_bz2()
-                _tl.tlog('full_to_protobuf_bz2')
-                self.all_diff_to_protobuf_bz2()
-                _tl.tlog('all_diff_to_protobuf_bz2')
+                self.full_to_protobuf_zlib()
+                _tl.tlog('full_to_protobuf_zlib')
+                self.all_diff_to_protobuf_zlib()
+                _tl.tlog('all_diff_to_protobuf_zlib')
 
                 self.redis_handler.realtime_push(
                     current_timestamp=self.current_timestamp,
-                    data_full=self.current_data_bz2,
-                    data_diffs=self.diff_dict_bz2)
+                    data_full=self.current_data_zlib,
+                    data_diffs=self.diff_dict_zlib)
                 _tl.tlog('realtime_push')
 
             except u.UpdateFailed as err:

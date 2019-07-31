@@ -11,6 +11,7 @@ import util as u  # type: ignore
 class RedisHandler:
     def __init__(self) -> None:
         self.server: redis.Redis = redis.Redis(host=u.REDIS_HOSTNAME, port=u.REDIS_PORT, db=0)
+        # self.pubsub = self.server.pubsub()
 
     def realtime_push(self, current_timestamp: int, data_full: bytes, data_diffs: Dict[int, bytes]) -> None:
         u.log.debug('Pushing the realime data to redis_server')
@@ -21,6 +22,7 @@ class RedisHandler:
             self.server.hmset('realtime:data_diffs', data_diffs)
 
         self.server.publish('realtime_updates', 'new_data')
+        u.log.debug('published \'new_data\' to realtime_updates')
 
 def main_loop() -> None:
     redis_handler = RedisHandler()
