@@ -17,7 +17,6 @@ RUN npm install
 # ---- Copy Files/Build ----
 FROM dependencies AS dev
 WORKDIR /app
-COPY . /app
 # RUN DEV SERVER
 CMD ["npm", "start"]
 

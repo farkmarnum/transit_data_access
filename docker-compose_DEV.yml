@@ -34,10 +34,12 @@ services:
       context: ./web_server/client
       target: dev
     volumes:
-      - './web_server/client/src:/app/src'
-      - './web_server/client/public:/app/public'
+      - ./web_server/client:/app
     image: "farkmarnum/transit_data_access:web_client"
     depends_on:
       - web_server
     ports:
       - "3000:3000"
+      - "35729:35729"
+    environment:
+      - CHOKIDAR_USEPOLLING=true
