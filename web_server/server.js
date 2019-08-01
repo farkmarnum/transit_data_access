@@ -7,7 +7,7 @@ const Redis = require('ioredis')
 /// /// CONSTANTS /// ///
 const hostname = process.env.WEBSOCKET_SERVER_HOSTNAME || '0.0.0.0'
 const port = process.env.WEBSOCKET_SERVER_PORT || 8000
-const redisHostname = process.env.REDIS_HOSTNAME || '192.168.99.100' // TODO: CHANGE THIS
+const redisHostname = process.env.REDIS_HOSTNAME || 'redis_server'
 const redisPort = process.env.REDIS_PORT || 6379
 
 

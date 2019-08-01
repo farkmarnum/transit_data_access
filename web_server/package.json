@@ -1,23 +1,21 @@
 {
   "name": "transit_data_access_backend",
   "version": "0.1.0",
-  "description": "Express server serving React app and using Websockets and Redis for data transfer",
+  "description": "Gets backend data via Redis and serves to React frontend using Websockets",
   "main": "server.js",
+  "dependencies": {
+    "dateformat": "^3.0.3",
+    "ioredis": "^4.11.2",
+    "pako": "^1.0.10",
+    "protobufjs": "^6.8.8",
+    "typescript": "^3.5.3",
+    "ws": "^7.1.1"
+  },
+  "devDependencies": {},
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js"
   },
   "author": "Mark Farnum",
-  "license": "GPL-3.0-or-later",
-  "dependencies": {
-    "dateformat": "^3.0.3",
-    "ioredis": "^4.11.2",
-    "pako": "^1.0.10",
-    "protobufjs": "^6.8.8"
-  },
-  "devDependencies": {
-    "@types/express": "^4.17.0",
-    "@types/ws": "^6.0.1",
-    "typescript": "^3.5.3"
-  }
+  "license": "GPL-3.0-or-later"
 }

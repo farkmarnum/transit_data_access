@@ -271,15 +271,16 @@ class Main extends React.Component {
     })
 
     // LOAD PROTOBUF
-    protobuf.load("transit_data_access.proto").then((root) => {
+    protobuf.load(`${process.env.PUBLIC_URL}/transit_data_access.proto`).then((root) => {
       DataFull = root.lookupType('transit_data_access.DataFull')
       DataUpdate = root.lookupType('transit_data_access.DataUpdate')
 
       /// THEN, SET UP WEBSOCKET
       const uniqueId = crypto.randomBytes(64).toString('base64');
-      const wsHostname = process.env.WEBSOCKET_SERVER_HOSTNAME || '127.0.0.1'
+      // const wsHostname = process.env.WEBSOCKET_SERVER_HOSTNAME || 'web_server'
+      const hostname = window.location.hostname
       const wsPort = process.env.WEBSOCKET_SERVER_PORT || 8000
-      const wsURL = `ws://${wsHostname}:${wsPort}/?unique_id=${uniqueId}`
+      const wsURL = `ws://${hostname}:${wsPort}/?unique_id=${uniqueId}`
       ws = new WebSocket(wsURL)
 
       ws.onopen = () => {
@@ -354,6 +355,13 @@ class Main extends React.Component {
 
   updateRealtimeData(protobufObj) {
 
+  }
+
+  componentDidMount() {
+    this.forceUpdateInterval = setInterval(() => this.setState({ time: Date.now() }), 60 * 1000);
+  }
+  componentWillUnmount() {
+    clearInterval(this.forceUpdateInterval);
   }
 
   decodeZippedProto(compressedBlob) {

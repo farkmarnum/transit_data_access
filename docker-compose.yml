@@ -2,8 +2,7 @@ version: '3'
 
 services:
   redis_server:
-    build: ./redis
-    # image: "redis:latest"
+    image: redis:5
     ports:
       - "6379:6379"
 
@@ -11,19 +10,29 @@ services:
     env_file:
       - ./config/docker.env
     build: ./parser
-    # image: "parser:latest"
+    image: "farkmarnum/transit_data_access:parser"
     depends_on:
       - redis_server
     ports:
       - "45654:45654"
 
-  # web_server:
-  #   env_file:
-  #     - ./config/docker.env
-  #   build: ./web_server
-  #   # image: "web_server:latest"
-  #   depends_on:
-  #     - redis_server
-  #     - parser
-  #   ports:
-  #     - "8000:8000"
+  web_server:
+    env_file:
+      - ./config/docker.env
+    build: ./web_server
+    image: "farkmarnum/transit_data_access:web_server"
+    depends_on:
+      - redis_server
+      - parser
+    ports:
+      - "8000:8000"
+
+  web_client:
+    env_file:
+      - ./config/docker.env
+    build: ./web_server/client
+    image: "farkmarnum/transit_data_access:web_client"
+    depends_on:
+      - web_server
+    ports:
+      - "3000:3000"
