@@ -1,5 +1,4 @@
 syntax = "proto3";
-
 package transit_data_access;
 
 
@@ -40,6 +39,7 @@ message DataFull {
     message Branch {
       uint32 route_hash = 4;
       uint32 final_station = 5;
+      string route_name = 999999; // FOR DEBUGGING
     }
     Branch branch = 6;
     enum TripStatus {

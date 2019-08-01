@@ -1,0 +1,200 @@
+h6, h5 {
+  margin: 0;
+  font-weight: 400;
+}
+code {
+  margin: 0 0 1rem 0;
+  display: block;
+  font-size: 1rem;
+  width: min-content;
+}
+
+
+.container {
+  min-width: 300px;
+}
+
+.text-left {
+  text-align: left; 
+}
+.text-center {
+  text-align: center; 
+}
+.text-right {
+  text-align: right; 
+}
+
+.header {
+  position: relative;
+}
+.header .absolute-left, .absolute-right {
+  top: 0.3rem;
+}
+.header h3 {
+  font-size: 3rem;
+}
+.header h6 {
+  font-size: 1.2rem;
+  padding-top: .3rem;
+}
+.absolute-left {
+  position: absolute;
+  left: 0;
+}
+.absolute-right {
+  position: absolute;
+  right: 0;
+}
+.title {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  margin: 5rem auto 0 auto;
+  text-align: center;
+}
+
+#header-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  height: 3rem;
+  background-color: #ccc;
+}
+
+.connected {
+  color: #0cac0c;
+}
+.disconnected {
+  color: #df0b0b;
+}
+
+.flash-on {
+  color: #ffdb00;
+  -webkit-transition: all 250ms cubic-bezier(0.420, 0.000, 1.000, 1.000);
+     -moz-transition: all 250ms cubic-bezier(0.420, 0.000, 1.000, 1.000);
+       -o-transition: all 250ms cubic-bezier(0.420, 0.000, 1.000, 1.000);
+          transition: all 250ms cubic-bezier(0.420, 0.000, 1.000, 1.000); /* ease-in */
+}
+.flash-off {
+  color: #000;
+  -webkit-transition: all 250ms cubic-bezier(0.000, 0.000, 0.580, 1.000);
+     -moz-transition: all 250ms cubic-bezier(0.000, 0.000, 0.580, 1.000);
+       -o-transition: all 250ms cubic-bezier(0.000, 0.000, 0.580, 1.000);
+          transition: all 250ms cubic-bezier(0.000, 0.000, 0.580, 1.000); /* ease-out */
+}
+
+
+
+.data {
+  margin-top: 12rem;
+}
+.data h6 {
+  font-size: 1.1rem;
+}
+.data button {
+  padding: 0 0.6rem 1rem 0.6rem;
+  border: none;
+  font-size: 1.5rem;
+  margin: 0;
+  line-height: 2.2rem;
+  height: 2.2rem;
+  border-radius: 100%;
+}
+
+.route-name-list {
+  margin: 0.5rem 0 0 -0.6rem;
+}
+.route-name {
+  display: inline;
+}
+
+.final-stations {
+  margin-top: 1rem;
+  font-size: 1.3rem;
+  font-weight: 300;
+}
+.final-stations .final-station {
+  font-size: 1.1rem;
+  font-weight: 300;
+  display: block;
+  padding-left: 0;
+  text-transform: initial;
+  border-radius: 1rem;
+  background-color: transparent;
+  padding: 0.4rem;
+  margin: 0 0 0.2rem -0.4rem;
+  line-height: 1rem;
+}
+.final-stations button:hover {
+  font-weight: 400;
+}
+.final-stations button.final-station:hover {
+  background-color: #eee;
+}
+.final-stations .selected {
+  background-color: #ccc;
+}
+.final-stations button.selected:hover {
+  background-color: #ccc;
+}
+
+.stations {
+  margin-top: 1rem;
+}
+
+.station {
+  font-size: 1.3rem;
+  line-height: 2rem;
+  font-weight: 400;
+}
+.station .station-name {
+  margin-right: 0.4rem;
+  font-weight: 600;
+}
+.station .empty {
+  font-style: italic;
+  font-weight: 100;
+}
+.station .arrival-time {
+  margin-left: 0.8rem;
+  font-weight: 300;
+}
+.station .arrival-time.very-soon {
+  font-weight: 400;
+  color: #3ac800;
+}
+.station .arrival-time.soon {
+  font-weight: 400;
+  color: #004eff;
+}
+/* ~~~~~~~~~~~~~~~~~~~~~ */
+/* FOR TABLET AND LARGER */
+/* ~~~~~~~~~~~~~~~~~~~~~ */
+@media (min-width: 900px) {
+
+}
+
+
+/* ~~~~~~~~~~~~~~~~~~~~~ */
+/* FOR PHONE AND LARGER  */
+/* ~~~~~~~~~~~~~~~~~~~~~ */
+@media (min-width: 550px) {
+  code {
+    font-size: 1.2rem;
+  }
+  .header h3 {
+    font-size: 4rem;
+  }
+  .header h6 {
+    font-size: 1.4rem;
+    padding-top: 0;
+  }
+  .data h6 {
+    font-size: 1.4rem;
+  }
+}
+
+

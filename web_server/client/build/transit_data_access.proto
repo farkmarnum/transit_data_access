@@ -1,0 +1,112 @@
+syntax = "proto3";
+package transit_data_access;
+
+
+// Full data message:
+message DataFull {
+  string name = 1001;
+  uint32 static_timestamp = 1002;
+  uint32 realtime_timestamp = 1003;
+
+  message RouteInfo {
+    string desc = 1004;
+    uint32 color = 1005;
+    uint32 text_color = 1006;
+    repeated uint32 stations = 1008;                  // each element is a StationHash
+  }
+  map<uint32, RouteInfo> routes = 1009;               // map key is RouteHash
+
+  message StationInfo {
+    string name = 11;
+    float lat = 12;
+    float lon = 13;
+    message TravelTime {
+      sint32 travel_time = 14;
+    }
+    map<uint32, TravelTime> travel_times = 15;        // map key is StationHash
+  }
+  map<uint32, StationInfo> stations = 1010;           // map key is StationHash
+
+  map<string, uint32> routehash_lookup = 1011;        // map values are RouteHash
+  map<string, uint32> stationhash_lookup = 1012;      // map values are StationHash
+
+  message TransfersForStation {
+    map<uint32, uint32> transfer_times = 1014;  // map key is StationHash, value is transfer_time
+  }
+  map<uint32, TransfersForStation> transfers = 1015;  // map key is StationHash
+
+  message TripInfo {
+    message Branch {
+      uint32 route_hash = 4;
+      uint32 final_station = 5;
+      string route_name = 999999; // FOR DEBUGGING
+    }
+    Branch branch = 6;
+    enum TripStatus {
+      STOPPED = 0;
+      DELAYED = 1;
+      ON_TIME = 2;
+    }
+    TripStatus status = 7;
+    uint32 timestamp = 8;
+    map<uint32, uint32> arrivals = 10;                  // map key is StationHash, value is Arrival Time
+  }
+  map<uint32, TripInfo> trips = 1016;                   // map key is TripHash
+
+}
+
+
+// Update data message:
+message DataUpdate {
+  uint32 realtime_timestamp = 2000;
+
+  message Branch {
+    uint32 route_hash = 4;
+    uint32 final_station = 5;
+  }
+  message Trip {
+    message TripInfo {
+      Branch branch = 6;
+      enum TripStatus {
+        STOPPED = 0;
+        DELAYED = 1;
+        ON_TIME = 2;
+      }
+      TripStatus status = 7;
+      uint32 timestamp = 8;
+      map<uint32, uint32> arrivals = 10;                  // map key is StationHash, value is Arrival Time
+    }
+    uint32 trip_hash = 11;
+    TripInfo info = 12;
+  }
+  message TripDiff {
+    repeated uint32 deleted = 2002;                       // TripHash
+    repeated Trip added = 2003;
+  }
+  TripDiff trips = 2004;
+
+  message StationsList {
+    repeated uint32 station_hash = 2005;
+  }
+  message StationArrival {
+    uint32 station_hash = 2006;
+    uint32 arrival_time = 2007;
+  }
+  message StationArrivalsList {
+    repeated StationArrival arrival = 2008;
+  }
+  message TripStationDict {
+    map<uint32, StationsList> trip_station_dict = 2009;   // keys = TripHash
+  }
+  message ArrivalsDiff {
+    TripStationDict deleted = 2010;                       // keys = TripHash
+    map<uint32, StationArrivalsList> added = 2011;        // keys = TripHash
+    map<sint32, TripStationDict> modified = 2012;         // keys = TimeDiff
+  }
+  ArrivalsDiff arrivals = 2013;
+
+  map<uint32, uint32> status = 2014;                 // keys = TripHash, values = TripStatus
+  
+  map<uint32, Branch> branch = 2015;                 // keys = TripHash
+}
+

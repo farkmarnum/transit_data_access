@@ -60,9 +60,6 @@ STOPPED, DELAYED, ON_TIME = list(map(TripStatus, range(3)))
 #####################################
 LOG_LEVEL: str = os.environ.get('LOG_LEVEL', 'INFO')
 
-PARSER_SOCKETIO_HOST: str = os.environ.get('PARSER_SOCKETIO_HOST', '0.0.0.0')
-PARSER_SOCKETIO_PORT: int = int(os.environ.get('PARSER_SOCKETIO_PORT', 45654))
-
 STATIC_PATH: str = f'/data/static'
 REALTIME_PATH: str = f'/data/realtime'
 
@@ -76,16 +73,17 @@ MTA_API_KEY: str
 MTA_REALTIME_BASE_URL: str = os.environ.get('MTA_REALTIME_BASE_URL', 'http://datamine.mta.info/mta_esi.php')
 MTA_STATIC_URL: str = os.environ.get('MTA_STATIC_URL', 'http://web.mta.info/developers/data/nyct/subway/google_transit.zip')
 
-REDIS_HOST: str
-REDIS_PORT: int = 6379
+REDIS_HOST: str  # redis_server
+REDIS_PORT: int  # 6379
 
 BRANCH_SERIALIZED_SENTINEL_CHAR = chr(30)
 
 try:
-    REDIS_HOST = os.environ['REDIS_HOST']
+    REDIS_HOSTNAME = os.environ['REDIS_HOSTNAME']
+    REDIS_PORT = int(os.environ['REDIS_PORT'])
     MTA_API_KEY = os.environ['MTA_API_KEY']
 except KeyError:
-    print('ERROR: MTA_API_KEY not set as env variable', file=sys.stderr)
+    print('ERROR: necessary environment variables (REDIS_HOSTNAME & REDIS_PORT & MTA_API_KEY) not set', file=sys.stderr)
     exit()
 
 try:
@@ -155,6 +153,8 @@ def short_hash(input_: Any, type_hint: Type[SpecifiedHash]) -> SpecifiedHash:
 class Branch(NamedTuple):
     route: RouteHash
     final_station: StationHash
+    # for DEBUGGING:
+    route_name: str = ""
     def serialize(self) -> str:
         return f'{self.route}{BRANCH_SERIALIZED_SENTINEL_CHAR}{self.final_station}'
 
