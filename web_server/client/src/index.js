@@ -10,6 +10,7 @@ const dateFormat = require('dateformat')
 const pako = require('pako')
 const crypto = require('crypto');
 
+const uniqueId = crypto.randomBytes(64).toString('base64');
 
 /// DATA INFO
 const DATA_FULL = 0
@@ -160,7 +161,7 @@ class RouteList extends React.Component {
     }
     return (
       <div>
-        <h5> Arrivals by Route</h5>
+        <h5> Arrivals by Route TESTING</h5>
         <div className="route-name-list">
           {
             routeInfos.sort().map(elem => {
@@ -254,11 +255,9 @@ function Data(props) {
       }
     }
   }
-
-  return (
-    <RouteList data={ data } />
-  )
+  return <RouteList data={ data } />
 }
+
 
 class Main extends React.Component {
   constructor(props) {
@@ -269,6 +268,7 @@ class Main extends React.Component {
         connected: false,
         dataStatusFlash: false
     })
+    this.setUpWebSocket = this.setUpWebSocket.bind(this)
 
     // LOAD PROTOBUF
     protobuf.load(`${process.env.PUBLIC_URL}/transit_data_access.proto`).then((root) => {
@@ -276,71 +276,79 @@ class Main extends React.Component {
       DataUpdate = root.lookupType('transit_data_access.DataUpdate')
 
       /// THEN, SET UP WEBSOCKET
-      const uniqueId = crypto.randomBytes(64).toString('base64');
-      // const wsHostname = process.env.WEBSOCKET_SERVER_HOSTNAME || 'web_server'
-      const hostname = window.location.hostname
-      const wsPort = process.env.WEBSOCKET_SERVER_PORT || 8000
-      const wsURL = `ws://${hostname}:${wsPort}/?unique_id=${uniqueId}`
-      ws = new WebSocket(wsURL)
-
-      ws.onopen = () => {
-      console.log(`Websocket connection established!`)
-      ws.send(`{ "type": "request_full" }`)
-        this.setState({
-          connected: true
-        })
-      }
-      ws.onclose = (evt) => {
-        console.log('Websocket connection closed!')
-        this.setState({
-          connected: false
-        })
-      }
-      ws.onerror = (evt) => {
-        console.log('Error:', evt)
-      }
-
-      ws.onmessage = (msg) => {
-        let data = msg.data;
-        if (typeof data === 'string') {
-          // received a string -- this should be either data_full information or data_update information
-          let parsed = JSON.parse(data)
-          if (parsed.type === 'data_full') {
-            upcomingMessageTimestamp = parseInt(parsed.timestamp)
-            upcomingMessageBinaryLength = parseInt(parsed.data_size)
-            upcomingMessageType = DATA_FULL
-          }
-          else if (parsed.type === 'data_update') {
-            upcomingMessageTimestamp = parseInt(parsed.timestamp_to)
-            upcomingMessageBinaryLength = parseInt(parsed.data_size)
-            upcomingMessageType = DATA_UPDATE
-            if (this.state.lastSuccessfulTimestamp !== parseInt(parsed.timestamp_from)) {
-              console.log(`this.state.lastSuccessfulTimestamp = ${this.state.lastSuccessfulTimestamp}, timestamp_from = ${parsed.timestamp_from}`)
-            }
-          }
-        } else if (typeof data === 'object') {
-          // received an object -- this should be either data_full or data_update
-          if (data.size !== upcomingMessageBinaryLength) {
-            console.log('data.size - upcomingMessageBinaryLength is a difference of: ', data.size - upcomingMessageBinaryLength)
-            ws.send(`{ "type": "request_full" }`)
-          } else {
-            this.decodeZippedProto(data)
-            this.setState({
-              lastSuccessfulTimestamp: upcomingMessageTimestamp
-            })
-            upcomingMessageTimestamp = 0
-            ws.send(`{
-              "type": "data_received",
-              "last_successful_timestamp": "${this.state.lastSuccessfulTimestamp}"
-            }`)
-          }
-        } else {
-          // received neither a string or object!
-          console.log('DATA RECEIVED TYPE = ', data)
-        }
-      }
+      this.setUpWebSocket()
     })
   }
+
+
+  setUpWebSocket() {
+    const hostname = window.location.hostname
+    const wsPort = process.env.WEBSOCKET_SERVER_PORT || 8000
+    const wsURL = `ws://${hostname}:${wsPort}/?unique_id=${uniqueId}`
+    ws = new WebSocket(wsURL)
+
+    ws.onopen = () => {
+    console.log(`Websocket connection established!`)
+    ws.send(`{ "type": "request_full" }`)
+      this.setState({
+        connected: true
+      })
+    }
+    ws.onclose = (evt) => {
+      console.log('Websocket connection closed!')
+      this.setState({
+        connected: false
+      }, () => {
+        setTimeout(this.setUpWebSocket(), 250)
+      })
+    }
+    ws.onerror = (evt) => {
+      console.log('Error:', evt)
+    }
+
+    ws.onmessage = (msg) => {
+      let data = msg.data;
+      if (typeof data === 'string') {
+        // received a string -- this should be either data_full information or data_update information
+        let parsed = JSON.parse(data)
+        if (parsed.type === 'data_full') {
+          upcomingMessageTimestamp = parseInt(parsed.timestamp)
+          upcomingMessageBinaryLength = parseInt(parsed.data_size)
+          upcomingMessageType = DATA_FULL
+        }
+        else if (parsed.type === 'data_update') {
+          upcomingMessageTimestamp = parseInt(parsed.timestamp_to)
+          upcomingMessageBinaryLength = parseInt(parsed.data_size)
+          upcomingMessageType = DATA_UPDATE
+          if (this.state.lastSuccessfulTimestamp !== parseInt(parsed.timestamp_from)) {
+            console.log(`this.state.lastSuccessfulTimestamp = ${this.state.lastSuccessfulTimestamp}, timestamp_from = ${parsed.timestamp_from}`)
+          }
+        }
+      } else if (typeof data === 'object') {
+        // received an object -- this should be either data_full or data_update
+        if (data.size !== upcomingMessageBinaryLength) {
+          console.log('data.size - upcomingMessageBinaryLength is a difference of: ', data.size - upcomingMessageBinaryLength)
+          ws.send(`{ "type": "request_full" }`)
+        } else {
+          this.decodeZippedProto(data)
+          this.setState({
+            lastSuccessfulTimestamp: upcomingMessageTimestamp
+          })
+          upcomingMessageTimestamp = 0
+          ws.send(`{
+            "type": "data_received",
+            "last_successful_timestamp": "${this.state.lastSuccessfulTimestamp}"
+          }`)
+        }
+      } else {
+        // received neither a string or object!
+        console.log('DATA RECEIVED TYPE = ', data)
+      }
+    }
+  }
+
+
+
 
   flashDataStatus() {
     this.setState({

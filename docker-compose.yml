@@ -1,4 +1,4 @@
-version: '3'
+version: '3.4'
 
 services:
   redis_server:
@@ -30,7 +30,12 @@ services:
   web_client:
     env_file:
       - ./config/docker.env
-    build: ./web_server/client
+    build:
+      context: ./web_server/client
+      target: build
+    volumes:
+      - './src:/app/src'
+      - './public:/app/public'
     image: "farkmarnum/transit_data_access:web_client"
     depends_on:
       - web_server
