@@ -153,6 +153,8 @@ def short_hash(input_: Any, type_hint: Type[SpecifiedHash]) -> SpecifiedHash:
 class Branch(NamedTuple):
     route: RouteHash
     final_station: StationHash
+    # for DEBUGGING:
+    route_name: str = ""
     def serialize(self) -> str:
         return f'{self.route}{BRANCH_SERIALIZED_SENTINEL_CHAR}{self.final_station}'
 

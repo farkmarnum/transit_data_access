@@ -164,6 +164,7 @@ class RealtimeManager():
                 full_feed.MergeFrom(fh.latest_feed)
             except (ValueError, TypeError):
                 try:
+                    continue  # JUST FOR NOW
                     full_feed.MergeFrom(fh.prev_feed)
                 except (ValueError, TypeError) as err:
                     raise u.UpdateFailed('Could not merge feed', fh.id_, err)
@@ -212,7 +213,7 @@ class RealtimeManager():
                 except KeyError as err:
                     u.log.error(err)
                     continue
-                branch = u.Branch(route_hash, final_station)
+                branch = u.Branch(route_hash, final_station, elem.trip_update.trip.route_id)  # NAME FOR DEBUGGING
                 self.current_data.trips[trip_hash] = u.Trip(id_=trip_hash, branch=branch)
 
             if elem.HasField('trip_update'):
@@ -355,6 +356,7 @@ class RealtimeManager():
         for trip_hash, trip in data_full.trips.items():
             proto_full.trips[trip_hash].branch.route_hash = trip.branch.route
             proto_full.trips[trip_hash].branch.final_station = trip.branch.final_station
+            proto_full.trips[trip_hash].branch.route_name = trip.branch.route_name  # FOR DEBUGGING
             proto_full.trips[trip_hash].status = trip.status
             proto_full.trips[trip_hash].timestamp = trip.timestamp if trip.timestamp else 0
             for station_hash, arrival_time in trip.arrivals.items():

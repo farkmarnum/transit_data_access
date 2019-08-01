@@ -83,11 +83,13 @@ class StaticHandler(object):
         """
         rswn_columns = [
             'route_id',
+            'shape_id',
             'stop_sequence',
             'stop_id',
         ]
         rswn_sort_by = [
             'route_id',
+            'shape_id',
             'stop_sequence'
         ]
         u.log.info("Cross referencing route, stop, and trip information...")
@@ -143,11 +145,12 @@ class StaticHandler(object):
                 route_color = int(row['route_color'].strip() or 'D3D3D3', 16)
                 text_color = int(row['route_text_color'].strip() or '000000', 16)
                 route_hash = u.short_hash(route_id, u.RouteHash)
+                # print(route_id, route_hash)
                 self.data.routes[route_hash] = u.RouteInfo(
                     desc=row['route_desc'],
                     color=route_color,
                     text_color=text_color,
-                    stations=set())
+                    stations=[])
                 self.data.routehash_lookup[route_id] = route_hash
 
         with open(self.locate_csv('route_stops_with_names'), mode='r') as rswn_file:
@@ -155,7 +158,9 @@ class StaticHandler(object):
             for row in rwsn_csv_reader:
                 route_hash = self.data.routehash_lookup[row['route_id']]
                 station_hash = self.data.stationhash_lookup[row['stop_id']]
-                self.data.routes[route_hash].stations.add(station_hash)
+                stations = self.data.routes[route_hash].stations
+                if station_hash not in stations:
+                    stations.append(station_hash)
 
     def load_transfers(self):
         with open(self.locate_csv('transfers'), mode='r') as transfers_file:

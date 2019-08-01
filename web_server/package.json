@@ -10,7 +10,7 @@
   "author": "Mark Farnum",
   "license": "GPL-3.0-or-later",
   "dependencies": {
-    "date-format": "^2.1.0",
+    "dateformat": "^3.0.3",
     "ioredis": "^4.11.2",
     "pako": "^1.0.10",
     "protobufjs": "^6.8.8"
