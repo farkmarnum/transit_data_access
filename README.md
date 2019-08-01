@@ -73,6 +73,8 @@ The docker image uses a multi-stage build, sourcing from node-alpine to keep its
 
 Currently the project is built with docker-compose, and the images then manually pulled onto a server. In the future there will be a CD/CI pipeline with AWS Fargate.
 
+config/example.env gives an example of a config file for the docker environment variables. This file should be named docker.env
+
 
 Issues/Plans
 ------
