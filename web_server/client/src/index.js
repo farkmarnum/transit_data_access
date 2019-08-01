@@ -161,7 +161,7 @@ class RouteList extends React.Component {
     }
     return (
       <div>
-        <h5> Arrivals by Route TESTING</h5>
+        <h5> Arrivals by Route </h5>
         <div className="route-name-list">
           {
             routeInfos.sort().map(elem => {
@@ -244,14 +244,18 @@ function Data(props) {
     for (let elem of Object.entries(trip.arrivals)) {
       const stationHash = elem[0]
           , arrivalTime = elem[1]
-      if (!data.stations[stationHash].arrivals[arrivalTime]) {
-        data.stations[stationHash].arrivals[arrivalTime] = {}
+      try {
+        if (!data.stations[stationHash].arrivals[arrivalTime]) {
+          data.stations[stationHash].arrivals[arrivalTime] = {}
+        }
+      } catch {
+        console.log('ERROR stationHash', stationHash)
       }
       try {
         data.stations[stationHash].arrivals[arrivalTime][trip.branch.finalStation] = tripHash
         data.routes[trip.branch.routeHash.toString()].finalStations.add(trip.branch.finalStation) // TODO figure out why each routeHash in data.routes is a string...
       } catch (err) {
-        // console.log(trip.branch.routeName)
+        // console.log('ERROR', trip.branch.routeName)
       }
     }
   }
@@ -269,6 +273,7 @@ class Main extends React.Component {
         dataStatusFlash: false
     })
     this.setUpWebSocket = this.setUpWebSocket.bind(this)
+    this.updateRealtimeData = this.updateRealtimeData.bind(this)
 
     // LOAD PROTOBUF
     protobuf.load(`${process.env.PUBLIC_URL}/transit_data_access.proto`).then((root) => {
@@ -348,8 +353,6 @@ class Main extends React.Component {
   }
 
 
-
-
   flashDataStatus() {
     this.setState({
       dataStatusFlash: true
@@ -362,11 +365,66 @@ class Main extends React.Component {
   }
 
   updateRealtimeData(protobufObj) {
+    let updatedArrivals
+    let data = this.state.realtimeData
+    console.log(protobufObj)
 
+    // ADDED + MODIFIED + DELETED ARRIVALS:
+    Object.keys(protobufObj.arrivals.added).forEach(tripHashStr => {
+      let tripHash = parseInt(tripHashStr)
+      let [stationHash, arrivalTime] = protobufObj.arrivals.added[tripHash].arrival
+      try {
+        data.trips[tripHash].arrivals[stationHash] = arrivalTime
+      } catch {
+        console.log('ERROR 1 tripHash', tripHash)
+      }
+    })
+    /// TODO fix this one in the .proto (inefficient!)
+    Object.keys(protobufObj.arrivals.deleted.tripStationDict).forEach(tripHashStr => {
+      let tripHash = parseInt(tripHashStr)
+      const stationHashes = protobufObj.arrivals.deleted.tripStationDict[tripHash].stationHash
+      stationHashes.forEach(stationHash => {
+        try {
+          delete data.trips[tripHash].arrivals[stationHash]
+        } catch {
+          console.log('ERROR 2 tripHash', tripHash)
+        }
+      })
+    })
+    /// TODO: why is this a string??
+    Object.keys(protobufObj.arrivals.modified).forEach(timeDiffStr => {
+      let timeDiff = parseInt(timeDiffStr)
+      let modified = protobufObj.arrivals.modified
+
+      Object.keys(modified[timeDiffStr].tripStationDict).forEach(tripHashStr => {
+      let tripHash = parseInt(tripHashStr)
+        let stationList = modified[timeDiffStr].tripStationDict[tripHash].stationHash
+        stationList.forEach(stationHash => {
+          try {
+            let oldArrivalTime = data.trips[tripHash].arrivals[stationHash]
+            if(typeof stationHash === "object") {
+              console.log(stationHash)
+            }
+            data.trips[tripHash].arrivals[stationHash] = oldArrivalTime + timeDiff
+            } catch {
+            console.log('ERROR 3 tripHash', tripHash)
+          }
+        })
+      })
+    })
+
+    // ADDED + MODIFIED + DELETED TRIPS:
+    Object.keys(protobufObj.arrivals.added).forEach(tripHash => {
+      let [stationHash, arrivalTime] = protobufObj.arrivals.added[tripHash].arrival
+      data.trips[tripHash].arrivals[stationHash] = arrivalTime
+    })
+    this.setState({
+      realtimeData: data
+    })
   }
 
   componentDidMount() {
-    this.forceUpdateInterval = setInterval(() => this.setState({ time: Date.now() }), 60 * 1000);
+    this.forceUpdateInterval = setInterval(() => this.setState({ time: Date.now() }), 1 * 1000);
   }
   componentWillUnmount() {
     clearInterval(this.forceUpdateInterval);
@@ -388,7 +446,8 @@ class Main extends React.Component {
 
         } else if (upcomingMessageType === DATA_UPDATE) {
           protobufObj = DataUpdate.decode(decompressed)
-          console.log(protobufObj)
+          this.updateRealtimeData(protobufObj)
+          // console.log(protobufObj)
         }
         this.flashDataStatus()
     }
