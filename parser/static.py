@@ -1,6 +1,7 @@
 """ downloads static GTFS data, checks if it's new, parses it, and stores it
 """
 # import os
+import gc
 from contextlib import suppress
 import time
 from collections import defaultdict
@@ -83,13 +84,11 @@ class StaticHandler(object):
         """
         rswn_columns = [
             'route_id',
-            'shape_id',
             'stop_sequence',
             'stop_id',
         ]
         rswn_sort_by = [
             'route_id',
-            'shape_id',
             'stop_sequence'
         ]
         u.log.info("Cross referencing route, stop, and trip information...")
@@ -107,9 +106,10 @@ class StaticHandler(object):
         u.log.info("Loaded trips, stops, and stop_times into DataFrames")
 
         composite = pd.merge(trips, stop_times, how='inner', on='trip_id')
-        composite = pd.merge(composite, stops, how='inner', on='stop_id')
         composite = composite[rswn_columns]
-        composite = composite.drop_duplicates().sort_values(by=rswn_sort_by)
+        composite = pd.merge(composite, stops, how='inner', on='stop_id')
+        composite.sort_values(by=rswn_sort_by, inplace=True, kind='quicksort')
+        composite = composite.drop_duplicates()
 
         rswn_csv = self.locate_csv('route_stops_with_names')
         composite.to_csv(rswn_csv, index=False)

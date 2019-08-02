@@ -24,10 +24,10 @@ let DataFull
 let DataUpdate
 let ws
 
-
 /// REACT
 /// /// /// TODO: ORGANIZE THIS WITH A BETTER CLASS HEIRARCHY SO IT'S READABLE! ALSO COMMENTS!!! AND DOCSTRINGS!!!!!!
 function RouteArrivals(props) {
+  // console.log('props.updatedTrips', props.updatedTrips)
   if (props.selectedRoute && props.selectedFinalStation) {
     return (
       <div className='stations'>
@@ -37,13 +37,13 @@ function RouteArrivals(props) {
             const now = Date.now()
             const station = props.data.stations[stationHash]
             let arrivalsForRoute = Object.keys(station.arrivals).filter(arrivalTime => {
-              let tripId = station.arrivals[arrivalTime][props.selectedFinalStation]
-              if(!tripId) return false
-                let routeHash = props.data.trips[tripId].branch.routeHash
+              let tripHash = station.arrivals[arrivalTime][props.selectedFinalStation]
+              if(!tripHash) return false
+                let routeHash = props.data.trips[tripHash].branch.routeHash
                   return (
-                  routeHash === props.selectedRouteHash &&
-                  now - arrivalTime > -30
-                )
+                    routeHash === props.selectedRouteHash &&
+                    now - arrivalTime > -30
+                  )
               // console.log(station.arrivals[arrivalTime], props.selectedFinalStation)
             })
             arrivalsForRoute = arrivalsForRoute.sort().slice(0, 3)
@@ -52,15 +52,26 @@ function RouteArrivals(props) {
             let arrivalTimeDiffsWithFormatting = arrivalsForRoute.map(arrivalTimeStr => { // TODO: why is this a string
               let arrivalTime = parseInt(arrivalTimeStr)
               let timeDiff = Math.floor(arrivalTime - (now / 1000))
+              let outList = []
               if (timeDiff < 15) {
-                return ["now", "very-soon"]
+                outList =  ["now", "very-soon"]
               } else if (timeDiff < 60) {
-                return [Math.floor(timeDiff) + "s", "very-soon"]
+                outList =  [Math.floor(timeDiff) + "s", "very-soon"]
               } else if (timeDiff < 10 * 60) {
-                return [Math.floor(timeDiff / 60) + "m", "soon"]
+                outList =  [Math.floor(timeDiff / 60) + "m", "soon"]
               } else {
-                return [dateFormat(new Date(arrivalTime * 1000), 'h:MMt'), ""]
+                outList =  [dateFormat(new Date(arrivalTime * 1000), 'h:MMt'), ""]
               }
+
+              let tripHash = station.arrivals[arrivalTimeStr][props.selectedFinalStation]
+              // console.log(tripHash, props.updatedTrips)
+              // throw new Error()
+
+              if (props.updatedTrips.has(tripHash)) {
+                // console.log(tripHash)
+                outList[1] = outList[1] + " updated"
+              }
+              return outList
             })
             /// TODO: remove dupplicate "now" entries...
             // arrivalTimeDiffs = [...new Set(arrivalTimeDiffs)] // TODO: this is inefficient...
@@ -200,6 +211,7 @@ class RouteList extends React.Component {
           selectedRouteHash={this.state.selectedRouteHash}
           selectedRouteName={selectedRouteName}
           selectedFinalStation={this.state.selectedFinalStation}
+          updatedTrips={this.props.updatedTrips}
           data={this.props.data}
         />
       </div>
@@ -210,56 +222,12 @@ class RouteList extends React.Component {
 
 function Data(props) {
   const data = props.data
+  // console.log('DATA:' , props.updatedTrips)
   if (data === null) {
     return "Waiting for data..."
   }
 
-  // add a val:key version of the lookup for routes (hash -> name)
-  data.routeNameLookup = {}
-  for (let key in data.routehashLookup) {
-    let val = data.routehashLookup[key]
-    data.routeNameLookup[val] = key
-  }
-
-  // add a val:key version of the lookup for routes (hash -> name)
-  // TODO: unneeded?
-  data.stationNameLookup = {}
-  for (let key in data.stationhashLookup) {
-    let val = data.stationhashLookup[key]
-    data.stationNameLookup[val] = key
-  }
-
-  // populate the arrivals list for each station in props.stations
-  // also, create a set of finalStations for each route
-  for (let stationHash in data.stations) {
-    data.stations[stationHash].arrivals = {}
-  }
-  for (let routeHash in data.routes) {
-    data.routes[routeHash].finalStations = new Set()
-  }
-  // console.log(Object.keys(data.routes))
-  for (let tripHash in data.trips) {
-    // console.log(tripHash)
-    const trip = data.trips[tripHash]
-    for (let elem of Object.entries(trip.arrivals)) {
-      const stationHash = elem[0]
-          , arrivalTime = elem[1]
-      try {
-        if (!data.stations[stationHash].arrivals[arrivalTime]) {
-          data.stations[stationHash].arrivals[arrivalTime] = {}
-        }
-      } catch {
-        console.log('ERROR stationHash', stationHash)
-      }
-      try {
-        data.stations[stationHash].arrivals[arrivalTime][trip.branch.finalStation] = tripHash
-        data.routes[trip.branch.routeHash.toString()].finalStations.add(trip.branch.finalStation) // TODO figure out why each routeHash in data.routes is a string...
-      } catch (err) {
-        // console.log('ERROR', trip.branch.routeName)
-      }
-    }
-  }
-  return <RouteList data={ data } />
+  return <RouteList data={ data } updatedTrips={ props.updatedTrips }/>
 }
 
 
@@ -270,7 +238,8 @@ class Main extends React.Component {
         realtimeData: null,
         lastSuccessfulTimestamp: 0,
         connected: false,
-        dataStatusFlash: false
+        dataStatusFlash: false,
+        updatedTrips: new Set()
     })
     this.setUpWebSocket = this.setUpWebSocket.bind(this)
     this.updateRealtimeData = this.updateRealtimeData.bind(this)
@@ -293,14 +262,14 @@ class Main extends React.Component {
     ws = new WebSocket(wsURL)
 
     ws.onopen = () => {
-    console.log(`Websocket connection established!`)
+    console.debug(`Websocket connection established!`)
     ws.send(`{ "type": "request_full" }`)
       this.setState({
         connected: true
       })
     }
     ws.onclose = (evt) => {
-      console.log('Websocket connection closed!')
+      console.debug('Websocket connection closed!')
       this.setState({
         connected: false
       }, () => {
@@ -338,12 +307,13 @@ class Main extends React.Component {
           this.decodeZippedProto(data)
           this.setState({
             lastSuccessfulTimestamp: upcomingMessageTimestamp
+          }, () => {
+            upcomingMessageTimestamp = 0
+            ws.send(`{
+              "type": "data_received",
+              "last_successful_timestamp": "${this.state.lastSuccessfulTimestamp}"
+            }`)
           })
-          upcomingMessageTimestamp = 0
-          ws.send(`{
-            "type": "data_received",
-            "last_successful_timestamp": "${this.state.lastSuccessfulTimestamp}"
-          }`)
         }
       } else {
         // received neither a string or object!
@@ -364,63 +334,100 @@ class Main extends React.Component {
     })
   }
 
-  updateRealtimeData(protobufObj) {
-    let updatedArrivals
+  updateRealtimeData(update) {
+    let updatedTrips = new Set()
     let data = this.state.realtimeData
-    console.log(protobufObj)
 
-    // ADDED + MODIFIED + DELETED ARRIVALS:
-    Object.keys(protobufObj.arrivals.added).forEach(tripHashStr => {
-      let tripHash = parseInt(tripHashStr)
-      let [stationHash, arrivalTime] = protobufObj.arrivals.added[tripHash].arrival
-      try {
-        data.trips[tripHash].arrivals[stationHash] = arrivalTime
-      } catch {
-        console.log('ERROR 1 tripHash', tripHash)
-      }
+    // Added arrivals:
+    let added = update.arrivals.added
+    Object.keys(added).forEach(tripHash => { // tripHash := String
+      updatedTrips.add(tripHash)
+      Object.entries(added[tripHash].arrival).forEach(elem => {
+        let stationArrival = elem[1]
+        data.trips[tripHash].arrivals[stationArrival.stationHash] = stationArrival.arrivalTime
+        if (!stationArrival.stationHash || !stationArrival.arrivalTime) console.log('!', stationArrival)
+      })
     })
-    /// TODO fix this one in the .proto (inefficient!)
-    Object.keys(protobufObj.arrivals.deleted.tripStationDict).forEach(tripHashStr => {
-      let tripHash = parseInt(tripHashStr)
-      const stationHashes = protobufObj.arrivals.deleted.tripStationDict[tripHash].stationHash
-      stationHashes.forEach(stationHash => {
+
+    // Deleted arrivals:
+    let deleted = update.arrivals.deleted.tripStationDict
+    Object.keys(deleted).forEach(tripHash => {
+      updatedTrips.add(tripHash)
+      deleted[tripHash].stationHash.forEach(stationHash => {
         try {
           delete data.trips[tripHash].arrivals[stationHash]
-        } catch {
-          console.log('ERROR 2 tripHash', tripHash)
+        } catch (e) {
+          console.log(e, tripHash, data.trips)
+          throw new Error()
         }
       })
     })
-    /// TODO: why is this a string??
-    Object.keys(protobufObj.arrivals.modified).forEach(timeDiffStr => {
-      let timeDiff = parseInt(timeDiffStr)
-      let modified = protobufObj.arrivals.modified
 
-      Object.keys(modified[timeDiffStr].tripStationDict).forEach(tripHashStr => {
-      let tripHash = parseInt(tripHashStr)
-        let stationList = modified[timeDiffStr].tripStationDict[tripHash].stationHash
-        stationList.forEach(stationHash => {
-          try {
-            let oldArrivalTime = data.trips[tripHash].arrivals[stationHash]
-            if(typeof stationHash === "object") {
-              console.log(stationHash)
-            }
-            data.trips[tripHash].arrivals[stationHash] = oldArrivalTime + timeDiff
-            } catch {
-            console.log('ERROR 3 tripHash', tripHash)
-          }
+    // Deleted arrivals:
+    let modified = update.arrivals.modified
+    Object.keys(modified).forEach(timeDiffStr => {
+      let timeDiff = parseInt(timeDiffStr)
+      let dict = modified[timeDiffStr].tripStationDict
+      Object.keys(dict).forEach(tripHash => {
+        updatedTrips.add(tripHash)
+        dict[tripHash].stationHash.forEach(stationHash => {
+          let oldArrivalTime = data.trips[tripHash].arrivals[stationHash]
+          if (!tripHash || !stationHash) console.log('!!', tripHash, stationHash, oldArrivalTime + timeDiff)
+          else data.trips[tripHash].arrivals[stationHash] = oldArrivalTime + timeDiff
         })
       })
     })
 
-    // ADDED + MODIFIED + DELETED TRIPS:
-    Object.keys(protobufObj.arrivals.added).forEach(tripHash => {
-      let [stationHash, arrivalTime] = protobufObj.arrivals.added[tripHash].arrival
-      data.trips[tripHash].arrivals[stationHash] = arrivalTime
+    // Added trips:
+    added = update.trips.added
+    added.forEach(obj => {
+      let tripHash = obj.tripHash
+        , trip = obj.info
+      data.trips[tripHash] = trip
+
+      for (let elem of Object.entries(obj.info.arrivals)) {
+        const stationHash = elem[0]
+            , arrivalTime = elem[1]
+        try {
+          if (!data.stations[stationHash].arrivals[arrivalTime]) {
+            data.stations[stationHash].arrivals[arrivalTime] = {}
+          }
+        } catch {
+          console.log('ERROR on stationHash for trip.arrivals:', trip.arrivals, 'and elem:', elem)
+        }
+        try {
+          data.stations[stationHash].arrivals[arrivalTime][trip.branch.finalStation] = tripHash
+          data.routes[trip.branch.routeHash.toString()].finalStations.add(trip.branch.finalStation) // TODO figure out why each routeHash in data.routes is a string...
+        } catch (err) {
+          console.log('ERROR', trip.branch.routeName)
+        }
+      }
     })
+
+    // Deleted trips:
+    deleted = update.trips.deleted
+    deleted.forEach(tripHash => {
+      delete data.trips[tripHash]
+    })
+
+
+    /// TODO!! modified status / branch
+
+
+    /// Update the data and flash the updated trips:
     this.setState({
-      realtimeData: data
-    })
+      realtimeData: data,
+      updatedTrips: updatedTrips
+    }, (() => {
+      this.flashDataStatus()
+      setTimeout(
+        () => {
+          this.setState({
+            updatedTrips: new Set()
+          })},
+        500)
+      })
+    )
   }
 
   componentDidMount() {
@@ -429,6 +436,58 @@ class Main extends React.Component {
   componentWillUnmount() {
     clearInterval(this.forceUpdateInterval);
   }
+
+
+  processData(data) {
+    // add a val:key version of the lookup for routes (hash -> name)
+    data.routeNameLookup = {}
+    for (let key in data.routehashLookup) {
+      let val = data.routehashLookup[key]
+      data.routeNameLookup[val] = key
+    }
+
+    // add a val:key version of the lookup for routes (hash -> name)
+    // TODO: unneeded?
+    data.stationNameLookup = {}
+    for (let key in data.stationhashLookup) {
+      let val = data.stationhashLookup[key]
+      data.stationNameLookup[val] = key
+    }
+
+    // populate the arrivals list for each station in props.stations
+    // also, create a set of finalStations for each route
+    for (let stationHash in data.stations) {
+      data.stations[stationHash].arrivals = {}
+    }
+    for (let routeHash in data.routes) {
+      data.routes[routeHash].finalStations = new Set()
+    }
+    // console.log(Object.keys(data.routes))
+    for (let tripHash in data.trips) {
+      // console.log(tripHash)
+      const trip = data.trips[tripHash]
+      for (let elem of Object.entries(trip.arrivals)) {
+        const stationHash = elem[0]
+            , arrivalTime = elem[1]
+        try {
+          if (!data.stations[stationHash].arrivals[arrivalTime]) {
+            data.stations[stationHash].arrivals[arrivalTime] = {}
+          }
+        } catch {
+          // console.log('ERROR on stationHash for trip.arrivals:', trip.arrivals, 'and elem:', elem)
+        }
+        try {
+          data.stations[stationHash].arrivals[arrivalTime][trip.branch.finalStation] = tripHash
+          data.routes[trip.branch.routeHash.toString()].finalStations.add(trip.branch.finalStation) // TODO figure out why each routeHash in data.routes is a string...
+        } catch (err) {
+          // console.log('ERROR', trip.branch.routeName)
+        }
+      }
+    }
+
+    return data
+  }
+
 
   decodeZippedProto(compressedBlob) {
     // console.log('Unzipping')
@@ -439,17 +498,19 @@ class Main extends React.Component {
 
         if (upcomingMessageType === DATA_FULL) {
           protobufObj = DataFull.decode(decompressed)
-          this.setState({
-            realtimeData: protobufObj
-          })
-          console.log(protobufObj)
+          let data = this.processData(protobufObj)
 
-        } else if (upcomingMessageType === DATA_UPDATE) {
+          this.setState({ realtimeData: data })          
+          this.flashDataStatus()
+          // console.log(protobufObj)
+          
+        }
+        else if (upcomingMessageType === DATA_UPDATE) {
           protobufObj = DataUpdate.decode(decompressed)
+
           this.updateRealtimeData(protobufObj)
           // console.log(protobufObj)
         }
-        this.flashDataStatus()
     }
     fileReader.readAsArrayBuffer(compressedBlob);
   }
@@ -489,7 +550,7 @@ class Main extends React.Component {
 
           <div className="row data">
             <div className="ten columns offset-by-one">
-              <Data data={this.state.realtimeData}/>
+              <Data data={ this.state.realtimeData } updatedTrips={ this.state.updatedTrips }/>
             </div>
           </div>
         </div>
