@@ -24,10 +24,63 @@ let DataFull
 let DataUpdate
 let ws
 
+
+/// React HELPER FUNCTIONS
+function processData(data) {
+  // add a val:key version of the lookup for routes (hash -> name)
+  data.routeNameLookup = {}
+  for (let key in data.routehashLookup) {
+    let val = data.routehashLookup[key]
+    data.routeNameLookup[val] = key
+  }
+
+  // add a val:key version of the lookup for routes (hash -> name)
+  // TODO: unneeded?
+  data.stationNameLookup = {}
+  for (let key in data.stationhashLookup) {
+    let val = data.stationhashLookup[key]
+    data.stationNameLookup[val] = key
+  }
+
+  // populate the arrivals list for each station in props.stations
+  // also, create a set of finalStations for each route
+  for (let stationHash in data.stations) {
+    data.stations[stationHash].arrivals = {}
+  }
+  for (let routeHash in data.routes) {
+    data.routes[routeHash].finalStations = new Set()
+  }
+  // console.log(Object.keys(data.routes))
+  for (let tripHash in data.trips) {
+    // console.log(tripHash)
+    const trip = data.trips[tripHash]
+    for (let elem of Object.entries(trip.arrivals)) {
+      const stationHash = elem[0]
+          , arrivalTime = elem[1]
+          , finalStation = trip.branch.finalStation
+      try {
+        if (!data.stations[stationHash].arrivals[finalStation]) {
+          data.stations[stationHash].arrivals[finalStation] = {}
+        }
+      } catch {
+        console.error('ERROR on stationHash for trip.arrivals:', trip.arrivals, 'and elem:', elem)
+      }
+      try {
+        data.stations[stationHash].arrivals[finalStation][arrivalTime] = tripHash
+        data.routes[trip.branch.routeHash.toString()].finalStations.add(finalStation) // TODO figure out why each routeHash in data.routes is a string...
+      } catch (err) {
+        console.error(trip.branch.routeHash, 'not in data.routes')
+      }
+    }
+  }
+
+  return data
+}
+
+
 /// REACT
 /// /// /// TODO: ORGANIZE THIS WITH A BETTER CLASS HEIRARCHY SO IT'S READABLE! ALSO COMMENTS!!! AND DOCSTRINGS!!!!!!
 function RouteArrivals(props) {
-  // console.log('props.updatedTrips', props.updatedTrips)
   if (props.selectedRoute && props.selectedFinalStation) {
     return (
       <div className='stations'>
@@ -35,16 +88,21 @@ function RouteArrivals(props) {
         {
           props.selectedRoute.stations.map((stationHash, i) => {
             const now = Date.now()
-            const station = props.data.stations[stationHash]
-            let arrivalsForRoute = Object.keys(station.arrivals).filter(arrivalTime => {
-              let tripHash = station.arrivals[arrivalTime][props.selectedFinalStation]
-              if(!tripHash) return false
+            const stationName = props.data.stations[stationHash].name
+            const arrivals = props.data.stations[stationHash].arrivals[props.selectedFinalStation]
+            if(!arrivals) return null
+
+            let arrivalsForRoute = Object.keys(arrivals).filter(arrivalTime => {
+              let tripHash = arrivals[arrivalTime]
+              if(!tripHash || !props.data.trips[tripHash]) {
+                console.error(`${tripHash} not found?`)
+                return false
+              }
                 let routeHash = props.data.trips[tripHash].branch.routeHash
                   return (
-                    routeHash === props.selectedRouteHash &&
-                    now - arrivalTime > -30
+                    (routeHash === props.selectedRouteHash) &&
+                    (arrivalTime - (now / 1000) > -30)
                   )
-              // console.log(station.arrivals[arrivalTime], props.selectedFinalStation)
             })
             arrivalsForRoute = arrivalsForRoute.sort().slice(0, 3)
 
@@ -57,30 +115,25 @@ function RouteArrivals(props) {
                 outList =  ["now", "very-soon"]
               } else if (timeDiff < 60) {
                 outList =  [Math.floor(timeDiff) + "s", "very-soon"]
-              } else if (timeDiff < 10 * 60) {
+              } else if (timeDiff < 20 * 60) {
                 outList =  [Math.floor(timeDiff / 60) + "m", "soon"]
               } else {
                 outList =  [dateFormat(new Date(arrivalTime * 1000), 'h:MMt'), ""]
               }
 
-              let tripHash = station.arrivals[arrivalTimeStr][props.selectedFinalStation]
-              // console.log(tripHash, props.updatedTrips)
-              // throw new Error()
-
+              let tripHash = arrivals[arrivalTimeStr]
               if (props.updatedTrips.has(tripHash)) {
-                // console.log(tripHash)
                 outList[1] = outList[1] + " updated"
               }
               return outList
             })
             /// TODO: remove dupplicate "now" entries...
-            // arrivalTimeDiffs = [...new Set(arrivalTimeDiffs)] // TODO: this is inefficient...
 
             if (arrivalTimeDiffsWithFormatting.length === 0) return null
             return (
               <div className='station' key={i}>
                 <span className='station-name'>
-                  {station.name}
+                  {stationName}
                 </span>
                 {
                   arrivalTimeDiffsWithFormatting.map((timeDiffWithFormatting, i) => {
@@ -110,9 +163,6 @@ class RouteList extends React.Component {
       selectedFinalStation: null,
       finalStations: null
     }
-    this.routes = this.props.data.routes
-    this.routeNameLookup = this.props.data.routeNameLookup
-    this.stations = this.props.data.stations
   }
 
   routeClicked(routeHash) {
@@ -133,7 +183,16 @@ class RouteList extends React.Component {
   }
 
   render() {
-    if (!this.props.data.routes) {
+    if (this.props.data !== null) {
+      this.routes = this.props.data.routes
+      this.routeNameLookup = this.props.data.routeNameLookup
+      this.stations = this.props.data.stations
+    }
+
+    if (this.props.data === null) {
+      return "Waiting for data..."
+    }
+    if (!this.routes) {
       return "Routes not found"
     }
 
@@ -220,22 +279,13 @@ class RouteList extends React.Component {
 }
 
 
-function Data(props) {
-  const data = props.data
-  // console.log('DATA:' , props.updatedTrips)
-  if (data === null) {
-    return "Waiting for data..."
-  }
-
-  return <RouteList data={ data } updatedTrips={ props.updatedTrips }/>
-}
-
 
 class Main extends React.Component {
   constructor(props) {
     super(props)
     this.state = ({
-        realtimeData: null,
+        unprocessedData: null,
+        processedData: null,
         lastSuccessfulTimestamp: 0,
         connected: false,
         dataStatusFlash: false,
@@ -254,7 +304,6 @@ class Main extends React.Component {
     })
   }
 
-
   setUpWebSocket() {
     const hostname = window.location.hostname
     const wsPort = process.env.WEBSOCKET_SERVER_PORT || 8000
@@ -262,14 +311,14 @@ class Main extends React.Component {
     ws = new WebSocket(wsURL)
 
     ws.onopen = () => {
-    console.debug(`Websocket connection established!`)
+    console.info(`Websocket connection established!`)
     ws.send(`{ "type": "request_full" }`)
       this.setState({
         connected: true
       })
     }
     ws.onclose = (evt) => {
-      console.debug('Websocket connection closed!')
+      console.info('Websocket connection closed!')
       this.setState({
         connected: false
       }, () => {
@@ -323,20 +372,9 @@ class Main extends React.Component {
   }
 
 
-  flashDataStatus() {
-    this.setState({
-      dataStatusFlash: true
-    })
-    sleep(500).then(() => {
-      this.setState({
-        dataStatusFlash: false
-      })
-    })
-  }
-
   updateRealtimeData(update) {
     let updatedTrips = new Set()
-    let data = this.state.realtimeData
+    let data = this.state.unprocessedData
 
     // Added arrivals:
     let added = update.arrivals.added
@@ -363,7 +401,7 @@ class Main extends React.Component {
       })
     })
 
-    // Deleted arrivals:
+    // Modified arrivals:
     let modified = update.arrivals.modified
     Object.keys(modified).forEach(timeDiffStr => {
       let timeDiff = parseInt(timeDiffStr)
@@ -372,7 +410,7 @@ class Main extends React.Component {
         updatedTrips.add(tripHash)
         dict[tripHash].stationHash.forEach(stationHash => {
           let oldArrivalTime = data.trips[tripHash].arrivals[stationHash]
-          if (!tripHash || !stationHash) console.log('!!', tripHash, stationHash, oldArrivalTime + timeDiff)
+          if (!tripHash || !stationHash) console.log('!!', tripHash, stationHash, oldArrivalTime + timeDiff) // TODO: remove after testing
           else data.trips[tripHash].arrivals[stationHash] = oldArrivalTime + timeDiff
         })
       })
@@ -392,14 +430,13 @@ class Main extends React.Component {
           if (!data.stations[stationHash].arrivals[arrivalTime]) {
             data.stations[stationHash].arrivals[arrivalTime] = {}
           }
-        } catch {
-          console.log('ERROR on stationHash for trip.arrivals:', trip.arrivals, 'and elem:', elem)
+        } catch (err) {
+          console.log('data.stations[stationHash].arrivals[arrivalTime] failed with', err)
         }
         try {
           data.stations[stationHash].arrivals[arrivalTime][trip.branch.finalStation] = tripHash
-          data.routes[trip.branch.routeHash.toString()].finalStations.add(trip.branch.finalStation) // TODO figure out why each routeHash in data.routes is a string...
         } catch (err) {
-          console.log('ERROR', trip.branch.routeName)
+          console.error('data.stations[stationHash].arrivals[arrivalTime][trip.branch.finalStation failed with', err)
         }
       }
     })
@@ -410,13 +447,19 @@ class Main extends React.Component {
       delete data.trips[tripHash]
     })
 
+    // Trips with modified branches:
+    modified = update.branch
+    Object.keys(modified).forEach(tripHash => {
+      data.trips[tripHash].branch = modified[tripHash]
+    })
 
-    /// TODO!! modified status / branch
-
+    /// TODO: modified status
 
     /// Update the data and flash the updated trips:
+    const processedData = processData(data)
     this.setState({
-      realtimeData: data,
+      unprocessedData: data,
+      processedData: processedData,
       updatedTrips: updatedTrips
     }, (() => {
       this.flashDataStatus()
@@ -430,7 +473,9 @@ class Main extends React.Component {
     )
   }
 
+
   componentDidMount() {
+    // force the React DOM to reload every second to update times specified in seconds:
     this.forceUpdateInterval = setInterval(() => this.setState({ time: Date.now() }), 1 * 1000);
   }
   componentWillUnmount() {
@@ -438,82 +483,47 @@ class Main extends React.Component {
   }
 
 
-  processData(data) {
-    // add a val:key version of the lookup for routes (hash -> name)
-    data.routeNameLookup = {}
-    for (let key in data.routehashLookup) {
-      let val = data.routehashLookup[key]
-      data.routeNameLookup[val] = key
-    }
+  flashDataStatus() {
+    this.setState({
+      dataStatusFlash: true
+    })
+    sleep(500).then(() => { // TODO: make this a constant that is 2x the CSS transformation time value
+      this.setState({
+        dataStatusFlash: false
+      })
+    })
+  }
 
-    // add a val:key version of the lookup for routes (hash -> name)
-    // TODO: unneeded?
-    data.stationNameLookup = {}
-    for (let key in data.stationhashLookup) {
-      let val = data.stationhashLookup[key]
-      data.stationNameLookup[val] = key
-    }
+  loadFull(raw) {
+    const unprocessedData = DataFull.decode(raw)
+    console.debug(unprocessedData)
+    const processedData = processData(unprocessedData)
 
-    // populate the arrivals list for each station in props.stations
-    // also, create a set of finalStations for each route
-    for (let stationHash in data.stations) {
-      data.stations[stationHash].arrivals = {}
-    }
-    for (let routeHash in data.routes) {
-      data.routes[routeHash].finalStations = new Set()
-    }
-    // console.log(Object.keys(data.routes))
-    for (let tripHash in data.trips) {
-      // console.log(tripHash)
-      const trip = data.trips[tripHash]
-      for (let elem of Object.entries(trip.arrivals)) {
-        const stationHash = elem[0]
-            , arrivalTime = elem[1]
-        try {
-          if (!data.stations[stationHash].arrivals[arrivalTime]) {
-            data.stations[stationHash].arrivals[arrivalTime] = {}
-          }
-        } catch {
-          // console.log('ERROR on stationHash for trip.arrivals:', trip.arrivals, 'and elem:', elem)
-        }
-        try {
-          data.stations[stationHash].arrivals[arrivalTime][trip.branch.finalStation] = tripHash
-          data.routes[trip.branch.routeHash.toString()].finalStations.add(trip.branch.finalStation) // TODO figure out why each routeHash in data.routes is a string...
-        } catch (err) {
-          // console.log('ERROR', trip.branch.routeName)
-        }
-      }
-    }
+    this.setState({
+      unprocessedData: unprocessedData,
+      processedData: processedData
+    })
+    this.flashDataStatus()
+  }
+  loadUpdate(raw) {
+    const update = DataUpdate.decode(raw)
+    console.debug(update)
 
-    return data
+    this.updateRealtimeData(update)
   }
 
 
   decodeZippedProto(compressedBlob) {
-    // console.log('Unzipping')
     var fileReader = new FileReader();
     fileReader.onload = (event) => {
         const decompressed = pako.inflate(event.target.result)
-        let protobufObj
-
-        if (upcomingMessageType === DATA_FULL) {
-          protobufObj = DataFull.decode(decompressed)
-          let data = this.processData(protobufObj)
-
-          this.setState({ realtimeData: data })          
-          this.flashDataStatus()
-          // console.log(protobufObj)
-          
-        }
-        else if (upcomingMessageType === DATA_UPDATE) {
-          protobufObj = DataUpdate.decode(decompressed)
-
-          this.updateRealtimeData(protobufObj)
-          // console.log(protobufObj)
-        }
+        if (upcomingMessageType === DATA_FULL) this.loadFull(decompressed)
+        else if (upcomingMessageType === DATA_UPDATE) this.loadUpdate(decompressed)
+        else console.error("upcomingMessageType not valid")
     }
     fileReader.readAsArrayBuffer(compressedBlob);
   }
+
 
   render() {
     let dataStatus
@@ -525,7 +535,6 @@ class Main extends React.Component {
     } else {
       dataStatus = ''
     }
-    // console.log(this.state.realtimeData)
     return (
       <React.Fragment>
         <div id="header-bar"/>
@@ -550,7 +559,7 @@ class Main extends React.Component {
 
           <div className="row data">
             <div className="ten columns offset-by-one">
-              <Data data={ this.state.realtimeData } updatedTrips={ this.state.updatedTrips }/>
+              <RouteList data={ this.state.processedData } updatedTrips={ this.state.updatedTrips }/>
             </div>
           </div>
         </div>

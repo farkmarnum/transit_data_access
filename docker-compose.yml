@@ -15,6 +15,10 @@ services:
       - redis_server
     ports:
       - "45654:45654"
+    deploy:
+      resources:
+       limits:
+        memory: 512M
 
   web_server:
     env_file:
@@ -30,7 +34,9 @@ services:
   web_client:
     env_file:
       - ./config/docker.env
-    build: ./web_server/client
+    build:
+      context: ./web_server/client
+      target: release
     image: "farkmarnum/transit_data_access:web_client"
     depends_on:
       - web_server

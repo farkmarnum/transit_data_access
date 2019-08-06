@@ -15,6 +15,10 @@ services:
       - redis_server
     ports:
       - "45654:45654"
+    deploy:
+      resources:
+       limits:
+        memory: 512M
 
   web_server:
     env_file:

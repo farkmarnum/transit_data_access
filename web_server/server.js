@@ -5,7 +5,7 @@ const Redis = require('ioredis')
 
 
 /// /// CONSTANTS /// ///
-const hostname = process.env.WEBSOCKET_SERVER_HOSTNAME || '0.0.0.0'
+const hostname = '0.0.0.0'
 const port = process.env.WEBSOCKET_SERVER_PORT || 8000
 const redisHostname = process.env.REDIS_HOSTNAME || 'redis_server'
 const redisPort = process.env.REDIS_PORT || 6379
@@ -112,7 +112,15 @@ wsServer.on('connection', (ws, request) => {
       if (parsed.type === 'data_received') {
         clients[clientId].lastSuccessfulTimestamp = parsed.last_successful_timestamp
       } else if (parsed.type === 'request_full') {
-        sendFull(clients[clientId])
+        if (dataFull !== null) {
+          sendFull(clients[clientId])
+        } else {
+          clients[clientId].ws.send(`
+{
+  "type": "error",
+  "error": "no_data"
+}`)
+        }
       }
     } catch (err) {
       console.log(err)

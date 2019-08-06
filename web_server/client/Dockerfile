@@ -17,8 +17,9 @@ RUN npm install
 # ---- Copy Files/Build ----
 FROM dependencies AS dev
 WORKDIR /app
+COPY . /app
 # RUN DEV SERVER
-CMD ["npm", "start"]
+CMD npm start
 
 
 # ---- Copy Files/Build ----
@@ -37,7 +38,7 @@ RUN npm -g install serve
 COPY --from=dependencies /app/package.json ./
 # Install app dependencies
 RUN npm install --only=production
-COPY --from=build /app ./
+COPY --from=build /app /app
 CMD ["serve", "-s", "build", "-p", "3000"]
 #	CMD ["node", "server.js"]
 
