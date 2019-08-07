@@ -356,7 +356,6 @@ class RealtimeManager():
         for trip_hash, trip in data_full.trips.items():
             proto_full.trips[trip_hash].branch.route_hash = trip.branch.route
             proto_full.trips[trip_hash].branch.final_station = trip.branch.final_station
-            proto_full.trips[trip_hash].branch.route_name = trip.branch.route_name  # FOR DEBUGGING
             proto_full.trips[trip_hash].status = trip.status
             proto_full.trips[trip_hash].timestamp = trip.timestamp if trip.timestamp else 0
             for station_hash, arrival_time in trip.arrivals.items():

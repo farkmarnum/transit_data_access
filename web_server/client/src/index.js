@@ -25,7 +25,7 @@ let DataUpdate
 let ws
 
 
-/// React HELPER FUNCTIONS
+/// React HELPER FUNCTIONS ///
 function processData(data) {
   // add a val:key version of the lookup for routes (hash -> name)
   data.routeNameLookup = {}
@@ -63,13 +63,13 @@ function processData(data) {
           data.stations[stationHash].arrivals[finalStation] = {}
         }
       } catch {
-        console.error('ERROR on stationHash for trip.arrivals:', trip.arrivals, 'and elem:', elem)
+        console.debug(`ERROR on stationHash for trip.arrivals: ${trip.arrivals} and elem: ${elem}`)
       }
       try {
         data.stations[stationHash].arrivals[finalStation][arrivalTime] = tripHash
         data.routes[trip.branch.routeHash.toString()].finalStations.add(finalStation) // TODO figure out why each routeHash in data.routes is a string...
       } catch (err) {
-        console.error(trip.branch.routeHash, 'not in data.routes')
+        console.debug(`ERROR: ${trip.branch.routeHash} not in data.routes`)
       }
     }
   }
@@ -77,9 +77,31 @@ function processData(data) {
   return data
 }
 
+function dataReceivedMsg(timestamp) {
+  return `{"type": "data_received", "last_successful_timestamp": "${timestamp}"}`
+}
 
-/// REACT
-/// /// /// TODO: ORGANIZE THIS WITH A BETTER CLASS HEIRARCHY SO IT'S READABLE! ALSO COMMENTS!!! AND DOCSTRINGS!!!!!!
+function requestFullMsg(error='none') {
+  return `{"type": "request_full", "error": "${error}"}`
+}
+
+/// REACT COMPONENTS ///
+function StationName(props) {
+  return (
+    <span className='station-name'>
+      {props.name}
+    </span>
+  )
+}
+
+function ArrivalTime(props) {
+  return (
+    <span className={"arrival-time " + props.formattingClasses}>
+      {props.time}
+    </span>
+  )
+}
+
 function RouteArrivals(props) {
   if (props.selectedRoute && props.selectedFinalStation) {
     return (
@@ -87,8 +109,8 @@ function RouteArrivals(props) {
         <code>*Known Issue: some stations are out of order</code>
         {
           props.selectedRoute.stations.map((stationHash, i) => {
-            const now = Date.now()
-            const stationName = props.data.stations[stationHash].name
+            // Filter arrivals to leave only those on a given route that haven't already happened yet
+            const now = Date.now() / 1000
             const arrivals = props.data.stations[stationHash].arrivals[props.selectedFinalStation]
             if(!arrivals) return null
 
@@ -98,18 +120,18 @@ function RouteArrivals(props) {
                 console.error(`${tripHash} not found?`)
                 return false
               }
-                let routeHash = props.data.trips[tripHash].branch.routeHash
-                  return (
-                    (routeHash === props.selectedRouteHash) &&
-                    (arrivalTime - (now / 1000) > -30)
-                  )
+              let routeHash = props.data.trips[tripHash].branch.routeHash
+              return (
+                (routeHash === props.selectedRouteHash) &&
+                (arrivalTime - now > -30)
+              )
             })
             arrivalsForRoute = arrivalsForRoute.sort().slice(0, 3)
 
             // convert each timeDiff (# of secs) to a text representation (30s, 4m, 12:34p, etc), and a styling based on how soon it is
             let arrivalTimeDiffsWithFormatting = arrivalsForRoute.map(arrivalTimeStr => { // TODO: why is this a string
               let arrivalTime = parseInt(arrivalTimeStr)
-              let timeDiff = Math.floor(arrivalTime - (now / 1000))
+              let timeDiff = Math.floor(arrivalTime - now)
               let outList = []
               if (timeDiff < 15) {
                 outList =  ["now", "very-soon"]
@@ -132,16 +154,12 @@ function RouteArrivals(props) {
             if (arrivalTimeDiffsWithFormatting.length === 0) return null
             return (
               <div className='station' key={i}>
-                <span className='station-name'>
-                  {stationName}
-                </span>
+                <StationName name={props.data.stations[stationHash].name} />
                 {
                   arrivalTimeDiffsWithFormatting.map((timeDiffWithFormatting, i) => {
-                    let[timeDiff, formattingClass] = timeDiffWithFormatting
+                    let[timeDiff, formattingClasses] = timeDiffWithFormatting
                     return (
-                      <span className={"arrival-time " + formattingClass} key={i}>
-                        {timeDiff}
-                      </span>
+                      <ArrivalTime time={timeDiff} formattingClasses={formattingClasses} key={i} />
                     )
                   })
                 }
@@ -163,11 +181,13 @@ class RouteList extends React.Component {
       selectedFinalStation: null,
       finalStations: null
     }
+    this.finalStationClicked.bind(this)
+    this.routeClicked.bind(this)
   }
 
   routeClicked(routeHash) {
     const newRouteHash = (routeHash === this.state.selectedRouteHash) ? null : routeHash
-    const finalStations = (newRouteHash === null) ? null : this.routes[newRouteHash].finalStations
+    const finalStations = (newRouteHash === null) ? null : this.props.data.routes[newRouteHash].finalStations
     this.setState({
       selectedRouteHash: newRouteHash,
       finalStations: finalStations,
@@ -179,33 +199,25 @@ class RouteList extends React.Component {
     this.setState({
       selectedFinalStation: (stationHash === this.state.selectedFinalStation) ? null : stationHash
     })
-
   }
 
   render() {
-    if (this.props.data !== null) {
-      this.routes = this.props.data.routes
-      this.routeNameLookup = this.props.data.routeNameLookup
-      this.stations = this.props.data.stations
-    }
-
     if (this.props.data === null) {
       return "Waiting for data..."
     }
-    if (!this.routes) {
+    if (!this.props.data.routes) {
       return "Routes not found"
     }
 
-    const routeInfos = Object.entries(this.routes).map((elem, i) => {
+    const routeInfos = Object.entries(this.props.data.routes).map((elem, i) => {
       let routeHash = parseInt(elem[0])
       let routeInfo = elem[1]
-      let routeName = this.routeNameLookup[routeHash]
-      // console.log([routeName, routeInfo, i])
+      let routeName = this.props.data.routeNameLookup[routeHash]
       return [routeName, routeInfo, routeHash, i]
     })
 
-    const selectedRoute = this.routes[this.state.selectedRouteHash]
-    const selectedRouteName = this.routeNameLookup[this.state.selectedRouteHash]
+    const selectedRoute = this.props.data.routes[this.state.selectedRouteHash]
+    const selectedRouteName = this.props.data.routeNameLookup[this.state.selectedRouteHash]
 
     let finalStationsRender
     if (this.state.finalStations !== null && this.state.finalStations.size > 0) {
@@ -213,11 +225,11 @@ class RouteList extends React.Component {
         return (
           <button
             className={"final-station " + ((this.state.selectedFinalStation === stationHash) ? "selected" : "")}
-            onClick={this.finalStationClicked.bind(this, stationHash)}
+            onClick={() => this.finalStationClicked(stationHash)}
             key={i}
           >
             {
-              "to " + this.stations[stationHash].name
+              "to " + this.props.data.stations[stationHash].name
             }
           </button>
         )
@@ -253,7 +265,7 @@ class RouteList extends React.Component {
                   className={"route-name"}
                   style={style}
                   title={routeInfo.desc}
-                  onClick={this.routeClicked.bind(this, routeHash)}
+                  onClick={() => this.routeClicked(routeHash)}
                 >
                   { routeName }
                 </button>
@@ -277,7 +289,6 @@ class RouteList extends React.Component {
     )
   }
 }
-
 
 
 class Main extends React.Component {
@@ -311,14 +322,14 @@ class Main extends React.Component {
     ws = new WebSocket(wsURL)
 
     ws.onopen = () => {
-    console.info(`Websocket connection established!`)
-    ws.send(`{ "type": "request_full" }`)
+    console.debug(`Websocket connection established!`)
+    ws.send(requestFullMsg())
       this.setState({
         connected: true
       })
     }
     ws.onclose = (evt) => {
-      console.info('Websocket connection closed!')
+      console.debug('Websocket connection closed!')
       this.setState({
         connected: false
       }, () => {
@@ -351,17 +362,14 @@ class Main extends React.Component {
         // received an object -- this should be either data_full or data_update
         if (data.size !== upcomingMessageBinaryLength) {
           console.log('data.size - upcomingMessageBinaryLength is a difference of: ', data.size - upcomingMessageBinaryLength)
-          ws.send(`{ "type": "request_full" }`)
+          ws.send(requestFullMsg())
         } else {
           this.decodeZippedProto(data)
           this.setState({
             lastSuccessfulTimestamp: upcomingMessageTimestamp
           }, () => {
             upcomingMessageTimestamp = 0
-            ws.send(`{
-              "type": "data_received",
-              "last_successful_timestamp": "${this.state.lastSuccessfulTimestamp}"
-            }`)
+            ws.send(dataReceivedMsg(this.state.lastSuccessfulTimestamp))
           })
         }
       } else {

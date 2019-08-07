@@ -19,6 +19,11 @@ services:
       resources:
        limits:
         memory: 512M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 4
+        window: 10s
 
   web_server:
     env_file:
@@ -30,6 +35,12 @@ services:
       - parser
     ports:
       - "8000:8000"
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 3s
+        max_attempts: 10
+        window: 10s
 
   web_client:
     env_file:
@@ -41,4 +52,10 @@ services:
     depends_on:
       - web_server
     ports:
-      - "3000:3000"
+      - "80:3000"
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 3s
+        max_attempts: 3
+        window: 30s

@@ -79,7 +79,7 @@ config/example.env gives an example of a config file for the docker environment 
 Issues/Plans
 ------
 
-* Frontend dataUpdates are not actually being processed yet (many bugs). Once that's fixed, there needs to be some sort of sort+hashsum check that everything worked.
+* Frontend dataUpdates need to have some sort of sort+hashsum check that everything worked after an update.
 
 * The NodeJS code needs better commenting, documentation, and organization
 
