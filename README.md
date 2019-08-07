@@ -76,13 +76,21 @@ Currently the project is built with docker-compose, and the images then manually
 config/example.env gives an example of a config file for the docker environment variables. This file should be named docker.env
 
 
-Issues/Plans
+Issues
 ------
 
-* Frontend dataUpdates need to have some sort of sort+hashsum check that everything worked after an update.
+* The code needs tests !!
 
 * The NodeJS code needs better commenting, documentation, and organization
 
-* The backend code needs tests
-
 * Docker needs a robust build/test/deploy pipeline
+
+
+Plans
+------
+
+* Frontend dataUpdates should have some sort of sort+hashsum check that everything worked after an update.
+
+* Add feature: get arrivals by station
+
+* Add feature: trip planning / path finding

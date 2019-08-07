@@ -12,3 +12,8 @@ pull:
 
 run:
 	docker stack deploy -c docker-compose.yml tda
+
+update:
+	docker service update tda_parser --image farkmarnum/transit_data_access:parser \
+	&& docker service update tda_web_server --image farkmarnum/transit_data_access:web_server \
+	&& docker service update tda_web_client --image farkmarnum/transit_data_access:web_client
