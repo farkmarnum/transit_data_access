@@ -23,7 +23,7 @@ class RedisHandler:
         self.server.publish('realtime_updates', 'new_data')
         u.log.debug('published \'new_data\' to realtime_updates')
 
-def connect_to_redis() -> Tuple[RedisHandler, redis.Redis]:
+def connect_to_redis() -> Tuple[realtime.RealtimeManager, redis.Redis]:
     """ establishes a connection to Redis and returns the handler and server
     Retries indefinitely upon failure
     """
@@ -31,14 +31,14 @@ def connect_to_redis() -> Tuple[RedisHandler, redis.Redis]:
         try:
             redis_handler = RedisHandler()
             redis_server = redis_handler.server
-            return redis_handler, redis_server
+            realtime_manager = realtime.RealtimeManager(redis_handler)
+            return realtime_manager, redis_server
         except redis.exceptions.ConnectionError:
             time.sleep(2)
 
 def main_loop() -> None:
-    redis_handler, redis_server = connect_to_redis()
+    realtime_manager, redis_server = connect_to_redis()
 
-    realtime_manager = realtime.RealtimeManager(redis_handler)
     time_for_next_static_parse = time_for_next_realtime_parse = time.time()
 
     while True:
@@ -59,7 +59,7 @@ def main_loop() -> None:
 
         except redis.exceptions.ConnectionError:
             # if we've lost connection to Redis, reconnect.
-            redis_handler, redis_server = connect_to_redis()
+            realtime_manager, redis_server = connect_to_redis()
 
 if __name__ == "__main__":
     main_loop()
