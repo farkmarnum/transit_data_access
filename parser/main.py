@@ -1,7 +1,7 @@
 """ This script manages the database server
 """
 import time
-from typing import Dict
+from typing import Dict, Tuple
 import redis
 import static     # type: ignore
 import realtime   # type: ignore
@@ -11,7 +11,6 @@ import util as u  # type: ignore
 class RedisHandler:
     def __init__(self) -> None:
         self.server: redis.Redis = redis.Redis(host=u.REDIS_HOSTNAME, port=u.REDIS_PORT, db=0)
-        # self.pubsub = self.server.pubsub()
 
     def realtime_push(self, current_timestamp: int, data_full: bytes, data_diffs: Dict[int, bytes]) -> None:
         u.log.debug('Pushing the realime data to redis_server')
@@ -24,27 +23,43 @@ class RedisHandler:
         self.server.publish('realtime_updates', 'new_data')
         u.log.debug('published \'new_data\' to realtime_updates')
 
+def connect_to_redis() -> Tuple[RedisHandler, redis.Redis]:
+    """ establishes a connection to Redis and returns the handler and server
+    Retries indefinitely upon failure
+    """
+    while True:
+        try:
+            redis_handler = RedisHandler()
+            redis_server = redis_handler.server
+            return redis_handler, redis_server
+        except redis.exceptions.ConnectionError:
+            time.sleep(2)
+
 def main_loop() -> None:
-    redis_handler = RedisHandler()
-    redis_server = redis_handler.server
+    redis_handler, redis_server = connect_to_redis()
 
     realtime_manager = realtime.RealtimeManager(redis_handler)
     time_for_next_static_parse = time_for_next_realtime_parse = time.time()
 
     while True:
-        if time.time() > time_for_next_static_parse:
-            u.log.debug('initiating static parse')
-            static_handler = static.StaticHandler(redis_server)
-            static_handler.update()
-            del static_handler
-            time_for_next_static_parse += (60 * 60 * 24)
+        try:
+            if time.time() > time_for_next_static_parse:
+                u.log.debug('initiating static parse')
+                static_handler = static.StaticHandler(redis_server)
+                static_handler.update()
+                del static_handler
+                time_for_next_static_parse += (60 * 60 * 24)
 
-        if time.time() > time_for_next_realtime_parse:
-            u.log.debug('initiating realtime parse')
-            realtime_manager.update()
-            time_for_next_realtime_parse += 15
+            if time.time() > time_for_next_realtime_parse:
+                u.log.debug('initiating realtime parse')
+                realtime_manager.update()
+                time_for_next_realtime_parse += 15
 
-        time.sleep(1)
+            time.sleep(1)
+
+        except redis.exceptions.ConnectionError:
+            # if we've lost connection to Redis, reconnect.
+            redis_handler, redis_server = connect_to_redis()
 
 if __name__ == "__main__":
     main_loop()

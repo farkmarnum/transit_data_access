@@ -112,7 +112,7 @@ wsServer.on('connection', (ws, request) => {
       if (parsed.type === 'data_received') {
         clients[clientId].lastSuccessfulTimestamp = parsed.last_successful_timestamp
       } else if (parsed.type === 'request_full') {
-        if (dataFull !== null) {
+        if (dataFull != null) {
           sendFull(clients[clientId])
         } else {
           clients[clientId].ws.send(`
