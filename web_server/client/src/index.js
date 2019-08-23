@@ -50,9 +50,7 @@ function processData(data) {
   for (let routeHash in data.routes) {
     data.routes[routeHash].finalStations = new Set()
   }
-  // console.log(Object.keys(data.routes))
   for (let tripHash in data.trips) {
-    // console.log(tripHash)
     const trip = data.trips[tripHash]
     for (let elem of Object.entries(trip.arrivals)) {
       const stationHash = elem[0]
@@ -322,14 +320,12 @@ class Main extends React.Component {
     ws = new WebSocket(wsURL)
 
     ws.onopen = () => {
-    console.debug(`Websocket connection established!`)
     ws.send(requestFullMsg())
       this.setState({
         connected: true
       })
     }
     ws.onclose = (evt) => {
-      console.debug('Websocket connection closed!')
       this.setState({
         connected: false
       }, () => {
@@ -337,7 +333,7 @@ class Main extends React.Component {
       })
     }
     ws.onerror = (evt) => {
-      console.log('Error:', evt)
+      console.error(evt)
     }
 
     ws.onmessage = (msg) => {
@@ -355,13 +351,13 @@ class Main extends React.Component {
           upcomingMessageBinaryLength = parseInt(parsed.data_size)
           upcomingMessageType = DATA_UPDATE
           if (this.state.lastSuccessfulTimestamp !== parseInt(parsed.timestamp_from)) {
-            console.log(`this.state.lastSuccessfulTimestamp = ${this.state.lastSuccessfulTimestamp}, timestamp_from = ${parsed.timestamp_from}`)
+            console.debug(`this.state.lastSuccessfulTimestamp = ${this.state.lastSuccessfulTimestamp}, timestamp_from = ${parsed.timestamp_from}`)
           }
         }
       } else if (typeof data === 'object') {
         // received an object -- this should be either data_full or data_update
         if (data.size !== upcomingMessageBinaryLength) {
-          console.log('data.size - upcomingMessageBinaryLength is a difference of: ', data.size - upcomingMessageBinaryLength)
+          console.debug('data.size - upcomingMessageBinaryLength is a difference of: ', data.size - upcomingMessageBinaryLength)
           ws.send(requestFullMsg())
         } else {
           this.decodeZippedProto(data)
@@ -374,7 +370,7 @@ class Main extends React.Component {
         }
       } else {
         // received neither a string or object!
-        console.log('DATA RECEIVED TYPE = ', data)
+        console.debug('DATA RECEIVED TYPE = ', data)
       }
     }
   }
@@ -391,7 +387,7 @@ class Main extends React.Component {
       Object.entries(added[tripHash].arrival).forEach(elem => {
         let stationArrival = elem[1]
         data.trips[tripHash].arrivals[stationArrival.stationHash] = stationArrival.arrivalTime
-        if (!stationArrival.stationHash || !stationArrival.arrivalTime) console.log('!', stationArrival)
+        if (!stationArrival.stationHash || !stationArrival.arrivalTime) console.debug(stationArrival)
       })
     })
 
@@ -504,9 +500,7 @@ class Main extends React.Component {
 
   loadFull(raw) {
     const unprocessedData = DataFull.decode(raw)
-    console.debug(unprocessedData)
     const processedData = processData(unprocessedData)
-
     this.setState({
       unprocessedData: unprocessedData,
       processedData: processedData
@@ -515,8 +509,6 @@ class Main extends React.Component {
   }
   loadUpdate(raw) {
     const update = DataUpdate.decode(raw)
-    console.debug(update)
-
     this.updateRealtimeData(update)
   }
 
