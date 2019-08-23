@@ -16,5 +16,8 @@ push:
 	&& docker push 517918230755.dkr.ecr.us-east-2.amazonaws.com/transit-data-access/web_server:latest \
 	&& docker push 517918230755.dkr.ecr.us-east-2.amazonaws.com/transit-data-access/web_client:latest \
 
+register-task:
+	aws ecs register-task-definition --cli-input-json file://ecs-task.json
+
 deploy:
 	aws ecs update-service --service transit-data-access --force-new-deployment

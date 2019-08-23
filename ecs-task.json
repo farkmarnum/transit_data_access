@@ -27,7 +27,6 @@
             ],
             "startTimeout": 60,
             "stopTimeout": 30,
-            "hostname": "parser",
             "interactive": true,
             "pseudoTerminal": true,
             "logConfiguration": {
@@ -75,7 +74,6 @@
             ],
             "startTimeout": 60,
             "stopTimeout": 30,
-            "hostname": "web-server",
             "interactive": true,
             "pseudoTerminal": true,
             "logConfiguration": {
@@ -115,7 +113,6 @@
             ],
             "startTimeout": 60,
             "stopTimeout": 30,
-            "hostname": "web-client",
             "interactive": true,
             "pseudoTerminal": true,
             "logConfiguration": {
@@ -132,7 +129,5 @@
         "FARGATE"
     ],
     "cpu": "1024",
-    "memory": "2048",
-    "pidMode": "host",
-    "ipcMode": "none"
+    "memory": "2048"
 }
