@@ -39,4 +39,4 @@ COPY --from=dependencies /app/package.json ./
 # Install app dependencies
 RUN npm install --only=production
 COPY --from=build /app /app
-CMD ["serve", "-s", "build", "-p", "3000"]
+CMD ["serve", "-s", "build", "-p", "80"]
