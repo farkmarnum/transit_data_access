@@ -129,7 +129,7 @@ wsServer.on('connection', (ws, request) => {
 
   ws.on('close', () => {
     setTimeout(() => {
-      console.log(`deleting client ${clientId} from clients (new clients len = ${clients.length()})`)
+      console.log(`deleting client ${clientId} from clients (new clients len = ${clients.length})`)
       delete clients[clientId]
     }, 1)
     // }, clientTimeout)
