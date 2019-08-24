@@ -126,6 +126,14 @@ wsServer.on('connection', (ws, request) => {
       console.log(err)
     }
   })
+
+  ws.on('close', () => {
+    setTimeout(() => {
+      console.log(`deleting client ${clientId} from clients (new clients len = ${clients.length()})`)
+      delete clients[clientId]
+    }, 1)
+    // }, clientTimeout)
+  })
 })
 
 function sendFull (client) {
