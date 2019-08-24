@@ -20,4 +20,4 @@ register-task:
 	aws ecs register-task-definition --cli-input-json file://ecs-task.json
 
 deploy:
-	aws ecs update-service --service transit-data-access --force-new-deployment
+	aws ecs update-service --cluster webapps --service transit-data-access --force-new-deployment

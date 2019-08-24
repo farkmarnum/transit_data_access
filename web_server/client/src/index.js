@@ -314,9 +314,10 @@ class Main extends React.Component {
   }
 
   setUpWebSocket() {
-    const hostname = window.location.hostname
-    const wsPort = process.env.WEBSOCKET_SERVER_PORT || 8000
-    const wsURL = `ws://${hostname}:${wsPort}/?unique_id=${uniqueId}`
+    const wsHost = window.location.hostname
+    const wsPort = 443
+    const wsPath = process.env.WEB_SOCKET_PATH || '/ws'
+    const wsURL = `ws://${wsHost}:${wsPort}${wsPath}/?unique_id=${uniqueId}`
     ws = new WebSocket(wsURL)
 
     ws.onopen = () => {

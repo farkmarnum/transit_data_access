@@ -1,5 +1,5 @@
 {
-    "family": "transit-data-access",
+    "family": "tda-backend",
     "taskRoleArn": "ecsTaskExecutionRole",
     "executionRoleArn": "ecsTaskExecutionRole",
     "networkMode": "awsvpc",
@@ -25,7 +25,7 @@
                     "value": "f775a76bd1960c98831b3c2b06c19bb5"
                 }
             ],
-            "startTimeout": 60,
+            "startTimeout": 30,
             "stopTimeout": 30,
             "interactive": true,
             "pseudoTerminal": true,
@@ -72,46 +72,7 @@
                     "condition": "START"
                 }
             ],
-            "startTimeout": 60,
-            "stopTimeout": 30,
-            "interactive": true,
-            "pseudoTerminal": true,
-            "logConfiguration": {
-                "logDriver": "awslogs",
-                "options": {
-                    "awslogs-group": "/ecs/transit-data-access",
-                    "awslogs-region": "us-east-2",
-                    "awslogs-stream-prefix": "ecs"
-                }
-            }
-        },
-        {
-            "name": "web-client",
-            "image": "517918230755.dkr.ecr.us-east-2.amazonaws.com/transit-data-access/web_client",
-            "cpu": 256,
-            "memory": 512,
-            "memoryReservation": 256,
-            "portMappings": [
-                {
-                    "containerPort": 80,
-                    "hostPort": 80,
-                    "protocol": "tcp"
-                }
-            ],
-            "essential": true,
-            "environment": [
-                {
-                    "name": "WEBSOCKET_SERVER_PORT",
-                    "value": "8000"
-                }
-            ],
-            "dependsOn": [
-                {
-                    "containerName": "web-server",
-                    "condition": "START"
-                }
-            ],
-            "startTimeout": 60,
+            "startTimeout": 30,
             "stopTimeout": 30,
             "interactive": true,
             "pseudoTerminal": true,
@@ -128,6 +89,6 @@
     "requiresCompatibilities": [
         "FARGATE"
     ],
-    "cpu": "1024",
-    "memory": "2048"
+    "cpu": "512",
+    "memory": "1024"
 }

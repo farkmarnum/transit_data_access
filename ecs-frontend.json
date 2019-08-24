@@ -1,0 +1,39 @@
+{
+    "family": "tda-frontend",
+    "taskRoleArn": "ecsTaskExecutionRole",
+    "executionRoleArn": "ecsTaskExecutionRole",
+    "networkMode": "awsvpc",
+    "containerDefinitions": [
+        {
+            "name": "web-client",
+            "image": "517918230755.dkr.ecr.us-east-2.amazonaws.com/transit-data-access/web_client",
+            "cpu": 256,
+            "memory": 512,
+            "portMappings": [
+                {
+                    "containerPort": 80,
+                    "hostPort": 80,
+                    "protocol": "tcp"
+                }
+            ],
+            "essential": true,
+            "startTimeout": 30,
+            "stopTimeout": 30,
+            "interactive": true,
+            "pseudoTerminal": true,
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/transit-data-access",
+                    "awslogs-region": "us-east-2",
+                    "awslogs-stream-prefix": "ecs"
+                }
+            }
+        }
+    ],
+    "requiresCompatibilities": [
+        "FARGATE"
+    ],
+    "cpu": "256",
+    "memory": "512"
+}
