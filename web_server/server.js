@@ -20,7 +20,7 @@ let clients = {}
 class Client {
   constructor (ws) {
     this.ws = ws
-    this.conected = true
+    this.connected = true
     this.lastSuccessfulTimestamp = 0
   }
 }
@@ -102,8 +102,14 @@ const wsServer = new WebSocket.Server({ server })
 
 wsServer.on('connection', (ws, request) => {
   const clientId = querystring.parse(request.url.slice(2)).unique_id
-  console.log(`new client w/ ID ${clientId}`)
-  clients[clientId] = new Client(ws, true, 0)
+  if (clients.has(clientId)) {
+    console.log(`client reconnected: ${clientId}`)
+    clients[clientId].connected = true
+    clients[clientId].ws = ws
+  } else {
+    console.log(`new client w/ ID ${clientId}`)
+    clients[clientId] = new Client(ws, true, 0)
+  }
 
   ws.on('message', (msg) => {
     // console.log(msg)
@@ -128,11 +134,14 @@ wsServer.on('connection', (ws, request) => {
   })
 
   ws.on('close', () => {
+    clients[clientId].connected = false
+    clients[clientId].ws = null
     setTimeout(() => {
-      console.log(`deleting client ${clientId} from clients (new clients len = ${clients.length})`)
-      delete clients[clientId]
-    }, 1)
-    // }, clientTimeout)
+      if (!clients[clientId].connected) {
+        console.log(`deleting client ${clientId} from clients (new clients len = ${Object.keys(clients).length})`)
+        delete clients[clientId]
+      }
+    }, 1000 * 15 * 20) // TODO: make this env dependent
   })
 })
 
