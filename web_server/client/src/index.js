@@ -315,13 +315,14 @@ class Main extends React.Component {
 
   setUpWebSocket() {
     const wsHost = window.location.hostname
-    const wsPort = 443
-    const wsPath = process.env.WEB_SOCKET_PATH || '/ws'
+    const wsPort = process.env.WEBSOCKET_SERVER_PORT || 8000
+    // const wsPath = process.env.WEBSOCKET_PATH || '/ws'
+    const wsPath = ''
     const wsURL = `ws://${wsHost}:${wsPort}${wsPath}/?unique_id=${uniqueId}`
     ws = new WebSocket(wsURL)
 
     ws.onopen = () => {
-    ws.send(requestFullMsg())
+      ws.send(requestFullMsg())
       this.setState({
         connected: true
       })
@@ -481,7 +482,10 @@ class Main extends React.Component {
 
   componentDidMount() {
     // force the React DOM to reload every second to update times specified in seconds:
-    this.forceUpdateInterval = setInterval(() => this.setState({ time: Date.now() }), 1 * 1000);
+    this.forceUpdateInterval = setInterval(() => this.setState({
+      time: Date.now()
+
+    }), 1 * 1000);
   }
   componentWillUnmount() {
     clearInterval(this.forceUpdateInterval);
@@ -536,6 +540,8 @@ class Main extends React.Component {
     } else {
       dataStatus = ''
     }
+    let connected = ws && ws.readyState === 1
+
     return (
       <React.Fragment>
         <div id="header-bar"/>
@@ -543,9 +549,9 @@ class Main extends React.Component {
           <div className="row header">
             <span ref="dataStatus" className={
               "absolute-left " +
-              (this.state.connected ? "connected " : "disconnected ")
+              (connected ? "connected " : "disconnected ")
             }>
-              <h6>{this.state.connected ? "connected" : "disconnected"}</h6>
+              <h6>{connected ? "connected" : "disconnected"}</h6>
             </span>
             <span className="title">
               <h3>Transit Data Access</h3>

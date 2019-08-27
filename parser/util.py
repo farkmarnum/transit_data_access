@@ -93,6 +93,9 @@ except AssertionError:
     REALTIME_FREQ, REALTIME_TIMEOUT, REALTIME_MAX_ATTEMPTS = 15, 3.2, 3
 
 
+REDIS_EXP = REALTIME_FREQ * REALTIME_MAX_ATTEMPTS
+
+
 #####################################
 #              LOGGING              #
 #####################################

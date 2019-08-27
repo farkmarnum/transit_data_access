@@ -1,0 +1,43 @@
+{
+    "cluster": "webapps",
+    "serviceName": "tda",
+    "taskDefinition": "arn:aws:ecs:us-east-2:517918230755:task-definition/transit-data-access:8",
+    "loadBalancers": [
+       {  
+          "targetGroupArn":"arn:aws:elasticloadbalancing:us-east-2:517918230755:targetgroup/tda-HTTP-web-client/8a3c4aa82f89aa2b",
+          "containerName":"web-client",
+          "containerPort":80
+       },
+       {  
+          "targetGroupArn":"arn:aws:elasticloadbalancing:us-east-2:517918230755:targetgroup/tda-HTTP-web-server/b66f1625eb684d0f",
+          "containerName":"web-server",
+          "containerPort":8000
+       }
+    ],
+    "serviceRegistries": [], 
+    "desiredCount": 1,
+    "launchType": "FARGATE",
+    "platformVersion": "LATEST",
+    "deploymentConfiguration": {
+        "maximumPercent": 200,
+        "minimumHealthyPercent": 100
+    },
+    "placementConstraints": [], 
+    "placementStrategy": [], 
+    "networkConfiguration": {
+        "awsvpcConfiguration": {
+            "subnets": [
+                "subnet-9e5361f6", 
+                "subnet-886109f2", 
+                "subnet-804393cc"
+            ], 
+            "securityGroups": [
+                "sg-03b8ebc75b589dd02"
+            ],
+            "assignPublicIp": "ENABLED"
+        }
+    }, 
+    "healthCheckGracePeriodSeconds": 60,
+    "schedulingStrategy": "REPLICA",
+    "enableECSManagedTags": true
+}

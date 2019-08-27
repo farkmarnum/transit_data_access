@@ -1,5 +1,5 @@
 {
-    "family": "tda-backend",
+    "family": "transit-data-access",
     "taskRoleArn": "ecsTaskExecutionRole",
     "executionRoleArn": "ecsTaskExecutionRole",
     "networkMode": "awsvpc",
@@ -8,8 +8,6 @@
             "name": "parser",
             "image": "517918230755.dkr.ecr.us-east-2.amazonaws.com/transit-data-access/parser",
             "cpu": 256,
-            "memory": 512,
-            "memoryReservation": 256,
             "essential": true,
             "environment": [
                 {
@@ -41,9 +39,7 @@
         {
             "name": "web-server",
             "image": "517918230755.dkr.ecr.us-east-2.amazonaws.com/transit-data-access/web_server",
-            "cpu": 256,
-            "memory": 512,
-            "memoryReservation": 256,
+            "cpu": 512,
             "portMappings": [
                 {
                     "containerPort": 8000,
@@ -84,11 +80,36 @@
                     "awslogs-stream-prefix": "ecs"
                 }
             }
+        },
+        {
+            "name": "web-client",
+            "image": "517918230755.dkr.ecr.us-east-2.amazonaws.com/transit-data-access/web_client",
+            "cpu": 256,
+            "portMappings": [
+                {
+                    "containerPort": 80,
+                    "hostPort": 80,
+                    "protocol": "tcp"
+                }
+            ],
+            "essential": true,
+            "startTimeout": 30,
+            "stopTimeout": 30,
+            "interactive": true,
+            "pseudoTerminal": true,
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/transit-data-access",
+                    "awslogs-region": "us-east-2",
+                    "awslogs-stream-prefix": "ecs"
+                }
+            }
         }
     ],
     "requiresCompatibilities": [
         "FARGATE"
     ],
-    "cpu": "512",
-    "memory": "1024"
+    "cpu": "1024",
+    "memory": "2048"
 }

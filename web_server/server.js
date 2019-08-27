@@ -6,9 +6,17 @@ const Redis = require('ioredis')
 
 /// /// CONSTANTS /// ///
 const hostname = '0.0.0.0'
-const port = process.env.WEBSOCKET_SERVER_PORT || 8000
+const wsPort = process.env.WEBSOCKET_SERVER_PORT || 8000
+// const wsPath = process.env.WEBSOCKET_PATH || '/ws'
+
 const redisHostname = process.env.REDIS_HOSTNAME || 'redis_server'
 const redisPort = process.env.REDIS_PORT || 6379
+
+const noDataError = '{"type": "error","error": "no_data"}'
+
+const realtimeFreq = process.env.REALTIME_FREQ || 15
+const realtimeDataDictCap = process.env.REALTIME_DATA_DICT_CAP || 20
+const clientIdExpiration = realtimeFreq * realtimeDataDictCap * 1000
 
 
 /// /// DATA /// ///
@@ -16,11 +24,11 @@ let dataFull = null
 let dataUpdates = []
 let latestTimestamp = 0
 
-let clients = {}
+let clients = new Map()
 class Client {
   constructor (ws) {
     this.ws = ws
-    this.connected = true
+    this.connected = true // TODO: consider removing this property and just using ws/readyState?
     this.lastSuccessfulTimestamp = 0
   }
 }
@@ -88,7 +96,7 @@ const server = http.createServer((req, res) => {
   res.end() // end the response
 })
 
-server.listen(port, hostname, 1024, (err) => {
+server.listen(wsPort, hostname, 1024, (err) => {
   if (err) {
     console.log(`Server error: ${err}`)
   } else {
@@ -98,34 +106,34 @@ server.listen(port, hostname, 1024, (err) => {
 
 
 /// /// WEBSOCKETS /// ///
-const wsServer = new WebSocket.Server({ server })
+const wsServer = new WebSocket.Server({ server: server })
 
 wsServer.on('connection', (ws, request) => {
   const clientId = querystring.parse(request.url.slice(2)).unique_id
+  console.log('url: ', request.url, 'clientId: ', clientId)
+
   if (clients.has(clientId)) {
     console.log(`client reconnected: ${clientId}`)
-    clients[clientId].connected = true
-    clients[clientId].ws = ws
+    let client = clients.get(clientId)
+    client.connected = true
+    client.ws = ws
   } else {
     console.log(`new client w/ ID ${clientId}`)
-    clients[clientId] = new Client(ws, true, 0)
+    clients.set(clientId, new Client(ws))
   }
 
   ws.on('message', (msg) => {
     // console.log(msg)
     try {
+      let client = clients.get(clientId)
       const parsed = JSON.parse(msg)
       if (parsed.type === 'data_received') {
-        clients[clientId].lastSuccessfulTimestamp = parsed.last_successful_timestamp
+        client.lastSuccessfulTimestamp = parsed.last_successful_timestamp
       } else if (parsed.type === 'request_full') {
         if (dataFull != null) {
-          sendFull(clients[clientId])
+          sendFull(client)
         } else {
-          clients[clientId].ws.send(`
-{
-  "type": "error",
-  "error": "no_data"
-}`)
+          sendNoDataError(client)
         }
       }
     } catch (err) {
@@ -134,16 +142,31 @@ wsServer.on('connection', (ws, request) => {
   })
 
   ws.on('close', () => {
-    clients[clientId].connected = false
-    clients[clientId].ws = null
-    setTimeout(() => {
-      if (!clients[clientId].connected) {
-        console.log(`deleting client ${clientId} from clients (new clients len = ${Object.keys(clients).length})`)
-        delete clients[clientId]
-      }
-    }, 1000 * 15 * 20) // TODO: make this env dependent
+    console.log('client disconnected: ', clientId)
+    let client = clients.get(clientId)
+    client.connected = false
+    client.ws = null
+    setTimeout(removeClient, clientIdExpiration, clientId)
   })
 })
+
+function removeClient (clientId) {
+  let client = clients.get(clientId)
+  if (client) {
+    if (!client.connected) {
+      console.log(`deleting client ${clientId} from clients (new clients size = ${clients.size})`)
+      clients.delete(clientId)
+    } else {
+      console.log(`client ${clientId} reconnected with a new ws and will not be removed`)
+    }
+  } else {
+    console.log(`could not find client: ${clientId}`)
+  }
+}
+
+function sendNoDataError (client) {
+  client.ws.send(noDataError)
+}
 
 function sendFull (client) {
   client.ws.send(`{
@@ -165,11 +188,13 @@ function sendUpdate (client) {
 }
 function pushToAll () {
   console.log(`Received new data w/ timestamp ${latestTimestamp}, pushing it to clients`)
-  for (const [clientID, client] of Object.entries(clients)) {
-    if (client.ws.readyState === WebSocket.OPEN) {
+  for (const [clientId, client] of clients.entries()) {
+    if (client.ws != null && client.ws.readyState === WebSocket.OPEN) {
       if (client.lastSuccessfulTimestamp in dataUpdates) {
+        console.log('sending update to ', clientId)
         sendUpdate(client)
       } else {
+        console.log('sending full to ', clientId)
         sendFull(client)
       }
     }

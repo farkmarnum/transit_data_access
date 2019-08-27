@@ -23,13 +23,20 @@ services:
   web_server:
     env_file:
       - ./config/docker.env
-    build: ./web_server
+    build:
+      context: ./web_server
+      target: dev
     image: "farkmarnum/transit_data_access:web_server"
     depends_on:
       - redis_server
       - parser
     ports:
       - "8000:8000"
+      - "9229:9229"
+    deploy:
+      resources:
+       limits:
+        memory: 512M
 
   web_client:
     env_file:
@@ -47,3 +54,7 @@ services:
       - "35729:35729"
     environment:
       - CHOKIDAR_USEPOLLING=true
+    deploy:
+      resources:
+       limits:
+        memory: 512M
