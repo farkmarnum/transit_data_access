@@ -60,7 +60,6 @@ class RealtimeFeedHandler:
                         self.prev_feed, self.latest_feed, self.latest_timestamp = \
                             self.latest_feed, feed_message, timestamp
                         self.redis_server.hset('realtime:feeds', self.id_, _raw)
-                        print(self.id_, ":", sys.getsizeof(_raw))
                     else:
                         self.result = FetchResult(OLD_FEED)
                     return

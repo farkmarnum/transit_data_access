@@ -21,5 +21,8 @@ push:
 register-task:
 	aws ecs register-task-definition --cli-input-json file://task-transit_data_access.json
 
+create-service:
+	aws ecs create-service --cluster webapps --service-name tda --cli-input-json file://service-tda.json
+
 deploy:
 	aws ecs update-service --cluster webapps --service tda --force-new-deployment
