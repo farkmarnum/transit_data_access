@@ -76,8 +76,6 @@ MTA_STATIC_URL: str = os.environ.get('MTA_STATIC_URL', 'http://web.mta.info/deve
 REDIS_HOST: str  # redis_server
 REDIS_PORT: int  # 6379
 
-BRANCH_SERIALIZED_SENTINEL_CHAR = chr(30)
-
 try:
     REDIS_HOSTNAME = os.environ['REDIS_HOSTNAME']
     REDIS_PORT = int(os.environ['REDIS_PORT'])
@@ -128,7 +126,7 @@ log = logging.getLogger('parser')
 
 
 #####################################
-#         UTILITY METHODS           #
+#        UTILITY FUNCTIONS          #
 #####################################
 def checksum(fname):
     hash_md5 = hashlib.md5()
@@ -149,6 +147,14 @@ def short_hash(input_: Any, type_hint: Type[SpecifiedHash]) -> SpecifiedHash:
     typed_hash = type_hint(ShortHash(hash_int))
     return typed_hash
 
+def trim_dict(dict_):
+    i = 0
+    while len(dict_) > REALTIME_DATA_DICT_CAP:
+        if i > 1000:
+            log.warning("could not trim specified dict to the %d most recent keys", REALTIME_DATA_DICT_CAP)
+            return
+        del dict_[min(dict_)]
+        i += 1
 
 #####################################
 #      TRANSIT DATA STRUCTURES      #
@@ -158,8 +164,6 @@ class Branch(NamedTuple):
     final_station: StationHash
     # for DEBUGGING:
     route_name: str = ""
-    def serialize(self) -> str:
-        return f'{self.route}{BRANCH_SERIALIZED_SENTINEL_CHAR}{self.final_station}'
 
 class StationArrival(NamedTuple):
     arrival_time: ArrivalTime
@@ -302,18 +306,6 @@ class StaticJSONDecoder(json.JSONDecoder):
 class RealtimeJSONEncoder(json.JSONEncoder):
     """ This is for encoding the parsed realtime data to JSON
     """
-    """
-    def fix_branches(self, dict_: dict) -> dict:
-        data_dict = {}
-        for k, v in dict_.items():
-            if isinstance(v, dict):
-                v = self.fix_branch_keys(v)
-            elif isinstance(v, Branch):
-                v = v.serialize()
-            data_dict[k] = v
-        return data_dict
-    """
-
     def default(self, obj):
         if isinstance(obj, set):
             return list(obj)
@@ -334,8 +326,6 @@ class RealtimeJSONDecoder(json.JSONDecoder):
     def fix_keys(self, dict_: dict) -> dict:
         data_dict = {}
         for k, v in dict_.items():
-            if BRANCH_SERIALIZED_SENTINEL_CHAR in k:
-                k = Branch(*k.split(BRANCH_SERIALIZED_SENTINEL_CHAR))
             if isinstance(v, dict):
                 data_dict[k] = self.fix_keys(v)
             else:

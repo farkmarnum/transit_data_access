@@ -126,6 +126,7 @@ class RealtimeManager():
         _oldest_timestamp_desired = time.time() - u.REALTIME_DATA_DICT_CAP * u.REALTIME_FREQ
         _outdated_timestamps = [t for t in _redis_data_dict_timestamps if float(t) < _oldest_timestamp_desired]
         u.log.debug('removing these timestamps from redis since they\'re too old: %s', _outdated_timestamps)
+
         if _outdated_timestamps:
             self.redis_server.hdel('realtime_data_dict', *_outdated_timestamps)
 
@@ -149,7 +150,6 @@ class RealtimeManager():
             if fh.result.status not in [NEW_FEED, OLD_FEED]:
                 u.log.error('parser: Encountered %s when fetching feed %s', fh.result.error, fh.id_)
 
-        # self.average_realtime_timestamp = int(sum([fh.latest_timestamp for fh in self.feed_handlers]) / len(self.feed_handlers))
         new_feeds = sum([int(fh.result.status == NEW_FEED) for fh in self.feed_handlers])
         u.log.info('parser: %s new feeds', new_feeds)
         if new_feeds < 1:
@@ -164,10 +164,9 @@ class RealtimeManager():
                 full_feed.MergeFrom(fh.latest_feed)
             except (ValueError, TypeError):
                 try:
-                    continue  # JUST FOR NOW
                     full_feed.MergeFrom(fh.prev_feed)
                 except (ValueError, TypeError) as err:
-                    raise u.UpdateFailed('Could not merge feed', fh.id_, err)
+                    u.log.error('Could not merge feed %s. Error: %s', fh.id_, err)
 
         self.feed = full_feed
 
@@ -237,14 +236,9 @@ class RealtimeManager():
                     trip_hash = u.short_hash(elem.vehicle.trip.trip_id, u.TripHash)
                     self.current_data.trips[trip_hash].status = u.STOPPED
 
-        self.serialize_to_JSON()
-
 
     def load_data_and_diffs(self) -> None:
         self.data_dict[self.current_timestamp] = self.current_data
-        if len(self.data_dict) > u.REALTIME_DATA_DICT_CAP:
-            del self.data_dict[min(self.data_dict)]
-        assert len(self.data_dict) <= u.REALTIME_DATA_DICT_CAP
 
         # TODO !!! optimize this with piping
         self.redis_server.hset('realtime_data_dict', self.current_timestamp, self.current_data_json)
@@ -417,40 +411,36 @@ class RealtimeManager():
             self.diff_dict_zlib[timestamp] = _zlib
 
 
-
     def update(self) -> None:
-        with u.TimeLogger() as _tl:
-            try:
-                tmp_data_placeholder = self.current_data
-                asyncio.get_event_loop().run_until_complete(self.fetch_all())
-                _tl.tlog('fetch_all')
-                self.merge_feeds()
-                _tl.tlog('merge_feeds')
-                self.load_static()
-                _tl.tlog('load_static')
-                self.parse()
-                _tl.tlog('parse')
-                self.load_data_and_diffs()
-                _tl.tlog('load_data_and_diffs')
-                self.full_to_protobuf_zlib()
-                _tl.tlog('full_to_protobuf_zlib')
-                self.all_diff_to_protobuf_zlib()
-                _tl.tlog('all_diff_to_protobuf_zlib')
+        try:
+            tmp_data_placeholder = self.current_data
+            asyncio.get_event_loop().run_until_complete(self.fetch_all())
+            self.merge_feeds()
+            self.load_static()
+            self.parse()
+            self.load_data_and_diffs()
+            self.full_to_protobuf_zlib()
+            self.all_diff_to_protobuf_zlib()
 
-                self.redis_handler.realtime_push(
-                    current_timestamp=self.current_timestamp,
-                    data_full=self.current_data_zlib,
-                    data_diffs=self.diff_dict_zlib)
-                _tl.tlog('realtime_push')
+            # trim the in-memory data stores so we don't get a memory leak!
+            # they are each trimmed to only the u.REALTIME_DATA_DICT_CAP most recent keys
+            u.trim_dict(self.data_dict)
+            u.trim_dict(self.diff_dict)
+            u.trim_dict(self.diff_dict_zlib)
 
-            except u.UpdateFailed as err:
-                self.current_data = tmp_data_placeholder
-                u.log.error(err)
-                if not self.current_data:
-                    if self.initial_merge_attempts < self.max_initial_merge_attempts:
-                        time.sleep(5)
-                        self.initial_merge_attempts += 1
-                        self.update()
-                    else:
-                        u.log.error('parser: Couldn\'t get all feeds, exiting after %s attempts.\n%s', self.max_initial_merge_attempts, err)
-                        exit()
+            self.redis_handler.realtime_push(
+                current_timestamp=self.current_timestamp,
+                data_full=self.current_data_zlib,
+                data_diffs=self.diff_dict_zlib)
+
+        except u.UpdateFailed as err:
+            self.current_data = tmp_data_placeholder
+            u.log.error(err)
+            if not self.current_data:
+                if self.initial_merge_attempts < self.max_initial_merge_attempts:
+                    time.sleep(5)
+                    self.initial_merge_attempts += 1
+                    self.update()
+                else:
+                    u.log.error('parser: Couldn\'t get all feeds, exiting after %s attempts.\n%s', self.max_initial_merge_attempts, err)
+                    exit()

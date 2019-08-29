@@ -17,11 +17,9 @@ class RedisHandler:
 
         self.server.set('realtime:current_timestamp', current_timestamp)
         self.server.set('realtime:data_full', data_full)
+        self.server.delete('realtime:data_diffs')
         if data_diffs:
             self.server.hmset('realtime:data_diffs', data_diffs)
-            while self.server.hlen('realtime:data_diffs') > u.REALTIME_DATA_DICT_CAP:
-                self.server.hdel('realtime:data_diffs', min(self.server.hkeys('realtime:data_diffs')))
-            assert self.server.hlen('realtime:data_diffs') <= u.REALTIME_DATA_DICT_CAP
 
         self.server.publish('realtime_updates', 'new_data')
         u.log.debug('published \'new_data\' to realtime_updates')

@@ -10,6 +10,9 @@ reload:
 test:
 	echo "Testing not yet set up..."
 
+aws-login:
+	$(aws ecr get-login --no-include-email)
+
 push:
 	docker tag transit_data_access/parser:latest 517918230755.dkr.ecr.us-east-2.amazonaws.com/transit-data-access/parser:latest \
 	&& docker tag transit_data_access/web_client:latest 517918230755.dkr.ecr.us-east-2.amazonaws.com/transit-data-access/web_client:latest \
@@ -24,5 +27,8 @@ register-task:
 create-service:
 	aws ecs create-service --cluster webapps --service-name tda --cli-input-json file://service-tda.json
 
-deploy:
+update-service:
 	aws ecs update-service --cluster webapps --service tda --force-new-deployment
+
+
+deploy: build test aws-login push update-service
