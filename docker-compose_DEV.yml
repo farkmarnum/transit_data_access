@@ -19,6 +19,7 @@ services:
       resources:
        limits:
         memory: 512M
+        cpus: '0.50'
 
   web_server:
     env_file:
@@ -37,6 +38,7 @@ services:
       resources:
        limits:
         memory: 512M
+        cpus: '0.50'
 
   web_client:
     env_file:
@@ -58,3 +60,4 @@ services:
       resources:
        limits:
         memory: 512M
+        cpus: '0.50'

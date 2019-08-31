@@ -1,16 +1,14 @@
-import React from 'react';
-import ReactDOM from 'react-dom';
-import './normalize.css';
-import './skeleton.css';
-import './index.css';
+import React from 'react'
+import ReactDOM from 'react-dom'
+import './normalize.css'
+import './skeleton.css'
+import './index.css'
 import { sleep } from './utils.js'
 
 const protobuf = require("protobufjs")
 const dateFormat = require('dateformat')
 const pako = require('pako')
-const crypto = require('crypto');
-
-const uniqueId = crypto.randomBytes(64).toString('base64');
+const crypto = require('crypto')
 
 /// DATA INFO
 const DATA_FULL = 0
@@ -24,6 +22,13 @@ let DataFull
 let DataUpdate
 let ws
 
+// CONSTANTS / ENV
+function devLog(entry) {
+  if(process.env.NODE_ENV === 'development') {
+    console.log(entry)
+  }
+}
+
 
 /// React HELPER FUNCTIONS ///
 function processData(data) {
@@ -34,22 +39,20 @@ function processData(data) {
     data.routeNameLookup[val] = key
   }
 
-  // add a val:key version of the lookup for routes (hash -> name)
-  // TODO: unneeded?
-  data.stationNameLookup = {}
-  for (let key in data.stationhashLookup) {
-    let val = data.stationhashLookup[key]
-    data.stationNameLookup[val] = key
-  }
-
-  // populate the arrivals list for each station in props.stations
-  // also, create a set of finalStations for each route
-  for (let stationHash in data.stations) {
-    data.stations[stationHash].arrivals = {}
-  }
+  // create a set of finalStations for each route
   for (let routeHash in data.routes) {
     data.routes[routeHash].finalStations = new Set()
   }
+
+  // add an arrivals list for each station and gather station_name & stationhash into two complimentary mappings
+  data.stationHashFromName = {}
+  data.stationNameFromHash = {}
+  for (let stationHash in data.stations) {
+    data.stations[stationHash].arrivals = {}
+    data.stationHashFromName[data.stations[stationHash].name] = stationHash
+    data.stationNameFromHash[stationHash] = data.stations[stationHash].name
+  }
+  // populate the arrivals list for each station in props.stations
   for (let tripHash in data.trips) {
     const trip = data.trips[tripHash]
     for (let elem of Object.entries(trip.arrivals)) {
@@ -61,13 +64,13 @@ function processData(data) {
           data.stations[stationHash].arrivals[finalStation] = {}
         }
       } catch {
-        console.debug(`ERROR on stationHash for trip.arrivals: ${trip.arrivals} and elem: ${elem}`)
+        devLog(`ERROR on stationHash for trip.arrivals: ${trip.arrivals} and elem: ${elem}`)
       }
       try {
         data.stations[stationHash].arrivals[finalStation][arrivalTime] = tripHash
         data.routes[trip.branch.routeHash.toString()].finalStations.add(finalStation) // TODO figure out why each routeHash in data.routes is a string...
       } catch (err) {
-        console.debug(`ERROR: ${trip.branch.routeHash} not in data.routes`)
+        devLog(`ERROR: ${trip.branch.routeHash} not in data.routes`)
       }
     }
   }
@@ -147,7 +150,7 @@ function RouteArrivals(props) {
               }
               return outList
             })
-            /// TODO: remove dupplicate "now" entries...
+            /// TODO: remove duplicate "now" entries...
 
             if (arrivalTimeDiffsWithFormatting.length === 0) return null
             return (
@@ -314,6 +317,7 @@ class Main extends React.Component {
   }
 
   setUpWebSocket() {
+    const uniqueId = crypto.randomBytes(64).toString('base64')
     const wsHost = window.location.hostname
     const wsPort = process.env.WEBSOCKET_SERVER_PORT || 8000
     // const wsPath = process.env.WEBSOCKET_PATH || '/ws'
@@ -339,7 +343,7 @@ class Main extends React.Component {
     }
 
     ws.onmessage = (msg) => {
-      let data = msg.data;
+      let data = msg.data
       if (typeof data === 'string') {
         // received a string -- this should be either data_full information or data_update information
         let parsed = JSON.parse(data)
@@ -353,13 +357,13 @@ class Main extends React.Component {
           upcomingMessageBinaryLength = parseInt(parsed.data_size)
           upcomingMessageType = DATA_UPDATE
           if (this.state.lastSuccessfulTimestamp !== parseInt(parsed.timestamp_from)) {
-            console.debug(`this.state.lastSuccessfulTimestamp = ${this.state.lastSuccessfulTimestamp}, timestamp_from = ${parsed.timestamp_from}`)
+            devLog(`this.state.lastSuccessfulTimestamp = ${this.state.lastSuccessfulTimestamp}, timestamp_from = ${parsed.timestamp_from}`)
           }
         }
       } else if (typeof data === 'object') {
         // received an object -- this should be either data_full or data_update
         if (data.size !== upcomingMessageBinaryLength) {
-          console.debug('data.size - upcomingMessageBinaryLength is a difference of: ', data.size - upcomingMessageBinaryLength)
+          devLog('data.size - upcomingMessageBinaryLength is a difference of: ', data.size - upcomingMessageBinaryLength)
           ws.send(requestFullMsg())
         } else {
           this.decodeZippedProto(data)
@@ -372,7 +376,7 @@ class Main extends React.Component {
         }
       } else {
         // received neither a string or object!
-        console.debug('DATA RECEIVED TYPE = ', data)
+        devLog('DATA RECEIVED TYPE = ', data)
       }
     }
   }
@@ -389,7 +393,7 @@ class Main extends React.Component {
       Object.entries(added[tripHash].arrival).forEach(elem => {
         let stationArrival = elem[1]
         data.trips[tripHash].arrivals[stationArrival.stationHash] = stationArrival.arrivalTime
-        if (!stationArrival.stationHash || !stationArrival.arrivalTime) console.debug(stationArrival)
+        if (!stationArrival.stationHash || !stationArrival.arrivalTime) devLog(stationArrival)
       })
     })
 
@@ -484,11 +488,10 @@ class Main extends React.Component {
     // force the React DOM to reload every second to update times specified in seconds:
     this.forceUpdateInterval = setInterval(() => this.setState({
       time: Date.now()
-
-    }), 1 * 1000);
+    }), 1 * 1000)
   }
   componentWillUnmount() {
-    clearInterval(this.forceUpdateInterval);
+    clearInterval(this.forceUpdateInterval)
   }
 
 
@@ -506,6 +509,7 @@ class Main extends React.Component {
   loadFull(raw) {
     const unprocessedData = DataFull.decode(raw)
     const processedData = processData(unprocessedData)
+    devLog(processedData)
     this.setState({
       unprocessedData: unprocessedData,
       processedData: processedData
@@ -514,19 +518,20 @@ class Main extends React.Component {
   }
   loadUpdate(raw) {
     const update = DataUpdate.decode(raw)
+    devLog(update)
     this.updateRealtimeData(update)
   }
 
 
   decodeZippedProto(compressedBlob) {
-    var fileReader = new FileReader();
+    var fileReader = new FileReader()
     fileReader.onload = (event) => {
         const decompressed = pako.inflate(event.target.result)
         if (upcomingMessageType === DATA_FULL) this.loadFull(decompressed)
         else if (upcomingMessageType === DATA_UPDATE) this.loadUpdate(decompressed)
         else console.error("upcomingMessageType not valid")
     }
-    fileReader.readAsArrayBuffer(compressedBlob);
+    fileReader.readAsArrayBuffer(compressedBlob)
   }
 
 
@@ -580,4 +585,4 @@ class Main extends React.Component {
 ReactDOM.render(
   <Main />,
   document.getElementById('root')
-);
+)

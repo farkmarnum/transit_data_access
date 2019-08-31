@@ -340,9 +340,6 @@ class RealtimeManager():
         for route_str, route_hash in data_full.routehash_lookup.items():
             proto_full.routehash_lookup[route_str] = route_hash
 
-        for station_str, station_hash in data_full.stationhash_lookup.items():
-            proto_full.stationhash_lookup[station_str] = station_hash
-
         for station_hash, transfers_for_station in data_full.transfers.items():
             for other_station_hash, transfer_time in transfers_for_station.items():
                 proto_full.transfers[station_hash].transfer_times[other_station_hash] = transfer_time

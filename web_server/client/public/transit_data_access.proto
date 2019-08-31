@@ -28,7 +28,6 @@ message DataFull {
   map<uint32, StationInfo> stations = 1010;           // map key is StationHash
 
   map<string, uint32> routehash_lookup = 1011;        // map values are RouteHash
-  map<string, uint32> stationhash_lookup = 1012;      // map values are StationHash
 
   message TransfersForStation {
     map<uint32, uint32> transfer_times = 1014;  // map key is StationHash, value is transfer_time
