@@ -60,16 +60,24 @@ function processData(data) {
       const stationHash = elem[0]
           , arrivalTime = elem[1]
           , finalStation = trip.branch.finalStation
-      try { // TODO: ORGANIZE THIS BY ROUTE
-        if (!data.stations[stationHash].arrivals[finalStation]) {
-          data.stations[stationHash].arrivals[finalStation] = {}
-        }
-      } catch {
-        devLog(`ERROR on stationHash for trip.arrivals: ${trip.arrivals} and elem: ${elem}`)
-      }
+          , routeHash = trip.branch.routeHash.toString()
+          // TODO figure out why each routeHash in data.routes is a string...
+
+      // create the nexted dicts if necessary:
       try {
-        data.stations[stationHash].arrivals[finalStation][arrivalTime] = tripHash
-        data.routes[trip.branch.routeHash.toString()].finalStations.add(finalStation) // TODO figure out why each routeHash in data.routes is a string...
+        if (!data.stations[stationHash].arrivals[routeHash]) {
+          data.stations[stationHash].arrivals[routeHash] = {}
+        }
+        if (!data.stations[stationHash].arrivals[routeHash][finalStation]) {
+          data.stations[stationHash].arrivals[routeHash][finalStation] = {}
+        }
+      } catch { devLog(`ERROR on stationHash for trip.arrivals: ${trip.arrivals} and elem: ${elem}`) }
+
+      // add this arrival to the station 
+      data.stations[stationHash].arrivals[routeHash][finalStation][arrivalTime] = tripHash
+      // add this arrival's finalStation to this route's 'finalStations' Set
+      try {
+        data.routes[trip.branch.routeHash].finalStations.add(finalStation)
       } catch (err) {
         devLog(`ERROR: ${trip.branch.routeHash} not in data.routes`)
       }
@@ -87,9 +95,10 @@ function requestFullMsg(error='none') {
   return `{"type": "request_full", "error": "${error}"}`
 }
 
-function getTimeDiffsWithFormatting(arrivals, updatedTrips) {
+function getTimeDiffsWithFormatting(arrivalsForBranch, updatedTrips) {
+  // Note: arrivalsForBranch should be from arrivals[routeHash][finalStation] for some routeHash and finalStation
   const now = Date.now() / 1000
-  return arrivals.map(arrivalTimeStr => { // TODO: why is this a string
+  return arrivalsForBranch.map(arrivalTimeStr => { // TODO: why is this a string
     let arrivalTime = parseInt(arrivalTimeStr)
     let timeDiff = Math.floor(arrivalTime - now)
     let outList = []
@@ -103,7 +112,7 @@ function getTimeDiffsWithFormatting(arrivals, updatedTrips) {
       outList =  [dateFormat(new Date(arrivalTime * 1000), 'h:MMt'), ""]
     }
 
-    let tripHash = arrivals[arrivalTimeStr]
+    let tripHash = arrivalsForBranch[arrivalTimeStr]
     if (updatedTrips.has(tripHash)) {
       outList[1] = outList[1] + " updated"
     }
@@ -135,28 +144,26 @@ function RouteArrivals(props) {
       <div className='route-stations'>
         <code>*Known Issue: some stations are out of order</code>
         {
+          // Filter arrivals to leave only those on a given route that haven't already happened yet
           props.selectedRoute.stations.map((stationHash, i) => {
-            // Filter arrivals to leave only those on a given route that haven't already happened yet
             const now = Date.now() / 1000
-            const arrivals = props.data.stations[stationHash].arrivals[props.selectedFinalStation]
-            if(!arrivals) return null
+            const station = props.data.stations[stationHash]
+            let arrivalsForBranch = station.arrivals[props.selectedRouteHash][props.selectedFinalStation]
+            if(!arrivalsForBranch) return null
 
-            let arrivalsForRoute = Object.keys(arrivals).filter(arrivalTime => {
-              let tripHash = arrivals[arrivalTime]
+            arrivalsForBranch = Object.keys(arrivalsForBranch).filter(arrivalTime => {
+              let tripHash = arrivalsForBranch[arrivalTime]
               if(!tripHash || !props.data.trips[tripHash]) {
                 console.error(`${tripHash} not found?`)
                 return false
               }
-              let routeHash = props.data.trips[tripHash].branch.routeHash
-              return (
-                (routeHash === props.selectedRouteHash) &&
-                (arrivalTime - now > -30)
-              )
+              return (arrivalTime - now > -30)
             })
-            arrivalsForRoute = arrivalsForRoute.sort().slice(0, 3)
+            // slice to get just the three most recent arrivals
+            arrivalsForBranch = arrivalsForBranch.sort().slice(0, 3)
 
             // convert each timeDiff (# of secs) to a text representation (30s, 4m, 12:34p, etc), and a styling based on how soon it is
-            let arrivalTimeDiffsWithFormatting = getTimeDiffsWithFormatting(arrivalsForRoute, props.updatedTrips)
+            let arrivalTimeDiffsWithFormatting = getTimeDiffsWithFormatting(arrivalsForBranch, props.updatedTrips)
             if (arrivalTimeDiffsWithFormatting.length === 0) return null
             return (
               <div className='route-station' key={i}>
@@ -191,6 +198,7 @@ function RouteNameList(props) {
               , i         = elem[3]
 
           const routeColor = "#" + ("00"+(Number(routeInfo.color).toString(16))).slice(-6)
+          // ^^ TODO: move this logic into processData to be DRY
           let style
           if (routeHash === props.selectedRouteHash) {
             style = {backgroundColor: routeColor, color: 'white'}
@@ -343,9 +351,37 @@ class Search extends React.Component {
   }
 }
 
+function StationRouteArrivals(props) {
+  const routeName = props.data.routeNameLookup[props.routeHash]
+  const finalStationName = props.data.stationNameFromHash[props.finalStation]
+  const timeDiffsWithFormatting = getTimeDiffsWithFormatting(
+    props.station.arrivals[props.routeHash][props.finalStation],
+    props.updatedTrips
+  )
+  const formattedArrivals = timeDiffsWithFormatting.map(
+    (timeDiffWithFormatting, i) => {
+      let[timeDiff, formattingClasses] = timeDiffWithFormatting
+      return (
+        <ArrivalTime time={timeDiff} formattingClasses={formattingClasses} key={i} />
+      )
+    }
+  )
+
+  return (
+    <div className="station-route">
+      <div className="station-route-name" style={{color: props.routeColor}}>
+        { routeName }
+      </div>
+      to { finalStationName }:
+      <div className="station-route-arrivals">
+        { formattedArrivals }
+      </div>
+    </div>
+  )
+}
+
 function Station(props) {
   const station = props.data.stations[props.stationHash]
-
   return (
     <div className="station">
       <div className="station-name">
@@ -353,7 +389,22 @@ function Station(props) {
       </div>
       <div className="station-routes">
         {
-          station.arrivals
+          Object.keys(station.arrivals).forEach((routeHash) => {
+            Object.keys(station.arrivals[routeHash]).forEach((finalStation) => {
+              const routeColor = (
+                "#" +
+                ("00"+(Number(props.data.routes[routeHash].color).toString(16))).slice(-6)
+              )
+              return (
+                <StationRouteArrivals
+                  routeHash={routeHash}
+                  routeColor={routeColor}
+                  finalStation={finalStation}
+                  station={station}
+                />
+              )
+            })
+          })
         }
       </div>
     </div>
@@ -604,23 +655,6 @@ class Main extends React.Component {
       let tripHash = obj.tripHash
         , trip = obj.info
       data.trips[tripHash] = trip
-
-      for (let elem of Object.entries(obj.info.arrivals)) {
-        const stationHash = elem[0]
-            , arrivalTime = elem[1]
-        try {
-          if (!data.stations[stationHash].arrivals[arrivalTime]) {
-            data.stations[stationHash].arrivals[arrivalTime] = {}
-          }
-        } catch (err) {
-          console.log('data.stations[stationHash].arrivals[arrivalTime] failed with', err)
-        }
-        try {
-          data.stations[stationHash].arrivals[arrivalTime][trip.branch.finalStation] = tripHash
-        } catch (err) {
-          console.error('data.stations[stationHash].arrivals[arrivalTime][trip.branch.finalStation failed with', err)
-        }
-      }
     })
 
     // Deleted trips:
@@ -635,7 +669,12 @@ class Main extends React.Component {
       data.trips[tripHash].branch = modified[tripHash]
     })
 
-    /// TODO: modified status
+    // Trips with modified status:
+    // TODO: double check this
+    modified = update.status
+    Object.keys(modified).forEach(tripHash => {
+      data.trips[tripHash].status = modified[tripHash]
+    })
 
     /// Update the data and flash the updated trips:
     const processedData = processData(data)

@@ -10,11 +10,11 @@ WORKDIR /app
 FROM node:${NODE_VERSION} AS dev
 WORKDIR /app
 # A wildcard is used to ensure both package.json AND package-lock.json are copied
-COPY package*.json ./
+COPY package*.json /app/
 RUN npm install
-COPY . ./
+COPY . /app/
 # Run development server
-CMD ["ls", "/app/src", "/app/public"]
+CMD npm start
 
 
 # ---- Dependencies ----

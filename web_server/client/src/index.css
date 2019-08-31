@@ -139,15 +139,17 @@ h3 {
   width: 100%;
   min-height: 3rem;
   margin-top: 1.5rem;
+  border: 0.1rem solid #ddd;
+  padding: 1rem;
 }
 .arrivals-by-station .station .station-name {
   font-weight: 500;
   border-bottom: 0.1rem solid #ccc;
 }
-.arrivals-by-station .station .station-route {
+.arrivals-by-station .station .station-route .station-route-name {
   font-weight: 400;
 }
-.arrivals-by-station .station .station-route {
+.arrivals-by-station .station .station-route .station-route-arrivals {
   font-weight: 300;
 }
 
