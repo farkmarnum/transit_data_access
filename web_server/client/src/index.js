@@ -10,24 +10,25 @@ const dateFormat = require('dateformat')
 const pako = require('pako')
 const crypto = require('crypto')
 
-/// DATA INFO
+
+/// CONSTANTS / ENV
 const DATA_FULL = 0
 const DATA_UPDATE = 1
 let upcomingMessageTimestamp = 0
 let upcomingMessageBinaryLength = 0
 let upcomingMessageType = DATA_FULL
 
-// OBJECTS (initialzed later)
-let DataFull
-let DataUpdate
-let ws
-
-// CONSTANTS / ENV
 function devLog(entry) {
   if(process.env.NODE_ENV === 'development') {
     console.log(entry)
   }
 }
+
+
+/// OBJECTS (initialzed later)
+let DataFull
+let DataUpdate
+let ws
 
 
 /// React HELPER FUNCTIONS ///
@@ -59,7 +60,7 @@ function processData(data) {
       const stationHash = elem[0]
           , arrivalTime = elem[1]
           , finalStation = trip.branch.finalStation
-      try {
+      try { // TODO: ORGANIZE THIS BY ROUTE
         if (!data.stations[stationHash].arrivals[finalStation]) {
           data.stations[stationHash].arrivals[finalStation] = {}
         }
@@ -86,10 +87,35 @@ function requestFullMsg(error='none') {
   return `{"type": "request_full", "error": "${error}"}`
 }
 
+function getTimeDiffsWithFormatting(arrivals, updatedTrips) {
+  const now = Date.now() / 1000
+  return arrivals.map(arrivalTimeStr => { // TODO: why is this a string
+    let arrivalTime = parseInt(arrivalTimeStr)
+    let timeDiff = Math.floor(arrivalTime - now)
+    let outList = []
+    if (timeDiff < 15) {
+      outList =  ["now", "very-soon"]
+    } else if (timeDiff < 60) {
+      outList =  [Math.floor(timeDiff) + "s", "very-soon"]
+    } else if (timeDiff < 20 * 60) {
+      outList =  [Math.floor(timeDiff / 60) + "m", "soon"]
+    } else {
+      outList =  [dateFormat(new Date(arrivalTime * 1000), 'h:MMt'), ""]
+    }
+
+    let tripHash = arrivals[arrivalTimeStr]
+    if (updatedTrips.has(tripHash)) {
+      outList[1] = outList[1] + " updated"
+    }
+    return outList
+  }) /// TODO: remove duplicate "now" entries...
+}
+
+
 /// REACT COMPONENTS ///
-function StationName(props) {
+function RouteStationName(props) {
   return (
-    <span className='station-name'>
+    <span className='route-station-name'>
       {props.name}
     </span>
   )
@@ -106,7 +132,7 @@ function ArrivalTime(props) {
 function RouteArrivals(props) {
   if (props.selectedRoute && props.selectedFinalStation) {
     return (
-      <div className='stations'>
+      <div className='route-stations'>
         <code>*Known Issue: some stations are out of order</code>
         {
           props.selectedRoute.stations.map((stationHash, i) => {
@@ -130,32 +156,11 @@ function RouteArrivals(props) {
             arrivalsForRoute = arrivalsForRoute.sort().slice(0, 3)
 
             // convert each timeDiff (# of secs) to a text representation (30s, 4m, 12:34p, etc), and a styling based on how soon it is
-            let arrivalTimeDiffsWithFormatting = arrivalsForRoute.map(arrivalTimeStr => { // TODO: why is this a string
-              let arrivalTime = parseInt(arrivalTimeStr)
-              let timeDiff = Math.floor(arrivalTime - now)
-              let outList = []
-              if (timeDiff < 15) {
-                outList =  ["now", "very-soon"]
-              } else if (timeDiff < 60) {
-                outList =  [Math.floor(timeDiff) + "s", "very-soon"]
-              } else if (timeDiff < 20 * 60) {
-                outList =  [Math.floor(timeDiff / 60) + "m", "soon"]
-              } else {
-                outList =  [dateFormat(new Date(arrivalTime * 1000), 'h:MMt'), ""]
-              }
-
-              let tripHash = arrivals[arrivalTimeStr]
-              if (props.updatedTrips.has(tripHash)) {
-                outList[1] = outList[1] + " updated"
-              }
-              return outList
-            })
-            /// TODO: remove duplicate "now" entries...
-
+            let arrivalTimeDiffsWithFormatting = getTimeDiffsWithFormatting(arrivalsForRoute, props.updatedTrips)
             if (arrivalTimeDiffsWithFormatting.length === 0) return null
             return (
-              <div className='station' key={i}>
-                <StationName name={props.data.stations[stationHash].name} />
+              <div className='route-station' key={i}>
+                <RouteStationName name={props.data.stations[stationHash].name} />
                 {
                   arrivalTimeDiffsWithFormatting.map((timeDiffWithFormatting, i) => {
                     let[timeDiff, formattingClasses] = timeDiffWithFormatting
@@ -174,7 +179,72 @@ function RouteArrivals(props) {
   return null
 }
 
-class RouteList extends React.Component {
+
+function RouteNameList(props) {
+  return (
+    <div className="route-name-list">
+      {
+        props.routeInfos.sort().map(elem => {
+          const routeName = elem[0]
+              , routeInfo = elem[1]
+              , routeHash = elem[2]
+              , i         = elem[3]
+
+          const routeColor = "#" + ("00"+(Number(routeInfo.color).toString(16))).slice(-6)
+          let style
+          if (routeHash === props.selectedRouteHash) {
+            style = {backgroundColor: routeColor, color: 'white'}
+          } else {
+            style = {color: routeColor, backgroundColor: 'white'}
+          }
+          return (
+            <button
+              key={i}
+              className={"route-name"}
+              style={style}
+              title={routeInfo.desc}
+              onClick={() => props.routeClicked(routeHash)}
+            >
+              { routeName }
+            </button>
+          )
+        })
+      }
+    </div>
+  )
+}
+
+function FinalStationsRender(props) {
+  let output
+  if (props.selectedRouteHash == null) {
+    output = "Click a route to see arrivals!"
+  } else if (props.finalStations !== null && props.finalStations.size > 0) {
+    output = [...props.finalStations].map((stationHash, i) => {
+      return (
+        <button
+          className={"route-final-station " + ((props.selectedFinalStation === stationHash) ? "selected" : "")}
+          onClick={() => props.finalStationClicked(stationHash)}
+          key={i}
+        >
+          { "to " + props.stations[stationHash].name }
+        </button>
+      )
+    })
+  } else {
+    if (props.selectedRouteHash !== null) {
+      output = "No trains currently running on this route."
+    } else {
+      output = props.selectedRouteHash
+    }
+  }
+  return (
+    <div className="route-final-stations">
+      { output }
+    </div>
+  )
+}
+
+class ArrivalsByRoute extends React.Component {
   constructor(props) {
     super(props)
     this.state = {
@@ -182,11 +252,9 @@ class RouteList extends React.Component {
       selectedFinalStation: null,
       finalStations: null
     }
-    this.finalStationClicked.bind(this)
-    this.routeClicked.bind(this)
   }
 
-  routeClicked(routeHash) {
+  routeClicked = (routeHash) => {
     const newRouteHash = (routeHash === this.state.selectedRouteHash) ? null : routeHash
     const finalStations = (newRouteHash === null) ? null : this.props.data.routes[newRouteHash].finalStations
     this.setState({
@@ -196,9 +264,156 @@ class RouteList extends React.Component {
     })
   }
 
-  finalStationClicked(stationHash) {
+  finalStationClicked = (stationHash) => {
     this.setState({
       selectedFinalStation: (stationHash === this.state.selectedFinalStation) ? null : stationHash
+    })
+  }
+
+  render() {
+    const routeInfos = Object.entries(this.props.data.routes).map((elem, i) => {
+      let routeHash = parseInt(elem[0])
+      let routeInfo = elem[1]
+      let routeName = this.props.data.routeNameLookup[routeHash]
+      return [routeName, routeInfo, routeHash, i]
+    })
+
+    const selectedRoute = this.props.data.routes[this.state.selectedRouteHash]
+    const selectedRouteName = this.props.data.routeNameLookup[this.state.selectedRouteHash]
+
+    return (
+      <React.Fragment>
+        <h5>
+          Arrivals By Route
+        </h5>
+        <RouteNameList
+          routeInfos={routeInfos}
+          selectedRouteHash={this.state.selectedRouteHash}
+          routeClicked={this.routeClicked}
+        />
+        <FinalStationsRender
+          finalStations={this.state.finalStations}
+          selectedFinalStation={this.state.selectedFinalStation}
+          selectedRouteHash={this.state.selectedRouteHash}
+          stations={this.props.data.stations}
+          finalStationClicked={this.finalStationClicked}
+        />
+        <RouteArrivals
+          className="route-arrivals"
+          selectedRoute={selectedRoute}
+          selectedRouteHash={this.state.selectedRouteHash}
+          selectedRouteName={selectedRouteName}
+          selectedFinalStation={this.state.selectedFinalStation}
+          updatedTrips={this.props.updatedTrips}
+          data={this.props.data}
+        />
+      </React.Fragment>
+    )
+  }
+}
+
+
+class Search extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = {
+      inputValue: ''
+    }
+  }
+
+  updateInputValue(evt) {
+    this.setState({
+      inputValue: evt.target.value
+    })
+  }
+
+  render() {
+    return (
+      <input
+        className="u-full-width"
+        onInput={
+          evt => {
+            this.updateInputValue(evt)
+            this.props.onInput(evt.target.value)
+          }
+        }
+        placeholder={this.props.placeholder}
+     />
+    )
+  }
+}
+
+function Station(props) {
+  const station = props.data.stations[props.stationHash]
+
+  return (
+    <div className="station">
+      <div className="station-name">
+        { station.name }
+      </div>
+      <div className="station-routes">
+        {
+          station.arrivals
+        }
+      </div>
+    </div>
+  )
+}
+
+class ArrivalsByStation extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = {
+      searchText: ''
+    }
+    this.stationNames = Object.keys(this.props.data.stationHashFromName)
+  }
+
+  updateSearchText = (searchText) => {
+    this.setState({
+      searchText: searchText
+    })
+  }
+
+  render() {
+    return (
+      <div className="arrivals-by-station">
+        <Search
+          placeholder='start typing a station name...'
+          onInput={this.updateSearchText}
+        />
+        {
+          this.stationNames.map((name, i) => {
+            if (name.indexOf(this.state.searchText) >= 0) {
+              return (
+                <Station
+                  key={ i }
+                  data={ this.props.data }
+                  stationHash={ this.props.data.stationHashFromName[name] }
+                />
+              )
+            } else {
+              return null
+            }
+          })
+        }
+      </div>
+    )
+  }
+}
+
+
+class DataInterface extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = {
+      selectedOption: null
+    }
+  }
+
+  setSelectedOption = (option) => {
+    this.setState({
+      selectedOption: option
     })
   }
 
@@ -210,83 +425,40 @@ class RouteList extends React.Component {
       return "Routes not found"
     }
 
-    const routeInfos = Object.entries(this.props.data.routes).map((elem, i) => {
-      let routeHash = parseInt(elem[0])
-      let routeInfo = elem[1]
-      let routeName = this.props.data.routeNameLookup[routeHash]
-      return [routeName, routeInfo, routeHash, i]
-    })
-
-    const selectedRoute = this.props.data.routes[this.state.selectedRouteHash]
-    const selectedRouteName = this.props.data.routeNameLookup[this.state.selectedRouteHash]
-
-    let finalStationsRender
-    if (this.state.finalStations !== null && this.state.finalStations.size > 0) {
-      finalStationsRender = [...this.state.finalStations].map((stationHash, i) => {
-        return (
-          <button
-            className={"final-station " + ((this.state.selectedFinalStation === stationHash) ? "selected" : "")}
-            onClick={() => this.finalStationClicked(stationHash)}
-            key={i}
-          >
-            {
-              "to " + this.props.data.stations[stationHash].name
-            }
-          </button>
-        )
-      })
-    } else {
-      if (this.state.selectedRouteHash !== null) {
-        finalStationsRender = "No trains currently running on this route."
-      } else {
-        finalStationsRender = this.state.selectedRouteHash
-      }
+    let arrivalsDisplay
+    if (this.state.selectedOption === "route") {
+      arrivalsDisplay = (
+        <ArrivalsByRoute
+          data={this.props.data}
+          updatedTrips={this.props.updatedTrips}
+        />
+      )
+    } else if (this.state.selectedOption === "station") {
+      arrivalsDisplay = (
+        <ArrivalsByStation
+          data={this.props.data}
+          updatedTrips={this.props.updatedTrips}
+        />
+      )
     }
     return (
-      <div>
-        <h5> Arrivals by Route </h5>
-        <div className="route-name-list">
-          {
-            routeInfos.sort().map(elem => {
-              const routeName = elem[0]
-                  , routeInfo = elem[1]
-                  , routeHash = elem[2]
-                  , i         = elem[3]
-
-              const routeColor = "#" + ("00"+(Number(routeInfo.color).toString(16))).slice(-6)
-              let style
-              if (routeHash === this.state.selectedRouteHash) {
-                style = {backgroundColor: routeColor, color: 'white'}
-              } else {
-                style = {color: routeColor, backgroundColor: 'white'}
-              }
-              return (
-                <button
-                  key={i}
-                  className={"route-name"}
-                  style={style}
-                  title={routeInfo.desc}
-                  onClick={() => this.routeClicked(routeHash)}
-                >
-                  { routeName }
-                </button>
-              )
-            })
-          }
+      <React.Fragment>
+        <div className="arrival-view-options">
+          <button
+            className={(this.state.selectedOption === "route") ? "selected" : ""}
+            onClick={() => this.setSelectedOption("route")}
+          >
+            Arrivals by<br/>Route
+          </button>
+          <button
+            className={(this.state.selectedOption === "station") ? "selected" : ""}
+            onClick={() => this.setSelectedOption("station")}
+          >
+            Arrivals by<br/>Station
+          </button>
         </div>
-        <div className="final-stations">
-          { finalStationsRender }
-        </div>
-        <RouteArrivals
-          className="route-arrivals"
-          selectedRoute={selectedRoute}
-          selectedRouteHash={this.state.selectedRouteHash}
-          selectedRouteName={selectedRouteName}
-          selectedFinalStation={this.state.selectedFinalStation}
-          updatedTrips={this.props.updatedTrips}
-          data={this.props.data}
-        />
-      </div>
+        {arrivalsDisplay}
+      </React.Fragment>
     )
   }
 }
@@ -571,7 +743,7 @@ class Main extends React.Component {
 
           <div className="row data">
             <div className="ten columns offset-by-one">
-              <RouteList data={ this.state.processedData } updatedTrips={ this.state.updatedTrips }/>
+              <DataInterface data={ this.state.processedData } updatedTrips={ this.state.updatedTrips }/>
             </div>
           </div>
         </div>

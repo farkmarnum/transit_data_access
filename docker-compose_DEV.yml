@@ -47,7 +47,8 @@ services:
       context: ./web_server/client
       target: dev
     volumes:
-      - ./web_server/client:/app
+      - ./web_server/client/src:/app/src
+      - ./web_server/client/public:/app/public
     image: "farkmarnum/transit_data_access:web_client"
     depends_on:
       - web_server

@@ -6,20 +6,6 @@ FROM node:${NODE_VERSION} AS base
 WORKDIR /app
 
 
-# # ---- Dependencies ----
-# FROM base AS dependencies 
-# # A wildcard is used to ensure both package.json AND package-lock.json are copied
-# COPY package*.json ./
-# # install app dependencies for production
-# RUN npm install --production
-
-
-# # ---- Copy Files/Build ----
-# FROM dependencies AS build
-# WORKDIR /app
-# COPY . /app
-
-
 # --- Dev ----
 FROM node:${NODE_VERSION} AS dev  
 # Create app directory
