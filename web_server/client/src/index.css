@@ -14,6 +14,7 @@ h3 {
 
 .container {
   min-width: 300px;
+  margin-bottom: 3rem;
 }
 
 .text-left {
@@ -122,8 +123,8 @@ h3 {
   color: #000;
 }
 .arrival-view-options .selected:hover {
-  border-color: #f2d142;
-  background: #f2d142;
+  border-color: #e9c423;
+  background: #e9c423;
   color: #000;
 }
 
@@ -132,28 +133,39 @@ h3 {
 .arrivals-by-station input {
   font-size: 1.8rem;
   border: 0.1rem solid #ccc;
+  border-radius: 0.5rem;
+  margin-top: 1rem; 
   padding: 1rem;
   color: #848484;
 }
 .arrivals-by-station .station {
   width: 100%;
-  min-height: 3rem;
   margin-top: 1.5rem;
-  border: 0.1rem solid #ddd;
-  padding: 1rem;
+  padding: 1.2rem;
+  border: 0.1rem solid #eee;
+  background-color: #eee;
+  border-radius: 1rem;
+  box-sizing: border-box;
+}
+.station-branch {
+  font-size: 1.6rem;
+}
+.station-branch span {
+  margin-right: 0.5rem;
 }
 .arrivals-by-station .station .station-name {
   font-weight: 500;
   border-bottom: 0.1rem solid #ccc;
 }
-.arrivals-by-station .station .station-route .station-route-name {
+.station-branch .station-route-name {
   font-weight: 400;
+  padding: 0.2rem 0.7rem;
+  line-height: 2.8rem;
+  border-radius: 100%;
 }
-.arrivals-by-station .station .station-route .station-route-arrivals {
+.station-branch .station-route-arrivals {
   font-weight: 300;
 }
-
-
 
 .data .route-name {
   padding: 0.2rem 0.6rem 2rem 0.6rem;
@@ -219,7 +231,7 @@ h3 {
   font-weight: 100;
 }
 .arrival-time {
-  margin-left: 0.8rem;
+  margin: 0 0 0 0.8rem;
   font-weight: 300;
 }
 .arrival-time.very-soon {

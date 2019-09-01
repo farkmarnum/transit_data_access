@@ -60,12 +60,12 @@ function getRedisData () {
     .hgetallBuffer('realtime:data_diffs')
     .exec((requestErr, results) => {
       if (requestErr) {
-        console.log(requestErr)
+        console.error(requestErr)
       } else {
         // results === [[err, result], [err, result], [err, result]]
         let errors = [results[0][0], results[1][0], results[2][0]]
         if (errors.some(err => err)) {
-          console.log(errors.filter(err => err))
+          console.error(errors.filter(err => err))
         } else {
           latestTimestamp = results[0][1]
           dataFull = results[1][1]
@@ -81,7 +81,7 @@ getRedisData()
 // redisPubSub client for subscribe()
 const redisPubSub = new Redis({ host: redisHostname, port: redisPort })
 redisPubSub.on('connect', () => { console.log('redisPubSub client connected') })
-redisPubSub.on('error', (err) => { console.log('redisPubSub error: ' + err) })
+redisPubSub.on('error', (err) => { console.error('redisPubSub error: ' + err) })
 redisPubSub.on('message', (channel, msg) => {
   if (channel === 'realtime_updates' && msg === 'new_data') {
     getRedisData()
@@ -110,15 +110,15 @@ const wsServer = new WebSocket.Server({ server: server })
 
 wsServer.on('connection', (ws, request) => {
   const clientId = querystring.parse(request.url.slice(2)).unique_id
-  console.log('url: ', request.url, 'clientId: ', clientId)
+  // console.log('url: ', request.url, 'clientId: ', clientId)
 
   if (clients.has(clientId)) {
-    console.log(`client reconnected: ${clientId}`)
+    // console.log(`client reconnected: ${clientId}`)
     let client = clients.get(clientId)
     client.connected = true
     client.ws = ws
   } else {
-    console.log(`new client w/ ID ${clientId}`)
+    // console.log(`new client w/ ID ${clientId}`)
     clients.set(clientId, new Client(ws))
   }
 
@@ -154,13 +154,13 @@ function removeClient (clientId) {
   let client = clients.get(clientId)
   if (client) {
     if (!client.connected) {
-      console.log(`deleting client ${clientId} from clients (new clients size = ${clients.size})`)
+      // console.log(`deleting client ${clientId} from clients (new clients size = ${clients.size})`)
       clients.delete(clientId)
     } else {
-      console.log(`client ${clientId} reconnected with a new ws and will not be removed`)
+      // console.log(`client ${clientId} reconnected with a new ws and will not be removed`)
     }
   } else {
-    console.log(`could not find client: ${clientId}`)
+    console.warning(`removeClient could not find client w/ clientID ${clientId}`)
   }
 }
 
@@ -191,10 +191,10 @@ function pushToAll () {
   for (const [clientId, client] of clients.entries()) {
     if (client.ws != null && client.ws.readyState === WebSocket.OPEN) {
       if (client.lastSuccessfulTimestamp in dataUpdates) {
-        console.log('sending update to ', clientId)
+        // console.log('sending update to ', clientId)
         sendUpdate(client)
       } else {
-        console.log('sending full to ', clientId)
+        // console.log('sending full to ', clientId)
         sendFull(client)
       }
     }

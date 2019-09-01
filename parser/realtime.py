@@ -133,9 +133,11 @@ class RealtimeManager():
         data_json_dict = self.redis_server.hgetall('realtime_data_dict')
         u.log.debug('realtime_data_dict loaded from Redis, len is %s', len(data_json_dict))
 
-        for timestamp, json_str in data_json_dict.items():
-            self.data_dict[int(timestamp.decode('utf-8'))] = json.loads(json_str, cls=u.RealtimeJSONDecoder)
-
+        try:
+            for timestamp, json_str in data_json_dict.items():
+                self.data_dict[int(timestamp.decode('utf-8'))] = json.loads(json_str, cls=u.RealtimeJSONDecoder)
+        except json.decoder.JSONDecodeError as e:
+            u.log.error(e)
 
     async def fetch_all(self) -> None:
         """get all new feeds, check each, and combine
