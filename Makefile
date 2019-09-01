@@ -11,7 +11,7 @@ test:
 	echo "Testing not yet set up..."
 
 aws-login:
-	$(aws ecr get-login --no-include-email)
+	$(shell aws ecr get-login --no-include-email)
 
 push:
 	docker tag transit_data_access/parser:latest 517918230755.dkr.ecr.us-east-2.amazonaws.com/transit-data-access/parser:latest \

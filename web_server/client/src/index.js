@@ -424,29 +424,41 @@ function Station(props) {
   )
 }
 
+
+const initResultLimit = 10;
+const resultLimitIncrease = 10;
+
 class ArrivalsByStation extends React.Component {
   constructor(props) {
     super(props)
     this.state = {
-      searchText: ""
+      searchText: "",
+      resultLimit: initResultLimit
     }
   }
 
   updateSearchText = (searchText) => {
     let trimmedText = searchText.trim().toLowerCase()
     this.setState({
-      searchText: (trimmedText.length > 1) ? trimmedText : ""
+      searchText: trimmedText,
+      resultLimit: initResultLimit
+    })
+  }
+
+  increaseResultLimit = () => {
+    this.setState({
+      resultLimit: this.state.resultLimit + resultLimitIncrease
     })
   }
 
   render() {
-    let stationList = ""
+    let stationList = []
     if (this.state.searchText !== "") {
-      stationList = this.props.data.stationNames.map((stationNameAndHash, i) => {
+      this.props.data.stationNames.forEach((stationNameAndHash, i) => {
         let name = stationNameAndHash.name
           , stationHash = stationNameAndHash.stationHash
         if (name.toLowerCase().indexOf(this.state.searchText) >= 0) {
-          return (
+          stationList.push(
             <Station
               key={ i }
               data={ this.props.data }
@@ -459,16 +471,25 @@ class ArrivalsByStation extends React.Component {
         }
       })
     }
+
+    let showMore = ""
+    if (stationList.length > 10) {
+      showMore = <div className="show-more" onClick={this.increaseResultLimit}>show more results</div>
+    }
+
     return (
-      <div className="arrivals-by-station">
-        <h5>
-          Arrivals By Station
-        </h5>
-        <Search
-          placeholder='start typing a station name...'
-          onInput={this.updateSearchText}
-        />
-        { stationList }
+      <div>
+        <div className="arrivals-by-station">
+          <h5>
+            Arrivals By Station
+          </h5>
+          <Search
+            placeholder='start typing a station name...'
+            onInput={this.updateSearchText}
+          />
+          { stationList.slice(0, this.state.resultLimit) }
+        </div>
+        { showMore }
       </div>
     )
   }

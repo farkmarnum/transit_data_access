@@ -142,7 +142,7 @@ wsServer.on('connection', (ws, request) => {
   })
 
   ws.on('close', () => {
-    console.log('client disconnected: ', clientId)
+    // console.log('client disconnected: ', clientId)
     let client = clients.get(clientId)
     client.connected = false
     client.ws = null
