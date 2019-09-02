@@ -15,12 +15,18 @@ COPY . .
 CMD ["node", "--inspect=0.0.0.0", "server.js"]
 
 
+# ---- Dependencies ----
+FROM base AS build
+# A wildcard is used to ensure both package.json AND package-lock.json are copied
+COPY package*.json ./
+RUN npm install --only=production
+
+
 # --- Release with Alpine ----
 FROM node:12.7-alpine AS release  
 # Create app directory
 WORKDIR /app
-COPY . .
-RUN npm install --production \
- && npm cache clean --force \
- && rm -rf /tmp/*
+COPY --from=build /app /app
+COPY ./server.js ./server.js
+
 CMD ["node", "server.js"]

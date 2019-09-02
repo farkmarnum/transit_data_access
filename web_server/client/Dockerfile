@@ -16,11 +16,10 @@ CMD npm start
 
 
 # ---- Dependencies ----
-FROM base AS dependencies 
+FROM base AS dependencies
 # A wildcard is used to ensure both package.json AND package-lock.json are copied
 COPY package*.json ./
-# install app dependencies including 'devDependencies'
-RUN npm install
+RUN npm install --only=production
 
 
 # ---- Copy Files/Build ----
@@ -30,14 +29,12 @@ COPY . /app
 # Build react/vue/angular bundle static files
 RUN npm run build
 
+
 # --- Release with Alpine ----
 FROM node:12.7-alpine AS release  
 # Create app directory
 WORKDIR /app
 RUN npm -g install serve
 
-COPY --from=dependencies /app/package.json ./
-# Install app dependencies
-RUN npm install --only=production
 COPY --from=build /app /app
 CMD ["serve", "-s", "build", "-p", "80"]

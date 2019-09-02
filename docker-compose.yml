@@ -53,7 +53,7 @@ services:
     depends_on:
       - web_server
     ports:
-      - "80:3000"
+      - "80:80"
     deploy:
       replicas: 4
       restart_policy:
