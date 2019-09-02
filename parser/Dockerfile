@@ -1,7 +1,4 @@
-ARG PYTHON_VERSION=3.7
-
-
-FROM python:${PYTHON_VERSION} as python-build
+FROM python:3.7 as python-build
 
 WORKDIR /wheels
 
@@ -12,7 +9,7 @@ RUN pip install --upgrade pip \
 
 
 
-FROM python:${PYTHON_VERSION}-slim
+FROM python:3.7-slim
 
 COPY --from=python-build /wheels /wheels
 

@@ -1,13 +1,11 @@
-ARG NODE_VERSION=12.7
-
 # ---- Base Node ----
-FROM node:${NODE_VERSION} AS base
+FROM node:12.7 AS base
 # Create app directory
 WORKDIR /app
 
 
 # ---- Copy Files/Build ----
-FROM node:${NODE_VERSION} AS dev
+FROM node:12.7 AS dev
 WORKDIR /app
 # A wildcard is used to ensure both package.json AND package-lock.json are copied
 COPY package*.json /app/
@@ -33,7 +31,7 @@ COPY . /app
 RUN npm run build
 
 # --- Release with Alpine ----
-FROM node:${NODE_VERSION}-alpine AS release  
+FROM node:12.7-alpine AS release  
 # Create app directory
 WORKDIR /app
 RUN npm -g install serve

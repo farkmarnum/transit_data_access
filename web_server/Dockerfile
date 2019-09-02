@@ -1,13 +1,11 @@
-ARG NODE_VERSION=12.7
-
 # ---- Base Node ----
-FROM node:${NODE_VERSION} AS base
+FROM node:12.7 AS base
 # Create app directory
 WORKDIR /app
 
 
 # --- Dev ----
-FROM node:${NODE_VERSION} AS dev  
+FROM node:12.7 AS dev  
 # Create app directory
 WORKDIR /app
 # Install ALL app dependencies
@@ -18,7 +16,7 @@ CMD ["node", "--inspect=0.0.0.0", "server.js"]
 
 
 # --- Release with Alpine ----
-FROM node:${NODE_VERSION}-alpine AS release  
+FROM node:12.7-alpine AS release  
 # Create app directory
 WORKDIR /app
 COPY . .
