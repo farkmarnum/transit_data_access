@@ -103,11 +103,6 @@ function timeDiffsFromBranchArrivals(arrivalsForBranch, updatedTrips) {
   // Note: arrivalsForBranch should be from arrivals[routeHash][finalStation] for some routeHash and finalStation
   const now = Date.now() / 1000
   arrivalsForBranch = Object.keys(arrivalsForBranch).filter(arrivalTime => {
-    // let tripHash = arrivalsForBranch[arrivalTime]
-    // if(!tripHash || !props.data.trips[tripHash]) {
-    //   console.error(`${tripHash} not found?`)
-    //   return false
-    // }
     return (arrivalTime - now > -30)
   })
   // slice to get just the three most recent arrivals

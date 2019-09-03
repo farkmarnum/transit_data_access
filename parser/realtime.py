@@ -346,6 +346,9 @@ class RealtimeManager():
             proto_full.stations[station_hash].name = station.name
             proto_full.stations[station_hash].lat = station.lat
             proto_full.stations[station_hash].lon = station.lon
+            proto_full.stations[station_hash].borough = station.borough
+            proto_full.stations[station_hash].n_label = station.n_label
+            proto_full.stations[station_hash].s_label = station.s_label
             for other_station_hash, travel_time in station.travel_times.items():
                 proto_full.stations[station_hash].travel_times[other_station_hash] = travel_time
 
