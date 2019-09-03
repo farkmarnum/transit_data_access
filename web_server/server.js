@@ -130,11 +130,7 @@ wsServer.on('connection', (ws, request) => {
       if (parsed.type === 'data_received') {
         client.lastSuccessfulTimestamp = parsed.last_successful_timestamp
       } else if (parsed.type === 'request_full') {
-        if (dataFull != null) {
-          sendFull(client)
-        } else {
-          sendNoDataError(client)
-        }
+        sendFull(client)
       }
     } catch (err) {
       console.log(err)
@@ -169,22 +165,30 @@ function sendNoDataError (client) {
 }
 
 function sendFull (client) {
-  client.ws.send(`{
-    "type": "data_full",
-    "timestamp": "${latestTimestamp}",
-    "data_size": "${dataFull.byteLength}"
-  }`)
-  client.ws.send(dataFull)
+  if (dataFull == null) {
+    sendNoDataError(client)
+  } else {
+    client.ws.send(`{
+      "type": "data_full",
+      "timestamp": "${latestTimestamp}",
+      "data_size": "${dataFull.byteLength}"
+    }`)
+    client.ws.send(dataFull)
+  }
 }
 function sendUpdate (client) {
-  const update = dataUpdates[client.lastSuccessfulTimestamp]
-  client.ws.send(`{
-    "type": "data_update",
-    "timestamp_from": "${client.lastSuccessfulTimestamp}",
-    "timestamp_to": "${latestTimestamp}",
-    "data_size": "${update.byteLength}"
-  }`)
-  client.ws.send(update)
+  if (dataUpdates == null) {
+    sendNoDataError(client)
+  } else {
+    const update = dataUpdates[client.lastSuccessfulTimestamp]
+    client.ws.send(`{
+      "type": "data_update",
+      "timestamp_from": "${client.lastSuccessfulTimestamp}",
+      "timestamp_to": "${latestTimestamp}",
+      "data_size": "${update.byteLength}"
+    }`)
+    client.ws.send(update)
+  }
 }
 function pushToAll () {
   console.log(`Received new data w/ timestamp ${latestTimestamp}, pushing it to clients`)

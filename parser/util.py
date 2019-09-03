@@ -15,6 +15,7 @@ import logging.config
 from dataclasses import dataclass, is_dataclass, field
 import pyhash  # type: ignore
 import hashlib
+import middleware  # type: ignore
 
 loop = asyncio.get_event_loop()
 
@@ -143,7 +144,8 @@ def short_hash(input_: Any, type_hint: Type[SpecifiedHash]) -> SpecifiedHash:
         short_hash('1', RouteHash) returns a short hash with type hint RouteHash
         short_hash('092200_6..N03R', TripHash) returns a short hash with type hint TripHash
     """
-    hash_int = hasher(str(input_) + type_hint.__name__)
+    input_ = middleware.transform_symbol(input_)
+    hash_int = hasher(str(input_))
     typed_hash = type_hint(ShortHash(hash_int))
     return typed_hash
 
@@ -188,12 +190,16 @@ class Station:
     name: str
     lat: float
     lon: float
+    borough: str
+    n_label: str
+    s_label: str
     travel_times: Dict[StationHash, TravelTime]
 
 @dataclass
 class Trip:
     id_: TripHash
     branch: Branch
+    direction: bool
     arrivals: Dict[StationHash, ArrivalTime] = field(default_factory=dict)
     status: TripStatus = ON_TIME
     timestamp: Optional[int] = None  # in seconds
@@ -385,20 +391,22 @@ class TimeLogger:
 class GTFSConf(NamedTuple):
     name: str
     static_url: str
+    additional_static_urls: List[str]
     realtime_urls: Dict[str, str]
 
-LIST_OF_FILES = [
-    'agency.txt',
-    'calendar_dates.txt',
-    'calendar.txt',
-    'route_stops_with_names.txt',
-    'routes.txt',
-    'shapes.txt',
-    'stop_times.txt',
-    'stops.txt',
-    'transfers.txt',
-    'trips.txt'
-]
+# LIST_OF_FILES = [
+#     'agency.txt',
+#     'calendar_dates.txt',
+#     'calendar.txt',
+#     'route_stops_with_names.txt',
+#     'routes.txt',
+#     'shapes.txt',
+#     'stop_times.txt',
+#     'stops.txt',
+#     'transfers.txt',
+#     'trips.txt'
+#     'station'
+# ]
 
 _base_url = MTA_REALTIME_BASE_URL
 _feed_ids = sorted(['1', '2', '11', '16', '21', '26', '31', '36', '51'], key=int)
@@ -407,5 +415,9 @@ _url_dict = {feed_id: f'{_base_url}?key={MTA_API_KEY}&feed_id={feed_id}' for fee
 GTFS_CONF = GTFSConf(
     name='MTA_subway',
     static_url=MTA_STATIC_URL,
+    additional_static_urls=[
+        'http://web.mta.info/developers/data/nyct/subway/Stations.csv',
+        'http://web.mta.info/developers/data/nyct/subway/StationComplexes.csv',
+    ],
     realtime_urls=_url_dict
 )

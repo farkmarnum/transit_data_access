@@ -12,51 +12,55 @@ message DataFull {
     string desc = 1004;
     uint32 color = 1005;
     uint32 text_color = 1006;
-    repeated uint32 stations = 1008;                  // each element is a StationHash
+    repeated uint32 stations = 15;                  // each element is a StationHash
   }
-  map<uint32, RouteInfo> routes = 1009;               // map key is RouteHash
+  map<uint32, RouteInfo> routes = 1008;               // map key is RouteHash
 
   message StationInfo {
-    string name = 11;
-    float lat = 12;
-    float lon = 13;
+    string name = 9;
+    float lat = 10;
+    float lon = 11;
+    string borough = 12;
+    string n_label = 13;
+    string s_label = 14;
     message TravelTime {
-      sint32 travel_time = 14;
+      sint32 travel_time = 16;
     }
-    map<uint32, TravelTime> travel_times = 15;        // map key is StationHash
+    map<uint32, TravelTime> travel_times = 1015;        // map key is StationHash
   }
-  map<uint32, StationInfo> stations = 1010;           // map key is StationHash
+  map<uint32, StationInfo> stations = 1016;           // map key is StationHash
 
-  map<string, uint32> routehash_lookup = 1011;        // map values are RouteHash
+  map<string, uint32> routehash_lookup = 1017;        // map values are RouteHash
 
   message TransfersForStation {
-    map<uint32, uint32> transfer_times = 1014;  // map key is StationHash, value is transfer_time
+    map<uint32, uint32> transfer_times = 1;  // map key is StationHash, value is transfer_time
   }
-  map<uint32, TransfersForStation> transfers = 1015;  // map key is StationHash
+  map<uint32, TransfersForStation> transfers = 1018;  // map key is StationHash
 
   message TripInfo {
     message Branch {
-      uint32 route_hash = 4;
-      uint32 final_station = 5;
+      uint32 route_hash = 2;
+      uint32 final_station = 3;
     }
-    Branch branch = 6;
+    Branch branch = 4;
     enum TripStatus {
       STOPPED = 0;
       DELAYED = 1;
       ON_TIME = 2;
     }
-    TripStatus status = 7;
-    uint32 timestamp = 8;
-    map<uint32, uint32> arrivals = 10;                  // map key is StationHash, value is Arrival Time
+    TripStatus status = 5;
+    uint32 timestamp = 6;
+    bool direction = 7;
+    map<uint32, uint32> arrivals = 8;                  // map key is StationHash, value is Arrival Time
   }
-  map<uint32, TripInfo> trips = 1016;                   // map key is TripHash
+  map<uint32, TripInfo> trips = 1019;                   // map key is TripHash
 
 }
 
 
 // Update data message:
 message DataUpdate {
-  uint32 realtime_timestamp = 2000;
+  uint32 realtime_timestamp = 3000;
 
   message Branch {
     uint32 route_hash = 4;
@@ -72,6 +76,7 @@ message DataUpdate {
       }
       TripStatus status = 7;
       uint32 timestamp = 8;
+      bool direction = 9;
       map<uint32, uint32> arrivals = 10;                  // map key is StationHash, value is Arrival Time
     }
     uint32 trip_hash = 11;

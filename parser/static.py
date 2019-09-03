@@ -1,7 +1,6 @@
 """ downloads static GTFS data, checks if it's new, parses it, and stores it
 """
 # import os
-import gc
 from contextlib import suppress
 import time
 from collections import defaultdict
@@ -69,11 +68,28 @@ class StaticHandler(object):
         except zipfile.BadZipFile as err:
                 raise u.UpdateFailed(err)
 
+        self.get_additional_data()
         self.merge_trips_and_stops()
+
+    def get_additional_data(self) -> None:
+        for url in u.GTFS_CONF.additional_static_urls:
+            try:
+                data_file = requests.get(url, allow_redirects=True, timeout=10)
+                out_path = f'{u.STATIC_PATH}/raw/{url.split("/")[-1].lower()}'
+                with open(out_path, mode='w') as out_stream:
+                    out_stream.write(data_file.text)
+            except requests.exceptions.RequestException as err:
+                raise u.UpdateFailed(f'{err}, failed to connect to {url}')
+
 
     def locate_csv(self, name: str) -> str:
         """Generates the path/filname for the csv given the name & gtfs_settings
         """
+        for url in u.GTFS_CONF.additional_static_urls:
+            shortened_name = url.split('/')[-1].lower()
+            if shortened_name == name + ".csv":
+                return f'{u.STATIC_PATH}/raw/{name}.csv'
+
         return f'{u.STATIC_PATH}/raw/{name}.txt'
 
     def merge_trips_and_stops(self):
@@ -129,11 +145,28 @@ class StaticHandler(object):
                         name=row['stop_name'],
                         lat=float(row['stop_lat']),
                         lon=float(row['stop_lon']),
+                        borough='',
+                        n_label='',
+                        s_label='',
                         travel_times={})
                     self.data.stationhash_lookup[stop_id] = station_hash
                 else:
                     station_hash = u.short_hash(parent_station, u.StationHash)
                     self.data.stationhash_lookup[stop_id] = station_hash
+
+        with open(self.locate_csv('stations'), mode='r') as stations_file:
+            stations_csv_reader = csv.DictReader(stations_file)
+            for row in stations_csv_reader:
+                stop_id = row['GTFS Stop ID']
+                station_hash = u.short_hash(stop_id, u.StationHash)
+                if station_hash not in self.data.stations:
+                    u.log.warning("%s -> %s not in self.data.stations", stop_id, station_hash)
+                else:
+                    borough, n_label, s_label = row['Borough'], row['North Direction Label'], row['South Direction Label']
+                    self.data.stations[station_hash].borough = borough
+                    self.data.stations[station_hash].n_label = n_label
+                    self.data.stations[station_hash].s_label = s_label
+
 
     def load_route_info(self) -> None:
         """ Loads info for each route

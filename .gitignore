@@ -1,0 +1,8 @@
+.DS_Store
+
+config/docker.env
+
+.v
+
+*.sublime-project
+*.sublime-workspace

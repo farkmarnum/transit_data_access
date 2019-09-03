@@ -214,8 +214,18 @@ class RealtimeManager():
                 except KeyError as err:
                     u.log.error(err)
                     continue
-                branch = u.Branch(route_hash, final_station, elem.trip_update.trip.route_id)  # NAME FOR DEBUGGING
-                self.current_data.trips[trip_hash] = u.Trip(id_=trip_hash, branch=branch)
+                branch = u.Branch(route_hash, final_station, elem.trip_update.trip.route_id)
+
+                direction = last_stop_id[-1]
+                if direction == "N":
+                    direction = True
+                elif direction == "S":
+                    direction = False
+                else:
+                    u.log.error("%s has no direction indicator", last_stop_id)
+                    continue
+
+                self.current_data.trips[trip_hash] = u.Trip(id_=trip_hash, branch=branch, direction=direction)
 
             if elem.HasField('trip_update'):
                 for stop_time_update in elem.trip_update.stop_time_update:
@@ -351,6 +361,7 @@ class RealtimeManager():
             proto_full.trips[trip_hash].branch.final_station = trip.branch.final_station
             proto_full.trips[trip_hash].status = trip.status
             proto_full.trips[trip_hash].timestamp = trip.timestamp if trip.timestamp else 0
+            proto_full.trips[trip_hash].direction = trip.direction
             for station_hash, arrival_time in trip.arrivals.items():
                 proto_full.trips[trip_hash].arrivals[station_hash] = arrival_time
 
@@ -373,6 +384,7 @@ class RealtimeManager():
             proto_trip.trip_hash = trip.id_
             proto_trip.info.status = trip.status
             proto_trip.info.timestamp = trip.timestamp if trip.timestamp else 0
+            proto_trip.info.direction = trip.direction
             proto_trip.info.branch.route_hash = trip.branch.route
             proto_trip.info.branch.final_station = trip.branch.final_station
             for station_hash, arrival_time in trip.arrivals.items():

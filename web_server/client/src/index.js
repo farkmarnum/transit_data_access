@@ -83,6 +83,7 @@ function processData(data) {
         data.routes[trip.branch.routeHash].finalStations.add(finalStation)
       } catch (err) {
         devLog(`ERROR: ${trip.branch.routeHash} not in data.routes`)
+        devLog(trip)
       }
     }
   }
@@ -391,6 +392,9 @@ function StationRouteArrivals(props) {
 
 function Station(props) {
   const station = props.data.stations[props.stationHash]
+  let arrival
+    , key
+    , routeColor
   return (
     <div className="station">
       <div className="station-name">
@@ -399,9 +403,10 @@ function Station(props) {
       <div className="station-routes">
         {
           Object.keys(station.arrivals).map((routeHash, i) => {
-            return Object.keys(station.arrivals[routeHash]).map((finalStation, j) => {
-              const key = i * 1000 + j
-              const routeColor = (
+            arrival = station.arrivals[routeHash]
+            return Object.keys(arrival).map((finalStation, j) => {
+              key = i * 1000 + j
+              routeColor = (
                 "#" +
                 ("00"+(Number(props.data.routes[routeHash].color).toString(16))).slice(-6)
               )
