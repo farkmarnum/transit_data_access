@@ -14,6 +14,7 @@ from google.protobuf.message import DecodeError
 import transit_data_access_pb2      # type: ignore
 import static                       # type: ignore
 import util as u                    # type: ignore
+import middleware                   # type: ignore
 
 TIME_DIFF_THRESHOLD: int = 3
 COMPRESSION_LEVEL = 9
@@ -201,7 +202,8 @@ class RealtimeManager():
     def parse(self) -> None:
         for elem in self.feed.entity:
             trip_hash = u.short_hash(elem.trip_update.trip.trip_id, u.TripHash)
-            route_hash = u.short_hash(elem.trip_update.trip.route_id, u.RouteHash)
+            route_id = middleware.transform_route(elem.trip_update.trip.route_id)
+            route_hash = u.short_hash(route_id, u.RouteHash)
 
             if trip_hash not in self.current_data.trips:
                 if not len(elem.trip_update.stop_time_update):
@@ -214,7 +216,7 @@ class RealtimeManager():
                 except KeyError as err:
                     u.log.error(err)
                     continue
-                branch = u.Branch(route_hash, final_station, elem.trip_update.trip.route_id)
+                branch = u.Branch(route_hash, final_station)
 
                 direction = last_stop_id[-1]
                 if direction == "N":

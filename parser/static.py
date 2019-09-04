@@ -177,6 +177,7 @@ class StaticHandler(object):
             route_csv_reader = csv.DictReader(route_file)
             for row in route_csv_reader:
                 route_id = row['route_id']
+                route_id = middleware.transform_route(route_id)
                 route_color = int(row['route_color'].strip() or 'D3D3D3', 16)
                 text_color = int(row['route_text_color'].strip() or '000000', 16)
                 route_hash = u.short_hash(route_id, u.RouteHash)
@@ -190,7 +191,9 @@ class StaticHandler(object):
         with open(self.locate_csv('route_stops_with_names'), mode='r') as rswn_file:
             rwsn_csv_reader = csv.DictReader(rswn_file)
             for row in rwsn_csv_reader:
-                route_hash = self.data.routehash_lookup[row['route_id']]
+                route_id = row['route_id']
+                route_id = middleware.transform_route(route_id)
+                route_hash = self.data.routehash_lookup[route_id]
                 station_hash = self.data.stationhash_lookup[row['stop_id']]
                 stations = self.data.routes[route_hash].stations
                 if station_hash not in stations:

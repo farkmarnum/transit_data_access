@@ -1,6 +1,7 @@
 def transform_route(symb):
     transformations = {
-        "SS": "SI"
+        "SS": "SI",
+        "GS": "S"
     }
     try:
         return transformations[symb]

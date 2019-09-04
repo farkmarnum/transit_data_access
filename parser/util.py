@@ -165,8 +165,6 @@ def trim_dict(dict_):
 class Branch(NamedTuple):
     route: RouteHash
     final_station: StationHash
-    # for DEBUGGING:
-    route_name: str = ""
 
 class StationArrival(NamedTuple):
     arrival_time: ArrivalTime
