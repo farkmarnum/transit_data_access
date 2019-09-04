@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 PATH := $(PATH)
 CLUSTER := webapps
-SERVICE := tda-2
+SERVICE := tda-3
 
 build:
 	docker-compose build
@@ -27,13 +27,15 @@ push:
 	&& docker push 517918230755.dkr.ecr.us-east-2.amazonaws.com/transit-data-access/web_client:latest \
 
 register-task:
-	aws ecs register-task-definition --cli-input-json file://task-transit_data_access.json
+	aws ecs register-task-definition --cli-input-json file://aws-deploy-conf/taskdef.json
 
 create-service:
-	aws ecs create-service --cluster $(CLUSTER) --service-name $(SERVICE) --cli-input-json file://service-tda.json
+	aws ecs create-service --cluster $(CLUSTER) --service-name $(SERVICE) --cli-input-json file://aws-deploy-conf/servicedef.json
 
 update-service:
 	aws ecs update-service --cluster $(CLUSTER) --service $(SERVICE) --force-new-deployment
 
 
 deploy: build test aws-login push update-service
+
+create: build test aws-login push create-service
