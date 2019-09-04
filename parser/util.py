@@ -144,7 +144,8 @@ def short_hash(input_: Any, type_hint: Type[SpecifiedHash]) -> SpecifiedHash:
         short_hash('1', RouteHash) returns a short hash with type hint RouteHash
         short_hash('092200_6..N03R', TripHash) returns a short hash with type hint TripHash
     """
-    input_ = middleware.transform_symbol(input_)
+    if type_hint.__name__ == "RouteHash":
+        input_ = middleware.transform_route(input_)
     hash_int = hasher(str(input_))
     typed_hash = type_hint(ShortHash(hash_int))
     return typed_hash

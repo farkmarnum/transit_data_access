@@ -1,8 +1,7 @@
 .DS_Store
-
-config/docker.env
-
 .v
-
 *.sublime-project
 *.sublime-workspace
+
+config/docker.env
+aws-deploy-conf

@@ -12,6 +12,7 @@ import json
 import pandas as pd
 from redis import ResponseError
 import util as u  # type: ignore
+import middleware  # type: ignore
 
 
 class StaticHandler(object):
@@ -163,6 +164,7 @@ class StaticHandler(object):
                     u.log.warning("%s -> %s not in self.data.stations", stop_id, station_hash)
                 else:
                     borough, n_label, s_label = row['Borough'], row['North Direction Label'], row['South Direction Label']
+                    borough = middleware.transform_borough(borough)
                     self.data.stations[station_hash].borough = borough
                     self.data.stations[station_hash].n_label = n_label
                     self.data.stations[station_hash].s_label = s_label
@@ -178,7 +180,6 @@ class StaticHandler(object):
                 route_color = int(row['route_color'].strip() or 'D3D3D3', 16)
                 text_color = int(row['route_text_color'].strip() or '000000', 16)
                 route_hash = u.short_hash(route_id, u.RouteHash)
-                # print(route_id, route_hash)
                 self.data.routes[route_hash] = u.RouteInfo(
                     desc=row['route_desc'],
                     color=route_color,
