@@ -3,5 +3,7 @@
 *.sublime-project
 *.sublime-workspace
 
+node_modules
+
 config/docker.env
 aws-deploy-conf
