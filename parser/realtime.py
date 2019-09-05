@@ -238,6 +238,10 @@ class RealtimeManager():
                         continue
 
                     arrival_time = u.ArrivalTime(stop_time_update.arrival.time)
+                    if not arrival_time:
+                        arrival_time = u.ArrivalTime(stop_time_update.departure.time) - 15
+                        # TODO ^^ this is hacky...
+
                     if arrival_time < time.time():
                         continue
                     self.current_data.trips[trip_hash].add_arrival(station_hash, arrival_time)
