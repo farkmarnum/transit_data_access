@@ -172,6 +172,8 @@ class StationArrival(NamedTuple):
 
 def dict_of_list_factory():
     return defaultdict(list)
+def dict_of_dict_factory():
+    return defaultdict(dict)
 def dict_of_dict_of_list_factory():
     return defaultdict(lambda: defaultdict(list))
 
@@ -189,10 +191,11 @@ class Station:
     name: str
     lat: float
     lon: float
-    borough: str
-    n_label: str
-    s_label: str
-    travel_times: Dict[StationHash, TravelTime]
+    borough: str = ''
+    n_label: str = ''
+    s_label: str = ''
+    station_complex: str = ''
+    travel_times: Dict[StationHash, TravelTime] = field(default_factory=dict)
 
 @dataclass
 class Trip:
@@ -209,17 +212,18 @@ class Trip:
 @dataclass
 class StaticData:
     name: str
-    static_timestamp: int
-    routes: Dict[RouteHash, RouteInfo]
-    stations: Dict[StationHash, Station]
-    routehash_lookup: Dict[str, RouteHash]
-    stationhash_lookup: Dict[str, StationHash]
-    transfers: DefaultDict[StationHash, Dict[StationHash, TransferTime]]
+    static_timestamp: int = 0
+    routes: Dict[RouteHash, RouteInfo] = field(default_factory=dict)
+    stations: Dict[StationHash, Station] = field(default_factory=dict)
+    station_complexes: Dict[str, str] = field(default_factory=dict)
+    routehash_lookup: Dict[str, RouteHash] = field(default_factory=dict)
+    stationhash_lookup: Dict[str, StationHash] = field(default_factory=dict)
+    transfers: DefaultDict[StationHash, Dict[StationHash, TransferTime]] = field(default_factory=dict_of_dict_factory)
 
 @dataclass
 class RealtimeData(StaticData):
-    realtime_timestamp: int
-    trips: Dict[TripHash, Trip]
+    realtime_timestamp: int = 0
+    trips: Dict[TripHash, Trip] = field(default_factory=dict)
 
 
 @dataclass

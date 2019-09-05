@@ -193,11 +193,11 @@ class RealtimeManager():
             static_timestamp=static_data.static_timestamp,
             routes=static_data.routes,
             stations=static_data.stations,
+            station_complexes={str(k): v for k, v in static_data.station_complexes.items()},
             routehash_lookup={str(k): v for k, v in static_data.routehash_lookup.items()},
             stationhash_lookup={str(k): v for k, v in static_data.stationhash_lookup.items()},
             transfers={int(k): {int(_k): _v for _k, _v in v.items()} for k, v in static_data.transfers.items()},
-            realtime_timestamp=self.current_timestamp,
-            trips={})
+            realtime_timestamp=self.current_timestamp)
 
     def parse(self) -> None:
         for elem in self.feed.entity:
@@ -287,8 +287,8 @@ class RealtimeManager():
             added=[new_trips[trip_hash] for trip_hash in (set(new_trips) - set(old_trips))]
         )
         arrivals_diff = u.ArrivalsDiff()
-        status_diff   = u.StatusDiff()  # noqa
-        branch_diff   = u.BranchDiff()  # noqa
+        status_diff = u.StatusDiff()
+        branch_diff = u.BranchDiff()
 
         for trip_hash in (set(new_trips) & set(old_trips)):
             new_trip = new_trips[trip_hash]
@@ -351,8 +351,12 @@ class RealtimeManager():
             proto_full.stations[station_hash].borough = station.borough
             proto_full.stations[station_hash].n_label = station.n_label
             proto_full.stations[station_hash].s_label = station.s_label
+            proto_full.stations[station_hash].station_complex = station.station_complex
             for other_station_hash, travel_time in station.travel_times.items():
                 proto_full.stations[station_hash].travel_times[other_station_hash] = travel_time
+
+        for station_complex_id, station_complex_name in data_full.station_complexes.items():
+            proto_full.station_complexes[station_complex_id] = station_complex_name
 
         for route_str, route_hash in data_full.routehash_lookup.items():
             proto_full.routehash_lookup[route_str] = route_hash

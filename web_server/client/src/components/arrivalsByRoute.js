@@ -12,23 +12,52 @@ function RouteStationName(props) {
 
 function RouteArrivals(props) {
   if (props.selectedRoute && props.selectedFinalStation) {
+    let tripHashes = new Set()
+    props.selectedRoute.stations.forEach((stationHash, i) => {
+      const station = props.data.stations[stationHash]
+      let arrivalsForBranch
+      try {
+        arrivalsForBranch = station.arrivals[props.selectedRouteHash][props.selectedFinalStation]
+        if(arrivalsForBranch) {
+          Object.values(arrivalsForBranch).forEach((tripHash) => {tripHashes.add(tripHash)})
+        }
+      } catch {
+      }
+    })
+    let longestTripHash
+      , currLength
+    let longestLenth = 0
+    tripHashes.forEach((tripHash) => {
+      currLength = Object.keys(props.data.trips[tripHash].arrivals).length
+      if (currLength > longestLenth) {
+        longestTripHash = tripHash
+        longestLenth = currLength
+      }
+    })
+
+    const lthArrivals = props.data.trips[longestTripHash].arrivals
+    const sortedStationHashes = Object.keys(lthArrivals).sort(function(hash1, hash2) {return lthArrivals[hash1] - lthArrivals[hash2]});
+
     return (
       <div className='route-stations'>
         <code>*Known Issue: some stations are out of order</code>
         {
           // Filter arrivals to leave only those on a given route that haven't already happened yet
-          props.selectedRoute.stations.map((stationHash, i) => {
+          sortedStationHashes.map((stationHash, i) => {
             const station = props.data.stations[stationHash]
             let arrivalsForBranch
             try {
               arrivalsForBranch = station.arrivals[props.selectedRouteHash][props.selectedFinalStation]
-            if(!arrivalsForBranch) return null
+              if(!arrivalsForBranch) {
+                return null
+              }
             } catch {
               return null
             }
 
             // convert each timeDiff (# of secs) to a text representation (30s, 4m, 12:34p, etc), and a styling based on how soon it is
             let arrivalTimeDiffsWithFormatting = timeDiffsFromBranchArrivals(arrivalsForBranch, props.updatedTrips)
+
             if (arrivalTimeDiffsWithFormatting.length === 0) return null
             return (
               <div className='route-station' key={i}>

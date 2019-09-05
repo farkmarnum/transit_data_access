@@ -20,7 +20,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='transit_data_access',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x19transit_data_access.proto\x12\x13transit_data_access\"\xa1\x0e\n\x08\x44\x61taFull\x12\r\n\x04name\x18\xe9\x07 \x01(\t\x12\x19\n\x10static_timestamp\x18\xea\x07 \x01(\r\x12\x1b\n\x12realtime_timestamp\x18\xeb\x07 \x01(\r\x12:\n\x06routes\x18\xf0\x07 \x03(\x0b\x32).transit_data_access.DataFull.RoutesEntry\x12>\n\x08stations\x18\xf8\x07 \x03(\x0b\x32+.transit_data_access.DataFull.StationsEntry\x12M\n\x10routehash_lookup\x18\xf9\x07 \x03(\x0b\x32\x32.transit_data_access.DataFull.RoutehashLookupEntry\x12@\n\ttransfers\x18\xfa\x07 \x03(\x0b\x32,.transit_data_access.DataFull.TransfersEntry\x12\x38\n\x05trips\x18\xfb\x07 \x03(\x0b\x32(.transit_data_access.DataFull.TripsEntry\x1aQ\n\tRouteInfo\x12\r\n\x04\x64\x65sc\x18\xec\x07 \x01(\t\x12\x0e\n\x05\x63olor\x18\xed\x07 \x01(\r\x12\x13\n\ntext_color\x18\xee\x07 \x01(\r\x12\x10\n\x08stations\x18\x0f \x03(\r\x1aV\n\x0bRoutesEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\x36\n\x05value\x18\x02 \x01(\x0b\x32\'.transit_data_access.DataFull.RouteInfo:\x02\x38\x01\x1a\xc8\x02\n\x0bStationInfo\x12\x0c\n\x04name\x18\t \x01(\t\x12\x0b\n\x03lat\x18\n \x01(\x02\x12\x0b\n\x03lon\x18\x0b \x01(\x02\x12\x0f\n\x07\x62orough\x18\x0c \x01(\t\x12\x0f\n\x07n_label\x18\r \x01(\t\x12\x0f\n\x07s_label\x18\x0e \x01(\t\x12Q\n\x0ctravel_times\x18\xf7\x07 \x03(\x0b\x32:.transit_data_access.DataFull.StationInfo.TravelTimesEntry\x1a!\n\nTravelTime\x12\x13\n\x0btravel_time\x18\x10 \x01(\x11\x1ah\n\x10TravelTimesEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\x43\n\x05value\x18\x02 \x01(\x0b\x32\x34.transit_data_access.DataFull.StationInfo.TravelTime:\x02\x38\x01\x1aZ\n\rStationsEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\x38\n\x05value\x18\x02 \x01(\x0b\x32).transit_data_access.DataFull.StationInfo:\x02\x38\x01\x1a\x36\n\x14RoutehashLookupEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\r:\x02\x38\x01\x1a\xa9\x01\n\x13TransfersForStation\x12\\\n\x0etransfer_times\x18\x01 \x03(\x0b\x32\x44.transit_data_access.DataFull.TransfersForStation.TransferTimesEntry\x1a\x34\n\x12TransferTimesEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\r\n\x05value\x18\x02 \x01(\r:\x02\x38\x01\x1a\x63\n\x0eTransfersEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12@\n\x05value\x18\x02 \x01(\x0b\x32\x31.transit_data_access.DataFull.TransfersForStation:\x02\x38\x01\x1a\x95\x03\n\x08TripInfo\x12=\n\x06\x62ranch\x18\x04 \x01(\x0b\x32-.transit_data_access.DataFull.TripInfo.Branch\x12\x41\n\x06status\x18\x05 \x01(\x0e\x32\x31.transit_data_access.DataFull.TripInfo.TripStatus\x12\x11\n\ttimestamp\x18\x06 \x01(\r\x12\x11\n\tdirection\x18\x07 \x01(\x08\x12\x46\n\x08\x61rrivals\x18\x08 \x03(\x0b\x32\x34.transit_data_access.DataFull.TripInfo.ArrivalsEntry\x1a\x33\n\x06\x42ranch\x12\x12\n\nroute_hash\x18\x02 \x01(\r\x12\x15\n\rfinal_station\x18\x03 \x01(\r\x1a/\n\rArrivalsEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\r\n\x05value\x18\x02 \x01(\r:\x02\x38\x01\"3\n\nTripStatus\x12\x0b\n\x07STOPPED\x10\x00\x12\x0b\n\x07\x44\x45LAYED\x10\x01\x12\x0b\n\x07ON_TIME\x10\x02\x1aT\n\nTripsEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\x35\n\x05value\x18\x02 \x01(\x0b\x32&.transit_data_access.DataFull.TripInfo:\x02\x38\x01\"\xbf\x0e\n\nDataUpdate\x12\x1b\n\x12realtime_timestamp\x18\xb8\x17 \x01(\r\x12\x38\n\x05trips\x18\xd4\x0f \x01(\x0b\x32(.transit_data_access.DataUpdate.TripDiff\x12?\n\x08\x61rrivals\x18\xdd\x0f \x01(\x0b\x32,.transit_data_access.DataUpdate.ArrivalsDiff\x12<\n\x06status\x18\xde\x0f \x03(\x0b\x32+.transit_data_access.DataUpdate.StatusEntry\x12<\n\x06\x62ranch\x18\xdf\x0f \x03(\x0b\x32+.transit_data_access.DataUpdate.BranchEntry\x1a\x33\n\x06\x42ranch\x12\x12\n\nroute_hash\x18\x04 \x01(\r\x12\x15\n\rfinal_station\x18\x05 \x01(\r\x1a\xc0\x03\n\x04Trip\x12\x11\n\ttrip_hash\x18\x0b \x01(\r\x12;\n\x04info\x18\x0c \x01(\x0b\x32-.transit_data_access.DataUpdate.Trip.TripInfo\x1a\xe7\x02\n\x08TripInfo\x12\x36\n\x06\x62ranch\x18\x06 \x01(\x0b\x32&.transit_data_access.DataUpdate.Branch\x12H\n\x06status\x18\x07 \x01(\x0e\x32\x38.transit_data_access.DataUpdate.Trip.TripInfo.TripStatus\x12\x11\n\ttimestamp\x18\x08 \x01(\r\x12\x11\n\tdirection\x18\t \x01(\x08\x12M\n\x08\x61rrivals\x18\n \x03(\x0b\x32;.transit_data_access.DataUpdate.Trip.TripInfo.ArrivalsEntry\x1a/\n\rArrivalsEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\r\n\x05value\x18\x02 \x01(\r:\x02\x38\x01\"3\n\nTripStatus\x12\x0b\n\x07STOPPED\x10\x00\x12\x0b\n\x07\x44\x45LAYED\x10\x01\x12\x0b\n\x07ON_TIME\x10\x02\x1aR\n\x08TripDiff\x12\x10\n\x07\x64\x65leted\x18\xd2\x0f \x03(\r\x12\x34\n\x05\x61\x64\x64\x65\x64\x18\xd3\x0f \x03(\x0b\x32$.transit_data_access.DataUpdate.Trip\x1a%\n\x0cStationsList\x12\x15\n\x0cstation_hash\x18\xd5\x0f \x03(\r\x1a>\n\x0eStationArrival\x12\x15\n\x0cstation_hash\x18\xd6\x0f \x01(\r\x12\x15\n\x0c\x61rrival_time\x18\xd7\x0f \x01(\r\x1aW\n\x13StationArrivalsList\x12@\n\x07\x61rrival\x18\xd8\x0f \x03(\x0b\x32..transit_data_access.DataUpdate.StationArrival\x1a\xd9\x01\n\x0fTripStationDict\x12`\n\x11trip_station_dict\x18\xd9\x0f \x03(\x0b\x32\x44.transit_data_access.DataUpdate.TripStationDict.TripStationDictEntry\x1a\x64\n\x14TripStationDictEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12;\n\x05value\x18\x02 \x01(\x0b\x32,.transit_data_access.DataUpdate.StationsList:\x02\x38\x01\x1a\xae\x03\n\x0c\x41rrivalsDiff\x12\x41\n\x07\x64\x65leted\x18\xda\x0f \x01(\x0b\x32/.transit_data_access.DataUpdate.TripStationDict\x12G\n\x05\x61\x64\x64\x65\x64\x18\xdb\x0f \x03(\x0b\x32\x37.transit_data_access.DataUpdate.ArrivalsDiff.AddedEntry\x12M\n\x08modified\x18\xdc\x0f \x03(\x0b\x32:.transit_data_access.DataUpdate.ArrivalsDiff.ModifiedEntry\x1a\x61\n\nAddedEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\x42\n\x05value\x18\x02 \x01(\x0b\x32\x33.transit_data_access.DataUpdate.StationArrivalsList:\x02\x38\x01\x1a`\n\rModifiedEntry\x12\x0b\n\x03key\x18\x01 \x01(\x11\x12>\n\x05value\x18\x02 \x01(\x0b\x32/.transit_data_access.DataUpdate.TripStationDict:\x02\x38\x01\x1a-\n\x0bStatusEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\r\n\x05value\x18\x02 \x01(\r:\x02\x38\x01\x1aU\n\x0b\x42ranchEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\x35\n\x05value\x18\x02 \x01(\x0b\x32&.transit_data_access.DataUpdate.Branch:\x02\x38\x01\x62\x06proto3')
+  serialized_pb=_b('\n\x19transit_data_access.proto\x12\x13transit_data_access\"\xc4\x0f\n\x08\x44\x61taFull\x12\r\n\x04name\x18\xe9\x07 \x01(\t\x12\x19\n\x10static_timestamp\x18\xea\x07 \x01(\r\x12\x1b\n\x12realtime_timestamp\x18\xeb\x07 \x01(\r\x12:\n\x06routes\x18\xf0\x07 \x03(\x0b\x32).transit_data_access.DataFull.RoutesEntry\x12>\n\x08stations\x18\xf8\x07 \x03(\x0b\x32+.transit_data_access.DataFull.StationsEntry\x12M\n\x10routehash_lookup\x18\xf9\x07 \x03(\x0b\x32\x32.transit_data_access.DataFull.RoutehashLookupEntry\x12@\n\ttransfers\x18\xfa\x07 \x03(\x0b\x32,.transit_data_access.DataFull.TransfersEntry\x12O\n\x11station_complexes\x18\xfb\x07 \x03(\x0b\x32\x33.transit_data_access.DataFull.StationComplexesEntry\x12\x38\n\x05trips\x18\xfc\x07 \x03(\x0b\x32(.transit_data_access.DataFull.TripsEntry\x1aQ\n\tRouteInfo\x12\r\n\x04\x64\x65sc\x18\xec\x07 \x01(\t\x12\x0e\n\x05\x63olor\x18\xed\x07 \x01(\r\x12\x13\n\ntext_color\x18\xee\x07 \x01(\r\x12\x10\n\x08stations\x18\x0f \x03(\r\x1aV\n\x0bRoutesEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\x36\n\x05value\x18\x02 \x01(\x0b\x32\'.transit_data_access.DataFull.RouteInfo:\x02\x38\x01\x1a\xe1\x02\n\x0bStationInfo\x12\x0c\n\x04name\x18\t \x01(\t\x12\x0b\n\x03lat\x18\n \x01(\x02\x12\x0b\n\x03lon\x18\x0b \x01(\x02\x12\x0f\n\x07\x62orough\x18\x0c \x01(\t\x12\x0f\n\x07n_label\x18\r \x01(\t\x12\x0f\n\x07s_label\x18\x0e \x01(\t\x12\x17\n\x0fstation_complex\x18\x11 \x01(\t\x12Q\n\x0ctravel_times\x18\xf7\x07 \x03(\x0b\x32:.transit_data_access.DataFull.StationInfo.TravelTimesEntry\x1a!\n\nTravelTime\x12\x13\n\x0btravel_time\x18\x10 \x01(\x11\x1ah\n\x10TravelTimesEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\x43\n\x05value\x18\x02 \x01(\x0b\x32\x34.transit_data_access.DataFull.StationInfo.TravelTime:\x02\x38\x01\x1aZ\n\rStationsEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\x38\n\x05value\x18\x02 \x01(\x0b\x32).transit_data_access.DataFull.StationInfo:\x02\x38\x01\x1a\x36\n\x14RoutehashLookupEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\r:\x02\x38\x01\x1a\xa9\x01\n\x13TransfersForStation\x12\\\n\x0etransfer_times\x18\x01 \x03(\x0b\x32\x44.transit_data_access.DataFull.TransfersForStation.TransferTimesEntry\x1a\x34\n\x12TransferTimesEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\r\n\x05value\x18\x02 \x01(\r:\x02\x38\x01\x1a\x63\n\x0eTransfersEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12@\n\x05value\x18\x02 \x01(\x0b\x32\x31.transit_data_access.DataFull.TransfersForStation:\x02\x38\x01\x1a\x37\n\x15StationComplexesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x1a\x95\x03\n\x08TripInfo\x12=\n\x06\x62ranch\x18\x04 \x01(\x0b\x32-.transit_data_access.DataFull.TripInfo.Branch\x12\x41\n\x06status\x18\x05 \x01(\x0e\x32\x31.transit_data_access.DataFull.TripInfo.TripStatus\x12\x11\n\ttimestamp\x18\x06 \x01(\r\x12\x11\n\tdirection\x18\x07 \x01(\x08\x12\x46\n\x08\x61rrivals\x18\x08 \x03(\x0b\x32\x34.transit_data_access.DataFull.TripInfo.ArrivalsEntry\x1a\x33\n\x06\x42ranch\x12\x12\n\nroute_hash\x18\x02 \x01(\r\x12\x15\n\rfinal_station\x18\x03 \x01(\r\x1a/\n\rArrivalsEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\r\n\x05value\x18\x02 \x01(\r:\x02\x38\x01\"3\n\nTripStatus\x12\x0b\n\x07STOPPED\x10\x00\x12\x0b\n\x07\x44\x45LAYED\x10\x01\x12\x0b\n\x07ON_TIME\x10\x02\x1aT\n\nTripsEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\x35\n\x05value\x18\x02 \x01(\x0b\x32&.transit_data_access.DataFull.TripInfo:\x02\x38\x01\"\xbf\x0e\n\nDataUpdate\x12\x1b\n\x12realtime_timestamp\x18\xb8\x17 \x01(\r\x12\x38\n\x05trips\x18\xd4\x0f \x01(\x0b\x32(.transit_data_access.DataUpdate.TripDiff\x12?\n\x08\x61rrivals\x18\xdd\x0f \x01(\x0b\x32,.transit_data_access.DataUpdate.ArrivalsDiff\x12<\n\x06status\x18\xde\x0f \x03(\x0b\x32+.transit_data_access.DataUpdate.StatusEntry\x12<\n\x06\x62ranch\x18\xdf\x0f \x03(\x0b\x32+.transit_data_access.DataUpdate.BranchEntry\x1a\x33\n\x06\x42ranch\x12\x12\n\nroute_hash\x18\x04 \x01(\r\x12\x15\n\rfinal_station\x18\x05 \x01(\r\x1a\xc0\x03\n\x04Trip\x12\x11\n\ttrip_hash\x18\x0b \x01(\r\x12;\n\x04info\x18\x0c \x01(\x0b\x32-.transit_data_access.DataUpdate.Trip.TripInfo\x1a\xe7\x02\n\x08TripInfo\x12\x36\n\x06\x62ranch\x18\x06 \x01(\x0b\x32&.transit_data_access.DataUpdate.Branch\x12H\n\x06status\x18\x07 \x01(\x0e\x32\x38.transit_data_access.DataUpdate.Trip.TripInfo.TripStatus\x12\x11\n\ttimestamp\x18\x08 \x01(\r\x12\x11\n\tdirection\x18\t \x01(\x08\x12M\n\x08\x61rrivals\x18\n \x03(\x0b\x32;.transit_data_access.DataUpdate.Trip.TripInfo.ArrivalsEntry\x1a/\n\rArrivalsEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\r\n\x05value\x18\x02 \x01(\r:\x02\x38\x01\"3\n\nTripStatus\x12\x0b\n\x07STOPPED\x10\x00\x12\x0b\n\x07\x44\x45LAYED\x10\x01\x12\x0b\n\x07ON_TIME\x10\x02\x1aR\n\x08TripDiff\x12\x10\n\x07\x64\x65leted\x18\xd2\x0f \x03(\r\x12\x34\n\x05\x61\x64\x64\x65\x64\x18\xd3\x0f \x03(\x0b\x32$.transit_data_access.DataUpdate.Trip\x1a%\n\x0cStationsList\x12\x15\n\x0cstation_hash\x18\xd5\x0f \x03(\r\x1a>\n\x0eStationArrival\x12\x15\n\x0cstation_hash\x18\xd6\x0f \x01(\r\x12\x15\n\x0c\x61rrival_time\x18\xd7\x0f \x01(\r\x1aW\n\x13StationArrivalsList\x12@\n\x07\x61rrival\x18\xd8\x0f \x03(\x0b\x32..transit_data_access.DataUpdate.StationArrival\x1a\xd9\x01\n\x0fTripStationDict\x12`\n\x11trip_station_dict\x18\xd9\x0f \x03(\x0b\x32\x44.transit_data_access.DataUpdate.TripStationDict.TripStationDictEntry\x1a\x64\n\x14TripStationDictEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12;\n\x05value\x18\x02 \x01(\x0b\x32,.transit_data_access.DataUpdate.StationsList:\x02\x38\x01\x1a\xae\x03\n\x0c\x41rrivalsDiff\x12\x41\n\x07\x64\x65leted\x18\xda\x0f \x01(\x0b\x32/.transit_data_access.DataUpdate.TripStationDict\x12G\n\x05\x61\x64\x64\x65\x64\x18\xdb\x0f \x03(\x0b\x32\x37.transit_data_access.DataUpdate.ArrivalsDiff.AddedEntry\x12M\n\x08modified\x18\xdc\x0f \x03(\x0b\x32:.transit_data_access.DataUpdate.ArrivalsDiff.ModifiedEntry\x1a\x61\n\nAddedEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\x42\n\x05value\x18\x02 \x01(\x0b\x32\x33.transit_data_access.DataUpdate.StationArrivalsList:\x02\x38\x01\x1a`\n\rModifiedEntry\x12\x0b\n\x03key\x18\x01 \x01(\x11\x12>\n\x05value\x18\x02 \x01(\x0b\x32/.transit_data_access.DataUpdate.TripStationDict:\x02\x38\x01\x1a-\n\x0bStatusEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\r\n\x05value\x18\x02 \x01(\r:\x02\x38\x01\x1aU\n\x0b\x42ranchEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\x35\n\x05value\x18\x02 \x01(\x0b\x32&.transit_data_access.DataUpdate.Branch:\x02\x38\x01\x62\x06proto3')
 )
 
 
@@ -46,8 +46,8 @@ _DATAFULL_TRIPINFO_TRIPSTATUS = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=1739,
-  serialized_end=1790,
+  serialized_start=1902,
+  serialized_end=1953,
 )
 _sym_db.RegisterEnumDescriptor(_DATAFULL_TRIPINFO_TRIPSTATUS)
 
@@ -72,8 +72,8 @@ _DATAUPDATE_TRIP_TRIPINFO_TRIPSTATUS = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=1739,
-  serialized_end=1790,
+  serialized_start=1902,
+  serialized_end=1953,
 )
 _sym_db.RegisterEnumDescriptor(_DATAUPDATE_TRIP_TRIPINFO_TRIPSTATUS)
 
@@ -125,8 +125,8 @@ _DATAFULL_ROUTEINFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=461,
-  serialized_end=542,
+  serialized_start=542,
+  serialized_end=623,
 )
 
 _DATAFULL_ROUTESENTRY = _descriptor.Descriptor(
@@ -162,8 +162,8 @@ _DATAFULL_ROUTESENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=544,
-  serialized_end=630,
+  serialized_start=625,
+  serialized_end=711,
 )
 
 _DATAFULL_STATIONINFO_TRAVELTIME = _descriptor.Descriptor(
@@ -192,8 +192,8 @@ _DATAFULL_STATIONINFO_TRAVELTIME = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=822,
-  serialized_end=855,
+  serialized_start=928,
+  serialized_end=961,
 )
 
 _DATAFULL_STATIONINFO_TRAVELTIMESENTRY = _descriptor.Descriptor(
@@ -229,8 +229,8 @@ _DATAFULL_STATIONINFO_TRAVELTIMESENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=857,
-  serialized_end=961,
+  serialized_start=963,
+  serialized_end=1067,
 )
 
 _DATAFULL_STATIONINFO = _descriptor.Descriptor(
@@ -283,7 +283,14 @@ _DATAFULL_STATIONINFO = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='travel_times', full_name='transit_data_access.DataFull.StationInfo.travel_times', index=6,
+      name='station_complex', full_name='transit_data_access.DataFull.StationInfo.station_complex', index=6,
+      number=17, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='travel_times', full_name='transit_data_access.DataFull.StationInfo.travel_times', index=7,
       number=1015, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
@@ -301,8 +308,8 @@ _DATAFULL_STATIONINFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=633,
-  serialized_end=961,
+  serialized_start=714,
+  serialized_end=1067,
 )
 
 _DATAFULL_STATIONSENTRY = _descriptor.Descriptor(
@@ -338,8 +345,8 @@ _DATAFULL_STATIONSENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=963,
-  serialized_end=1053,
+  serialized_start=1069,
+  serialized_end=1159,
 )
 
 _DATAFULL_ROUTEHASHLOOKUPENTRY = _descriptor.Descriptor(
@@ -375,8 +382,8 @@ _DATAFULL_ROUTEHASHLOOKUPENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1055,
-  serialized_end=1109,
+  serialized_start=1161,
+  serialized_end=1215,
 )
 
 _DATAFULL_TRANSFERSFORSTATION_TRANSFERTIMESENTRY = _descriptor.Descriptor(
@@ -412,8 +419,8 @@ _DATAFULL_TRANSFERSFORSTATION_TRANSFERTIMESENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1229,
-  serialized_end=1281,
+  serialized_start=1335,
+  serialized_end=1387,
 )
 
 _DATAFULL_TRANSFERSFORSTATION = _descriptor.Descriptor(
@@ -442,8 +449,8 @@ _DATAFULL_TRANSFERSFORSTATION = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1112,
-  serialized_end=1281,
+  serialized_start=1218,
+  serialized_end=1387,
 )
 
 _DATAFULL_TRANSFERSENTRY = _descriptor.Descriptor(
@@ -479,8 +486,45 @@ _DATAFULL_TRANSFERSENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1283,
-  serialized_end=1382,
+  serialized_start=1389,
+  serialized_end=1488,
+)
+
+_DATAFULL_STATIONCOMPLEXESENTRY = _descriptor.Descriptor(
+  name='StationComplexesEntry',
+  full_name='transit_data_access.DataFull.StationComplexesEntry',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='key', full_name='transit_data_access.DataFull.StationComplexesEntry.key', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='value', full_name='transit_data_access.DataFull.StationComplexesEntry.value', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=_b('8\001'),
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=1490,
+  serialized_end=1545,
 )
 
 _DATAFULL_TRIPINFO_BRANCH = _descriptor.Descriptor(
@@ -516,8 +560,8 @@ _DATAFULL_TRIPINFO_BRANCH = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1637,
-  serialized_end=1688,
+  serialized_start=1800,
+  serialized_end=1851,
 )
 
 _DATAFULL_TRIPINFO_ARRIVALSENTRY = _descriptor.Descriptor(
@@ -553,8 +597,8 @@ _DATAFULL_TRIPINFO_ARRIVALSENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1690,
-  serialized_end=1737,
+  serialized_start=1853,
+  serialized_end=1900,
 )
 
 _DATAFULL_TRIPINFO = _descriptor.Descriptor(
@@ -612,8 +656,8 @@ _DATAFULL_TRIPINFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1385,
-  serialized_end=1790,
+  serialized_start=1548,
+  serialized_end=1953,
 )
 
 _DATAFULL_TRIPSENTRY = _descriptor.Descriptor(
@@ -649,8 +693,8 @@ _DATAFULL_TRIPSENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1792,
-  serialized_end=1876,
+  serialized_start=1955,
+  serialized_end=2039,
 )
 
 _DATAFULL = _descriptor.Descriptor(
@@ -710,8 +754,15 @@ _DATAFULL = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='trips', full_name='transit_data_access.DataFull.trips', index=7,
+      name='station_complexes', full_name='transit_data_access.DataFull.station_complexes', index=7,
       number=1019, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='trips', full_name='transit_data_access.DataFull.trips', index=8,
+      number=1020, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -719,7 +770,7 @@ _DATAFULL = _descriptor.Descriptor(
   ],
   extensions=[
   ],
-  nested_types=[_DATAFULL_ROUTEINFO, _DATAFULL_ROUTESENTRY, _DATAFULL_STATIONINFO, _DATAFULL_STATIONSENTRY, _DATAFULL_ROUTEHASHLOOKUPENTRY, _DATAFULL_TRANSFERSFORSTATION, _DATAFULL_TRANSFERSENTRY, _DATAFULL_TRIPINFO, _DATAFULL_TRIPSENTRY, ],
+  nested_types=[_DATAFULL_ROUTEINFO, _DATAFULL_ROUTESENTRY, _DATAFULL_STATIONINFO, _DATAFULL_STATIONSENTRY, _DATAFULL_ROUTEHASHLOOKUPENTRY, _DATAFULL_TRANSFERSFORSTATION, _DATAFULL_TRANSFERSENTRY, _DATAFULL_STATIONCOMPLEXESENTRY, _DATAFULL_TRIPINFO, _DATAFULL_TRIPSENTRY, ],
   enum_types=[
   ],
   serialized_options=None,
@@ -729,7 +780,7 @@ _DATAFULL = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=51,
-  serialized_end=1876,
+  serialized_end=2039,
 )
 
 
@@ -766,8 +817,8 @@ _DATAUPDATE_BRANCH = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=2169,
-  serialized_end=2220,
+  serialized_start=2332,
+  serialized_end=2383,
 )
 
 _DATAUPDATE_TRIP_TRIPINFO_ARRIVALSENTRY = _descriptor.Descriptor(
@@ -803,8 +854,8 @@ _DATAUPDATE_TRIP_TRIPINFO_ARRIVALSENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1690,
-  serialized_end=1737,
+  serialized_start=1853,
+  serialized_end=1900,
 )
 
 _DATAUPDATE_TRIP_TRIPINFO = _descriptor.Descriptor(
@@ -862,8 +913,8 @@ _DATAUPDATE_TRIP_TRIPINFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=2312,
-  serialized_end=2671,
+  serialized_start=2475,
+  serialized_end=2834,
 )
 
 _DATAUPDATE_TRIP = _descriptor.Descriptor(
@@ -899,8 +950,8 @@ _DATAUPDATE_TRIP = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=2223,
-  serialized_end=2671,
+  serialized_start=2386,
+  serialized_end=2834,
 )
 
 _DATAUPDATE_TRIPDIFF = _descriptor.Descriptor(
@@ -936,8 +987,8 @@ _DATAUPDATE_TRIPDIFF = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=2673,
-  serialized_end=2755,
+  serialized_start=2836,
+  serialized_end=2918,
 )
 
 _DATAUPDATE_STATIONSLIST = _descriptor.Descriptor(
@@ -966,8 +1017,8 @@ _DATAUPDATE_STATIONSLIST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=2757,
-  serialized_end=2794,
+  serialized_start=2920,
+  serialized_end=2957,
 )
 
 _DATAUPDATE_STATIONARRIVAL = _descriptor.Descriptor(
@@ -1003,8 +1054,8 @@ _DATAUPDATE_STATIONARRIVAL = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=2796,
-  serialized_end=2858,
+  serialized_start=2959,
+  serialized_end=3021,
 )
 
 _DATAUPDATE_STATIONARRIVALSLIST = _descriptor.Descriptor(
@@ -1033,8 +1084,8 @@ _DATAUPDATE_STATIONARRIVALSLIST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=2860,
-  serialized_end=2947,
+  serialized_start=3023,
+  serialized_end=3110,
 )
 
 _DATAUPDATE_TRIPSTATIONDICT_TRIPSTATIONDICTENTRY = _descriptor.Descriptor(
@@ -1070,8 +1121,8 @@ _DATAUPDATE_TRIPSTATIONDICT_TRIPSTATIONDICTENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=3067,
-  serialized_end=3167,
+  serialized_start=3230,
+  serialized_end=3330,
 )
 
 _DATAUPDATE_TRIPSTATIONDICT = _descriptor.Descriptor(
@@ -1100,8 +1151,8 @@ _DATAUPDATE_TRIPSTATIONDICT = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=2950,
-  serialized_end=3167,
+  serialized_start=3113,
+  serialized_end=3330,
 )
 
 _DATAUPDATE_ARRIVALSDIFF_ADDEDENTRY = _descriptor.Descriptor(
@@ -1137,8 +1188,8 @@ _DATAUPDATE_ARRIVALSDIFF_ADDEDENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=3405,
-  serialized_end=3502,
+  serialized_start=3568,
+  serialized_end=3665,
 )
 
 _DATAUPDATE_ARRIVALSDIFF_MODIFIEDENTRY = _descriptor.Descriptor(
@@ -1174,8 +1225,8 @@ _DATAUPDATE_ARRIVALSDIFF_MODIFIEDENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=3504,
-  serialized_end=3600,
+  serialized_start=3667,
+  serialized_end=3763,
 )
 
 _DATAUPDATE_ARRIVALSDIFF = _descriptor.Descriptor(
@@ -1218,8 +1269,8 @@ _DATAUPDATE_ARRIVALSDIFF = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=3170,
-  serialized_end=3600,
+  serialized_start=3333,
+  serialized_end=3763,
 )
 
 _DATAUPDATE_STATUSENTRY = _descriptor.Descriptor(
@@ -1255,8 +1306,8 @@ _DATAUPDATE_STATUSENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=3602,
-  serialized_end=3647,
+  serialized_start=3765,
+  serialized_end=3810,
 )
 
 _DATAUPDATE_BRANCHENTRY = _descriptor.Descriptor(
@@ -1292,8 +1343,8 @@ _DATAUPDATE_BRANCHENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=3649,
-  serialized_end=3734,
+  serialized_start=3812,
+  serialized_end=3897,
 )
 
 _DATAUPDATE = _descriptor.Descriptor(
@@ -1350,8 +1401,8 @@ _DATAUPDATE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1879,
-  serialized_end=3734,
+  serialized_start=2042,
+  serialized_end=3897,
 )
 
 _DATAFULL_ROUTEINFO.containing_type = _DATAFULL
@@ -1370,6 +1421,7 @@ _DATAFULL_TRANSFERSFORSTATION.fields_by_name['transfer_times'].message_type = _D
 _DATAFULL_TRANSFERSFORSTATION.containing_type = _DATAFULL
 _DATAFULL_TRANSFERSENTRY.fields_by_name['value'].message_type = _DATAFULL_TRANSFERSFORSTATION
 _DATAFULL_TRANSFERSENTRY.containing_type = _DATAFULL
+_DATAFULL_STATIONCOMPLEXESENTRY.containing_type = _DATAFULL
 _DATAFULL_TRIPINFO_BRANCH.containing_type = _DATAFULL_TRIPINFO
 _DATAFULL_TRIPINFO_ARRIVALSENTRY.containing_type = _DATAFULL_TRIPINFO
 _DATAFULL_TRIPINFO.fields_by_name['branch'].message_type = _DATAFULL_TRIPINFO_BRANCH
@@ -1383,6 +1435,7 @@ _DATAFULL.fields_by_name['routes'].message_type = _DATAFULL_ROUTESENTRY
 _DATAFULL.fields_by_name['stations'].message_type = _DATAFULL_STATIONSENTRY
 _DATAFULL.fields_by_name['routehash_lookup'].message_type = _DATAFULL_ROUTEHASHLOOKUPENTRY
 _DATAFULL.fields_by_name['transfers'].message_type = _DATAFULL_TRANSFERSENTRY
+_DATAFULL.fields_by_name['station_complexes'].message_type = _DATAFULL_STATIONCOMPLEXESENTRY
 _DATAFULL.fields_by_name['trips'].message_type = _DATAFULL_TRIPSENTRY
 _DATAUPDATE_BRANCH.containing_type = _DATAUPDATE
 _DATAUPDATE_TRIP_TRIPINFO_ARRIVALSENTRY.containing_type = _DATAUPDATE_TRIP_TRIPINFO
@@ -1494,6 +1547,13 @@ DataFull = _reflection.GeneratedProtocolMessageType('DataFull', (_message.Messag
     })
   ,
 
+  'StationComplexesEntry' : _reflection.GeneratedProtocolMessageType('StationComplexesEntry', (_message.Message,), {
+    'DESCRIPTOR' : _DATAFULL_STATIONCOMPLEXESENTRY,
+    '__module__' : 'transit_data_access_pb2'
+    # @@protoc_insertion_point(class_scope:transit_data_access.DataFull.StationComplexesEntry)
+    })
+  ,
+
   'TripInfo' : _reflection.GeneratedProtocolMessageType('TripInfo', (_message.Message,), {
 
     'Branch' : _reflection.GeneratedProtocolMessageType('Branch', (_message.Message,), {
@@ -1536,6 +1596,7 @@ _sym_db.RegisterMessage(DataFull.RoutehashLookupEntry)
 _sym_db.RegisterMessage(DataFull.TransfersForStation)
 _sym_db.RegisterMessage(DataFull.TransfersForStation.TransferTimesEntry)
 _sym_db.RegisterMessage(DataFull.TransfersEntry)
+_sym_db.RegisterMessage(DataFull.StationComplexesEntry)
 _sym_db.RegisterMessage(DataFull.TripInfo)
 _sym_db.RegisterMessage(DataFull.TripInfo.Branch)
 _sym_db.RegisterMessage(DataFull.TripInfo.ArrivalsEntry)
@@ -1675,6 +1736,7 @@ _DATAFULL_STATIONSENTRY._options = None
 _DATAFULL_ROUTEHASHLOOKUPENTRY._options = None
 _DATAFULL_TRANSFERSFORSTATION_TRANSFERTIMESENTRY._options = None
 _DATAFULL_TRANSFERSENTRY._options = None
+_DATAFULL_STATIONCOMPLEXESENTRY._options = None
 _DATAFULL_TRIPINFO_ARRIVALSENTRY._options = None
 _DATAFULL_TRIPSENTRY._options = None
 _DATAUPDATE_TRIP_TRIPINFO_ARRIVALSENTRY._options = None

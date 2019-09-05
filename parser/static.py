@@ -3,7 +3,6 @@
 # import os
 from contextlib import suppress
 import time
-from collections import defaultdict
 import requests
 import shutil
 import csv
@@ -23,15 +22,7 @@ class StaticHandler(object):
         self.current_checksum = None
         self.latest_checksum = None
         self.url: str = u.GTFS_CONF.static_url
-        self.data: u.StaticData = u.StaticData(
-            name=u.GTFS_CONF.name,
-            static_timestamp=0,
-            routes={},
-            stations={},
-            routehash_lookup={},
-            stationhash_lookup={},
-            transfers=defaultdict(dict)
-        )
+        self.data: u.StaticData = u.StaticData(name=u.GTFS_CONF.name)
         self.data.static_timestamp = 0
         self.data_json_str: str = ''
 
@@ -145,11 +136,7 @@ class StaticHandler(object):
                         id_=station_hash,
                         name=row['stop_name'],
                         lat=float(row['stop_lat']),
-                        lon=float(row['stop_lon']),
-                        borough='',
-                        n_label='',
-                        s_label='',
-                        travel_times={})
+                        lon=float(row['stop_lon']))
                     self.data.stationhash_lookup[stop_id] = station_hash
                 else:
                     station_hash = u.short_hash(parent_station, u.StationHash)
@@ -158,8 +145,14 @@ class StaticHandler(object):
         with open(self.locate_csv('stations'), mode='r') as stations_file:
             stations_csv_reader = csv.DictReader(stations_file)
             for row in stations_csv_reader:
+                if row['Complex ID'] != row['Station ID']:
+                    station_complex = row['Complex ID']
+                else:
+                    station_complex = ''
+
                 stop_id = row['GTFS Stop ID']
                 station_hash = u.short_hash(stop_id, u.StationHash)
+
                 if station_hash not in self.data.stations:
                     u.log.warning("%s -> %s not in self.data.stations", stop_id, station_hash)
                 else:
@@ -168,6 +161,13 @@ class StaticHandler(object):
                     self.data.stations[station_hash].borough = borough
                     self.data.stations[station_hash].n_label = n_label
                     self.data.stations[station_hash].s_label = s_label
+                    if station_complex:
+                        self.data.stations[station_hash].station_complex = station_complex
+
+        with open(self.locate_csv('stationcomplexes'), mode='r') as stations_file:
+            stations_csv_reader = csv.DictReader(stations_file)
+            for row in stations_csv_reader:
+                self.data.station_complexes[row['Complex ID']] = row['Complex Name']
 
 
     def load_route_info(self) -> None:

@@ -23,6 +23,7 @@ message DataFull {
     string borough = 12;
     string n_label = 13;
     string s_label = 14;
+    string station_complex = 17;
     message TravelTime {
       sint32 travel_time = 16;
     }
@@ -36,6 +37,8 @@ message DataFull {
     map<uint32, uint32> transfer_times = 1;  // map key is StationHash, value is transfer_time
   }
   map<uint32, TransfersForStation> transfers = 1018;  // map key is StationHash
+
+  map<string, string> station_complexes = 1019;  // map key is StationHash
 
   message TripInfo {
     message Branch {
@@ -53,7 +56,7 @@ message DataFull {
     bool direction = 7;
     map<uint32, uint32> arrivals = 8;                  // map key is StationHash, value is Arrival Time
   }
-  map<uint32, TripInfo> trips = 1019;                   // map key is TripHash
+  map<uint32, TripInfo> trips = 1020;                   // map key is TripHash
 
 }
 

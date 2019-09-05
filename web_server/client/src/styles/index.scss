@@ -333,6 +333,7 @@ body {
   min-width: $arrivalsWidth;
 }
 .arrival-time {
+  display: inline-block;
   width: $arrivalTimeWidth;
   margin: 0;
   margin-left: $arrivalTimeLeftMargin;
