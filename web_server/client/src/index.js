@@ -1,8 +1,8 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
-import './normalize.css'
-import './skeleton.css'
-import './index.scss'
+import './styles/normalize.css'
+import './styles/skeleton.css'
+import './styles/index.scss'
 import {
   devLog,
   sleep,
