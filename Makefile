@@ -5,7 +5,7 @@ SERVICE := tda-3
 PDIR := $(shell pwd)
 TMP := $(PWD)/../temp-tdr-build
 
-ECR := 517918230755.dkr.ecr.us-east-2.amazonaws.com
+ECR := 517918230755.dkr.ecr.us-east-2.amazonaws.com/transit-data-access
 
 build:
 	docker-compose build
@@ -47,13 +47,13 @@ deploy:
 	&& cp -R $(PDIR)/config $(PDIR)/aws-deploy-conf . \
 	&& cd protobuf && make all && cd .. \
 	&& pwd \
-	&& docker build -t $(ECR)/parser:latest -t 517918230755.dkr.ecr.us-east-2.amazonaws.com/transit-data-access/parser:latest ./parser \
-	&& docker build -t $(ECR)/web_server:latest -t 517x918230755.dkr.ecr.us-east-2.amazonaws.com/transit-data-access/web_client:latest ./web_server \
-	&& docker build -t $(ECR)/web_client:latest -t 517918230755.dkr.ecr.us-east-2.amazonaws.com/transit-data-access/web_server:latest ./web_server/client \
+	&& docker build -t $(ECR)/parser:latest     -t parser:latest     ./parser \
+	&& docker build -t $(ECR)/web_server:latest -t web_server:latest ./web_server \
+	&& docker build -t $(ECR)/web_client:latest -t web_client:latest ./web_server/client \
 	&& $(shell aws ecr get-login --no-include-email) \
-	&& docker push $(ECR)/transit-data-access/parser:latest \
-	&& docker push $(ECR)/transit-data-access/web_server:latest \
-	&& docker push $(ECR)/transit-data-access/web_client:latest \
+	&& docker push $(ECR)/parser:latest \
+	&& docker push $(ECR)/web_server:latest \
+	&& docker push $(ECR)/web_client:latest \
 	&& rm -rf $(TMP) \
 	&& aws ecs update-service --cluster $(CLUSTER) --service $(SERVICE) --force-new-deployment
 
