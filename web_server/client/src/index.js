@@ -2,8 +2,16 @@ import React from 'react'
 import ReactDOM from 'react-dom'
 import './normalize.css'
 import './skeleton.css'
-import './index.css'
-import { sleep } from './utils.js'
+import './index.scss'
+import {
+  devLog,
+  sleep,
+  processData,
+  dataReceivedMsg,
+  requestFullMsg,
+} from './utils.js'
+import { ArrivalsByRoute } from './components/arrivalsByRoute.js'
+import { ArrivalsByStation } from './components/arrivalsByStation.js'
 
 const protobuf = require("protobufjs")
 const dateFormat = require('dateformat')
@@ -18,12 +26,6 @@ let upcomingMessageTimestamp = 0
 let upcomingMessageBinaryLength = 0
 let upcomingMessageType = DATA_FULL
 
-function devLog(entry) {
-  if(process.env.NODE_ENV === 'development') {
-    console.log(entry)
-  }
-}
-
 
 /// OBJECTS (initialzed later)
 let DataFull
@@ -31,469 +33,7 @@ let DataUpdate
 let ws
 
 
-/// React HELPER FUNCTIONS ///
-function processData(data) {
-  // add a val:key version of the lookup for routes (hash -> name)
-  data.routeNameLookup = {}
-  for (let key in data.routehashLookup) {
-    let val = data.routehashLookup[key]
-    data.routeNameLookup[val] = key
-  }
-
-  // create a set of finalStations for each route
-  for (let routeHash in data.routes) {
-    data.routes[routeHash].finalStations = new Set()
-  }
-
-  // add an arrivals list for each station and gather station_name & stationhash into two complimentary mappings
-  data.stationNameFromHash = {}
-  data.stationNames = []
-  for (let stationHash in data.stations) {
-    data.stations[stationHash].arrivals = {}
-    data.stationNameFromHash[stationHash] = data.stations[stationHash].name
-    data.stationNames.push({
-      name: data.stations[stationHash].name,
-      stationHash: stationHash
-    })
-  }
-  // populate the arrivals list for each station in props.stations
-  for (let tripHash in data.trips) {
-    const trip = data.trips[tripHash]
-    for (let elem of Object.entries(trip.arrivals)) {
-      const stationHash = elem[0]
-          , arrivalTime = elem[1]
-          , finalStation = trip.branch.finalStation
-          , routeHash = trip.branch.routeHash.toString()
-          // TODO figure out why each routeHash in data.routes is a string...
-
-      // create the nexted dicts if necessary:
-      try {
-        if (!data.stations[stationHash].arrivals[routeHash]) {
-          data.stations[stationHash].arrivals[routeHash] = {}
-        }
-        if (!data.stations[stationHash].arrivals[routeHash][finalStation]) {
-          data.stations[stationHash].arrivals[routeHash][finalStation] = {}
-        }
-      } catch { devLog(`ERROR on stationHash for trip.arrivals: ${trip.arrivals} and elem: ${elem}`) }
-
-      // add this arrival to the station 
-      data.stations[stationHash].arrivals[routeHash][finalStation][arrivalTime] = tripHash
-      // add this arrival's finalStation to this route's 'finalStations' Set
-      try {
-        data.routes[trip.branch.routeHash].finalStations.add(finalStation)
-      } catch (err) {
-        devLog(`ERROR: ${trip.branch.routeHash} not in data.routes`)
-        devLog(trip)
-      }
-    }
-  }
-
-  return data
-}
-
-function dataReceivedMsg(timestamp) {
-  return `{"type": "data_received", "last_successful_timestamp": "${timestamp}"}`
-}
-
-function requestFullMsg(error='none') {
-  return `{"type": "request_full", "error": "${error}"}`
-}
-
-function timeDiffsFromBranchArrivals(arrivalsForBranch, updatedTrips) {
-  // Note: arrivalsForBranch should be from arrivals[routeHash][finalStation] for some routeHash and finalStation
-  const now = Date.now() / 1000
-  arrivalsForBranch = Object.keys(arrivalsForBranch).filter(arrivalTime => {
-    return (arrivalTime - now > -30)
-  })
-  // slice to get just the three most recent arrivals
-  arrivalsForBranch = arrivalsForBranch.sort().slice(0, 3)
-
-  return arrivalsForBranch.map(arrivalTimeStr => { // TODO: why is this a string
-    let arrivalTime = parseInt(arrivalTimeStr)
-    let timeDiff = Math.floor(arrivalTime - now)
-    let outList = []
-    if (timeDiff < 15) {
-      outList =  ["now", "very-soon"]
-    } else if (timeDiff < 60) {
-      outList =  [Math.floor(timeDiff) + "s", "very-soon"]
-    } else if (timeDiff < 20 * 60) {
-      outList =  [Math.floor(timeDiff / 60) + "m", "soon"]
-    } else {
-      outList =  [dateFormat(new Date(arrivalTime * 1000), 'h:MMt'), ""]
-    }
-
-    let tripHash = arrivalsForBranch[arrivalTimeStr]
-    if (updatedTrips.has(tripHash)) {
-      outList[1] = outList[1] + " updated"
-    }
-    return outList
-  }) /// TODO: remove duplicate "now" entries...
-}
-
-
 /// REACT COMPONENTS ///
-function RouteStationName(props) {
-  return (
-    <span className='route-station-name'>
-      {props.name}
-    </span>
-  )
-}
-
-function ArrivalTime(props) {
-  return (
-    <span className={"arrival-time " + props.formattingClasses}>
-      {props.time}
-    </span>
-  )
-}
-
-function RouteArrivals(props) {
-  if (props.selectedRoute && props.selectedFinalStation) {
-    return (
-      <div className='route-stations'>
-        <code>*Known Issue: some stations are out of order</code>
-        {
-          // Filter arrivals to leave only those on a given route that haven't already happened yet
-          props.selectedRoute.stations.map((stationHash, i) => {
-            const station = props.data.stations[stationHash]
-            let arrivalsForBranch
-            try {
-              arrivalsForBranch = station.arrivals[props.selectedRouteHash][props.selectedFinalStation]
-            if(!arrivalsForBranch) return null
-            } catch {
-              return null
-            }
-
-            // convert each timeDiff (# of secs) to a text representation (30s, 4m, 12:34p, etc), and a styling based on how soon it is
-            let arrivalTimeDiffsWithFormatting = timeDiffsFromBranchArrivals(arrivalsForBranch, props.updatedTrips)
-            if (arrivalTimeDiffsWithFormatting.length === 0) return null
-            return (
-              <div className='route-station' key={i}>
-                <RouteStationName name={props.data.stations[stationHash].name} />
-                {
-                  arrivalTimeDiffsWithFormatting.map((timeDiffWithFormatting, i) => {
-                    let[timeDiff, formattingClasses] = timeDiffWithFormatting
-                    return (
-                      <ArrivalTime time={timeDiff} formattingClasses={formattingClasses} key={i} />
-                    )
-                  })
-                }
-              </div>
-            )
-          })
-        }
-      </div>
-    )
-  }
-  return null
-}
-
-
-function RouteNameList(props) {
-  return (
-    <div className="route-name-list">
-      {
-        props.routeInfos.sort().map(elem => {
-          const routeName = elem[0]
-              , routeInfo = elem[1]
-              , routeHash = elem[2]
-              , i         = elem[3]
-
-          const routeColor = "#" + ("00"+(Number(routeInfo.color).toString(16))).slice(-6)
-          // ^^ TODO: move this logic into processData to be DRY
-          let style
-          if (routeHash === props.selectedRouteHash) {
-            style = {backgroundColor: routeColor, color: 'white'}
-          } else {
-            style = {color: routeColor, backgroundColor: 'white'}
-          }
-          return (
-            <button
-              key={i}
-              className={"route-name"}
-              style={style}
-              title={routeInfo.desc}
-              onClick={() => props.routeClicked(routeHash)}
-            >
-              { routeName }
-            </button>
-          )
-        })
-      }
-    </div>
-  )
-}
-
-function FinalStationsRender(props) {
-  let output
-  if (props.selectedRouteHash == null) {
-    output = "Click a route to see arrivals!"
-  } else if (props.finalStations !== null && props.finalStations.size > 0) {
-    output = [...props.finalStations].map((stationHash, i) => {
-      return (
-        <button
-          className={"route-final-station " + ((props.selectedFinalStation === stationHash) ? "selected" : "")}
-          onClick={() => props.finalStationClicked(stationHash)}
-          key={i}
-        >
-          { "to " + props.stations[stationHash].name }
-        </button>
-      )
-    })
-  } else {
-    if (props.selectedRouteHash !== null) {
-      output = "No trains currently running on this route."
-    } else {
-      output = props.selectedRouteHash
-    }
-  }
-  return (
-    <div className="route-final-stations">
-      { output }
-    </div>
-  )
-}
-
-class ArrivalsByRoute extends React.Component {
-  constructor(props) {
-    super(props)
-    this.state = {
-      selectedRouteHash: null,
-      selectedFinalStation: null,
-      finalStations: null
-    }
-  }
-
-  routeClicked = (routeHash) => {
-    const newRouteHash = (routeHash === this.state.selectedRouteHash) ? null : routeHash
-    const finalStations = (newRouteHash === null) ? null : this.props.data.routes[newRouteHash].finalStations
-    this.setState({
-      selectedRouteHash: newRouteHash,
-      finalStations: finalStations,
-      selectedFinalStation: null
-    })
-  }
-
-  finalStationClicked = (stationHash) => {
-    this.setState({
-      selectedFinalStation: (stationHash === this.state.selectedFinalStation) ? null : stationHash
-    })
-  }
-
-  render() {
-    const routeInfos = Object.entries(this.props.data.routes).map((elem, i) => {
-      let routeHash = parseInt(elem[0])
-      let routeInfo = elem[1]
-      let routeName = this.props.data.routeNameLookup[routeHash]
-      return [routeName, routeInfo, routeHash, i]
-    })
-
-    const selectedRoute = this.props.data.routes[this.state.selectedRouteHash]
-    const selectedRouteName = this.props.data.routeNameLookup[this.state.selectedRouteHash]
-
-    return (
-      <React.Fragment>
-        <h5>
-          Arrivals By Route
-        </h5>
-        <RouteNameList
-          routeInfos={routeInfos}
-          selectedRouteHash={this.state.selectedRouteHash}
-          routeClicked={this.routeClicked}
-        />
-        <FinalStationsRender
-          finalStations={this.state.finalStations}
-          selectedFinalStation={this.state.selectedFinalStation}
-          selectedRouteHash={this.state.selectedRouteHash}
-          stations={this.props.data.stations}
-          finalStationClicked={this.finalStationClicked}
-        />
-        <RouteArrivals
-          className="route-arrivals"
-          selectedRoute={selectedRoute}
-          selectedRouteHash={this.state.selectedRouteHash}
-          selectedRouteName={selectedRouteName}
-          selectedFinalStation={this.state.selectedFinalStation}
-          updatedTrips={this.props.updatedTrips}
-          data={this.props.data}
-        />
-      </React.Fragment>
-    )
-  }
-}
-
-
-class Search extends React.Component {
-  constructor(props) {
-    super(props)
-    this.state = {
-      inputValue: ''
-    }
-  }
-
-  updateInputValue(evt) {
-    this.setState({
-      inputValue: evt.target.value
-    })
-  }
-
-  render() {
-    return (
-      <input
-        className="u-full-width"
-        onInput={
-          evt => {
-            this.updateInputValue(evt)
-            this.props.onInput(evt.target.value)
-          }
-        }
-        placeholder={this.props.placeholder}
-     />
-    )
-  }
-}
-
-function StationRouteArrivals(props) {
-  const routeName = props.data.routeNameLookup[props.routeHash]
-  const finalStationName = props.data.stationNameFromHash[props.finalStation]
-  const timeDiffsWithFormatting = timeDiffsFromBranchArrivals(
-    props.station.arrivals[props.routeHash][props.finalStation],
-    props.updatedTrips
-  )
-  const formattedArrivals = timeDiffsWithFormatting.map(
-    (timeDiffWithFormatting, i) => {
-      let[timeDiff, formattingClasses] = timeDiffWithFormatting
-      return (
-        <ArrivalTime time={timeDiff} formattingClasses={formattingClasses} key={i} />
-      )
-    }
-  )
-
-  return (
-    <div className="station-arrivals">
-      <span className="station-branch">
-        <span className="station-route-name" style={{color: "white", backgroundColor: props.routeColor}}>
-          { routeName }
-        </span>
-        to { finalStationName }:
-      </span>
-      <span className="station-route-arrivals">
-        { formattedArrivals }
-      </span>
-    </div>
-  )
-}
-
-function Station(props) {
-  const station = props.data.stations[props.stationHash]
-  let arrival
-    , key
-    , routeColor
-  return (
-    <div className="station">
-      <div className="station-name">
-        { station.name }
-      </div>
-      <div className="station-routes">
-        {
-          Object.keys(station.arrivals).map((routeHash, i) => {
-            arrival = station.arrivals[routeHash]
-            return Object.keys(arrival).map((finalStation, j) => {
-              key = i * 1000 + j
-              routeColor = (
-                "#" +
-                ("00"+(Number(props.data.routes[routeHash].color).toString(16))).slice(-6)
-              )
-              return (
-                <StationRouteArrivals
-                  key={key}
-                  data={props.data}
-                  routeHash={routeHash}
-                  finalStation={finalStation}
-                  routeColor={routeColor}
-                  station={station}
-                  updatedTrips={props.updatedTrips}
-                />
-              )
-            })
-          })
-        }
-      </div>
-    </div>
-  )
-}
-
-
-const initResultLimit = 10;
-const resultLimitIncrease = 10;
-
-class ArrivalsByStation extends React.Component {
-  constructor(props) {
-    super(props)
-    this.state = {
-      searchText: "",
-      resultLimit: initResultLimit
-    }
-  }
-
-  updateSearchText = (searchText) => {
-    let trimmedText = searchText.trim().toLowerCase()
-    this.setState({
-      searchText: trimmedText,
-      resultLimit: initResultLimit
-    })
-  }
-
-  increaseResultLimit = () => {
-    this.setState({
-      resultLimit: this.state.resultLimit + resultLimitIncrease
-    })
-  }
-
-  render() {
-    let stationList = []
-    if (this.state.searchText !== "") {
-      this.props.data.stationNames.forEach((stationNameAndHash, i) => {
-        let name = stationNameAndHash.name
-          , stationHash = stationNameAndHash.stationHash
-        if (name.toLowerCase().indexOf(this.state.searchText) >= 0) {
-          stationList.push(
-            <Station
-              key={ i }
-              data={ this.props.data }
-              stationHash={ stationHash }
-              updatedTrips={ this.props.updatedTrips }
-            />
-          )
-        } else {
-          return null
-        }
-      })
-    }
-
-    let showMore = ""
-    if (stationList.length > 10) {
-      showMore = <div className="show-more" onClick={this.increaseResultLimit}>show more results</div>
-    }
-
-    return (
-      <div>
-        <div className="arrivals-by-station">
-          <h5>
-            Arrivals By Station
-          </h5>
-          <Search
-            placeholder='start typing a station name...'
-            onInput={this.updateSearchText}
-          />
-          { stationList.slice(0, this.state.resultLimit) }
-        </div>
-        { showMore }
-      </div>
-    )
-  }
-}
 
 
 class DataInterface extends React.Component {
@@ -512,7 +52,11 @@ class DataInterface extends React.Component {
 
   render() {
     if (this.props.data === null) {
-      return "Waiting for data..."
+      return (
+        <div style={{color: "#fff"}}>
+          Waiting for data...
+        </div>
+      )
     }
     if (!this.props.data.routes) {
       return "Routes not found"
@@ -803,6 +347,7 @@ class Main extends React.Component {
     return (
       <React.Fragment>
         <div id="header-bar"/>
+        <div id="background"/>
         <div className="container">
           <div className="row header">
             <span ref="dataStatus" className={
@@ -823,7 +368,7 @@ class Main extends React.Component {
           </div>
 
           <div className="row data">
-            <div className="ten columns offset-by-one">
+            <div className="twelve columns">
               <DataInterface data={ this.state.processedData } updatedTrips={ this.state.updatedTrips }/>
             </div>
           </div>

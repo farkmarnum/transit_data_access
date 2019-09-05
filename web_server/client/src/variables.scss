@@ -1,0 +1,50 @@
+@import "util.scss";
+
+/* /// COLORS /// */
+
+/*** MAIN ***/
+$primaryLight: #0153EA;
+$primaryMidLight: #003CA9;
+$primaryMid: #003089;
+$primaryMidDark: #00266C;
+$primaryDark: #001B4B;
+
+$secondaryLight: #FCFF00;
+$secondaryMidLight: #FBFE00;
+$secondaryMid: #CBCE00;
+$secondaryMidDark: #A0A200;
+$secondaryDark: #707100;
+
+
+/*** BASIC FONT / BG ***/
+$brightWhite: #fff;
+$lightestGrey: #eee;
+$lightGrey: #ccc;
+$midGrey: #848484;
+$darkGrey: #666;
+$darkestGrey: #222;
+
+$lightBackground: #fff;
+$darkBackground: #222;
+
+/*** INDICATORS ***/
+$goodGreen: #0cac0c;
+$badRed: #df0b0b;
+
+
+/* /// DIMENSIONS /// */
+$routeNameWidth: 4.5rem;
+$arrivalTimeWidth: 3.5rem;
+$arrivalTimeLeftMargin: 1rem;
+
+$arrivalsWidth: ($arrivalTimeWidth + $arrivalTimeLeftMargin) * 3;
+$stationLabelSubtractor: $arrivalsWidth + $routeNameWidth;
+
+
+$routeNameWidthMEDIUM: $routeNameWidth;
+$arrivalTimeWidthMEDIUM: 4.5rem;
+$arrivalTimeLeftMarginMEDIUM: 1rem;
+
+$arrivalsWidthMEDIUM: ($arrivalTimeWidthMEDIUM + $arrivalTimeLeftMarginMEDIUM) * 3;
+$stationLabelSubtractorMEDIUM: $arrivalsWidthMEDIUM + $routeNameWidthMEDIUM;
+
