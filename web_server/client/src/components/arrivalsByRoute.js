@@ -40,7 +40,6 @@ function RouteArrivals(props) {
 
     return (
       <div className='route-stations'>
-        <code>*Known Issue: some stations are out of order</code>
         {
           // Filter arrivals to leave only those on a given route that haven't already happened yet
           sortedStationHashes.map((stationHash, i) => {
