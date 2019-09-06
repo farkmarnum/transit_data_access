@@ -191,14 +191,93 @@ body {
   vertical-align: top;
   padding: 0.3rem 0;
 }
-.station-route-name {
-  font-size: 2rem;
+
+.route-circle {
+  position: relative;
+  width: $routeCircleDiameter;
+  height: $routeCircleDiameter;
+  line-height: $routeCircleDiameter;
+  font-size: $routeCircleDiameter * 2 / 3;
   font-weight: 400;
-  padding: 0.3rem 0.9rem;
-  line-height: 2.8rem;
-  border-radius: 100%;
-  margin: 0 auto;
+  border: none;
+  border-radius: 50%;
+  padding: 0;
+  margin: 0.5rem $routeIconRightMargin 0.5rem 0;
 }
+.route-circle:hover {
+  width: $routeCircleDiameter * 1.2;
+  height: $routeCircleDiameter * 1.2;
+  line-height: $routeCircleDiameter * 1.2;
+  margin-left: $routeCircleDiameter * -0.1;
+  margin-top: $routeCircleDiameter * -0.1;
+  margin-bottom: 1rem - ($routeCircleDiameter * 0.2);
+  margin-right: $routeIconRightMargin - ($routeCircleDiameter * 0.1);
+  font-size: $routeCircleDiameter * 2 / 3 * 1.2;
+  z-index: 0;
+}
+.selected-route-circle::after {
+  position: absolute;
+  content: '';
+  width: $routeCircleDiameter * 1.2;
+  height: $routeCircleDiameter * 1.2;
+  margin-left: $routeCircleDiameter * -0.1;
+  margin-top: $routeCircleDiameter * -0.1;
+  margin-bottom: 1rem - ($routeCircleDiameter * 0.2);
+  margin-right: $routeIconRightMargin - ($routeCircleDiameter * 0.1);
+  background-color: $lightGrey;
+  border-radius: 50%;
+  padding: 0;
+  top: 0;
+  left: 0;
+  z-index: 0;
+}
+.selected-route-circle:hover::after {
+  display: none;
+}
+
+.route-diamond-outer {
+  background-color: transparent;
+  width: $routeCircleDiameter;
+  height: $routeCircleDiameter;
+  line-height: $routeCircleDiameter;
+  font-size: $routeCircleDiameter * 2 / 3;
+  font-weight: 400;
+  border: none;
+  padding: 0;
+  position: relative;
+  overflow: visible;
+  z-index: 1;
+  margin: 0.5rem $routeIconRightMargin 0.5rem 0;
+}
+.route-diamond-inner {
+  z-index: -1;
+  height: $routeDiamondLength;
+  width: $routeDiamondLength;
+  top: $routeDiamondLength / 6.5;
+  left: $routeDiamondLength / 6.5;
+  position: absolute;
+  content: '';
+  transform: rotate(45deg);
+}
+.route-diamond-outer:hover {
+  width: $routeCircleDiameter * 1.2;
+  height: $routeCircleDiameter * 1.2;
+  line-height: $routeCircleDiameter * 1.2;
+  font-size: $routeCircleDiameter * 2 / 3 * 1.2;
+
+  margin-left: $routeCircleDiameter * -0.1;
+  margin-top: $routeCircleDiameter * -0.1;
+  margin-right: $routeIconRightMargin - $routeCircleDiameter * 0.1;
+  margin-bottom: 1rem - ($routeCircleDiameter * 0.2);
+}
+.route-diamond-outer:hover .route-diamond-inner {
+  height: $routeDiamondLength * 1.2;
+  width: $routeDiamondLength * 1.2;
+  top: $routeDiamondLength / 6.5;
+  left: $routeDiamondLength / 6.5;
+}
+
+
 .station-route-arrivals {
   font-weight: 300;
   float: right;
@@ -247,15 +326,15 @@ body {
 .arrivals-by-route-header h5 {
   color: $brightWhite;
 }
-.arrivals-by-route-header .route-name {
-  padding: 0.2rem 0.6rem 2rem 0.6rem;
-  border: none;
-  font-size: 1.6rem;
-  line-height: 1.8rem;
-  height: 1.8rem;
-  margin: 0.1rem;
-  border-radius: 100%;
-}
+// .arrivals-by-route-header .route-name {
+//   padding: 0.2rem 0.6rem 2rem 0.6rem;
+//   border: none;
+//   font-size: 1.6rem;
+//   line-height: 1.8rem;
+//   height: 1.8rem;
+//   margin: 0.1rem;
+//   border-radius: 100%;
+// }
 
 .route-names-and-final-stations {
   border-radius: 1rem;

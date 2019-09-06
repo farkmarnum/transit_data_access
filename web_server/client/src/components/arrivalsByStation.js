@@ -1,6 +1,11 @@
 import React from 'react'
-import { ArrivalTime } from './baseComponents.js'
-import { timeDiffsFromBranchArrivals } from './sharedFunctions.js'
+import {
+  ArrivalTime,
+  RouteIcon
+} from './baseComponents.js'
+import {
+  timeDiffsFromBranchArrivals,
+} from './sharedFunctions.js'
 
 class Search extends React.Component {
   constructor(props) {
@@ -52,13 +57,16 @@ function StationRouteArrivals(props) {
       )
     }
   )
+  // const formattedRoute = formatRouteName(routeName)
 
   return (
     <div className="station-arrivals">
       <span className="station-route-name-outer">
-        <span className="station-route-name" style={{color: "white", backgroundColor: props.routeColor}}>
-          { routeName }
-        </span>
+        <RouteIcon
+          routeName={routeName}
+          routeColor={props.routeColor}
+          clickable={false}
+        />
       </span>
       <span className="station-name-and-borough">
         <div className="final-station-name">{ finalStation.name }</div>

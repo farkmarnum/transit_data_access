@@ -206,19 +206,22 @@ class Main extends React.Component {
       })
     })
 
+    let deleted
     // Deleted arrivals:
-    let deleted = update.arrivals.deleted.tripStationDict
-    Object.keys(deleted).forEach(tripHash => {
-      updatedTrips.add(tripHash)
-      deleted[tripHash].stationHash.forEach(stationHash => {
-        try {
-          delete data.trips[tripHash].arrivals[stationHash]
-        } catch (e) {
-          console.log(e, tripHash, data.trips)
-          throw new Error()
-        }
+    if (update.arrivals.deleted) {
+      deleted = update.arrivals.deleted.tripStationDict
+      Object.keys(deleted).forEach(tripHash => {
+        updatedTrips.add(tripHash)
+        deleted[tripHash].stationHash.forEach(stationHash => {
+          try {
+            delete data.trips[tripHash].arrivals[stationHash]
+          } catch (e) {
+            console.log(e, tripHash, data.trips)
+            throw new Error()
+          }
+        })
       })
-    })
+    }
 
     // Modified arrivals:
     let modified = update.arrivals.modified

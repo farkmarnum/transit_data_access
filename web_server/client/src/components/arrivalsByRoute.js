@@ -1,6 +1,12 @@
 import React from 'react'
-import { ArrivalTime } from './baseComponents.js'
-import { timeDiffsFromBranchArrivals, toColorCode } from './sharedFunctions.js'
+import {
+  ArrivalTime,
+  RouteIcon
+} from './baseComponents.js'
+import {
+  timeDiffsFromBranchArrivals,
+  toColorCode
+} from './sharedFunctions.js'
 
 function RouteStationName(props) {
   return (
@@ -90,29 +96,19 @@ function RouteNameList(props) {
     <React.Fragment>
       {
         props.routeInfos.sort().map(elem => {
-          const routeName = elem[0]
-              , routeInfo = elem[1]
-              , routeHash = elem[2]
-              , i         = elem[3]
-
-          const routeColor = toColorCode(routeInfo.color)
-          // ^^ TODO: move this logic into processData to be DRY
-          let style
-          if (routeHash === props.selectedRouteHash) {
-            style = {backgroundColor: routeColor, color: 'white'}
-          } else {
-            style = {color: routeColor, backgroundColor: 'inherit'}
-          }
+          let routeName  = elem[0]
+            , routeInfo  = elem[1]
+            , routeHash  = elem[2]
+            , i          = elem[3]
           return (
-            <button
+            <RouteIcon
+              routeName={routeName}
+              routeColor={toColorCode(routeInfo.color)}
+              selected={routeHash === props.selectedRouteHash}
               key={i}
-              className={"route-name"}
-              style={style}
-              title={routeInfo.desc}
-              onClick={() => props.routeClicked(routeHash)}
-            >
-              { routeName }
-            </button>
+              clickable={true}
+              routeClicked={() => props.routeClicked(routeHash)}
+            />
           )
         })
       }
