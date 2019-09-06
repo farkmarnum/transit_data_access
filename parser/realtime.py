@@ -186,6 +186,9 @@ class RealtimeManager():
             static_json_str = self.redis_server.get('static:json_full').decode('utf-8')
             del sh
 
+        if not static_json_str:
+            raise u.UpdateFailed("Could not load static")
+
         static_data = json.loads(static_json_str, cls=u.StaticJSONDecoder)
         self.current_timestamp = Timestamp(int(time.time()))
         self.current_data = u.RealtimeData(
