@@ -34,8 +34,6 @@ let ws
 
 
 /// REACT COMPONENTS ///
-
-
 class DataInterface extends React.Component {
   constructor(props) {
     super(props)

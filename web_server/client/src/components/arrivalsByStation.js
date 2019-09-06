@@ -170,7 +170,7 @@ export class ArrivalsByStation extends React.Component {
     }
 
     let showMore = ""
-    if (stationList.length > 10) {
+    if (stationList.length > this.state.resultLimit) {
       showMore = <div className="show-more" onClick={this.increaseResultLimit}>show more results</div>
     }
 
