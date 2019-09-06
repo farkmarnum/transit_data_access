@@ -44,7 +44,6 @@ function StationRouteArrivals(props) {
   if (branchArrivals == null || Object.keys(branchArrivals).length === 0) {
     return "no arrivals"
   }
-  // const direction = Object.keys(branchArrivals)[0].direction
   const timeDiffsWithFormatting = timeDiffsFromBranchArrivals(
     branchArrivals,
     props.updatedTrips
@@ -57,7 +56,6 @@ function StationRouteArrivals(props) {
       )
     }
   )
-  // const formattedRoute = formatRouteName(routeName)
 
   return (
     <div className="station-arrivals">
@@ -79,11 +77,80 @@ function StationRouteArrivals(props) {
   )
 }
 
+function StationBranchesForDirection(props) {
+  let routeColor
+  return (
+    <div className="station-branches-for-route">
+      <div className="station-arrivals-direction-title">
+        {props.direction ? "North" : "South"}-bound
+      </div>
+      {
+        props.branches.map((tuple, i) => {
+          let [routeHash, finalStationHash] = tuple
+          routeColor = (
+            "#" +
+            ("00"+(Number(props.data.routes[routeHash].color).toString(16))).slice(-6)
+          )
+          return (
+            <StationRouteArrivals
+              key={ i }
+              data={props.data}
+              routeHash={routeHash}
+              finalStationHash={finalStationHash}
+              routeColor={routeColor}
+              station={props.station}
+              updatedTrips={props.updatedTrips}
+            />
+          )
+        })
+      }
+    </div>
+  )
+}
+
 function Station(props) {
   const station = props.data.stations[props.stationHash]
-  let arrival
-    , key
-    , routeColor
+  let northBranches = []
+    , southBranches = []
+
+  let stationRoutes = []
+  Object.keys(station.arrivals).forEach((routeHash) => {
+    Object.keys(station.arrivals[routeHash]).forEach((finalStationHash, j) => {
+      let direction = props.data.stations[finalStationHash].finalStationDirection
+      if (direction === true) {
+        northBranches.push([routeHash, finalStationHash])
+      } else if (direction === false) {
+        southBranches.push([routeHash, finalStationHash])
+      } else {
+        console.error(props.data.stations[finalStationHash], "does not have .finalStationDirection")
+      }
+    })
+  })
+  if (northBranches.length > 0) {
+    stationRoutes.push(
+      <StationBranchesForDirection
+        key={0}
+        station={station}
+        branches={northBranches}
+        direction={true}
+        updatedTrips={props.updatedTrips}
+        data={props.data} /// TODO remove
+      />
+    )
+  }
+  if (southBranches.length > 0) {
+    stationRoutes.push(
+      <StationBranchesForDirection
+        key={1}
+        station={station}
+        branches={southBranches}
+        direction={false}
+        updatedTrips={props.updatedTrips}
+        data={props.data} /// TODO remove
+      />
+    )
+  }
+
   return (
     <div className="station">
       <div className="station-header">
@@ -91,32 +158,7 @@ function Station(props) {
         {/*<span className="borough-label">{ station.borough }</span>*/}
       </div>
       <div className="station-routes">
-        {
-          Object.keys(station.arrivals).map((routeHash, i) => {
-            arrival = station.arrivals[routeHash]
-            if (Object.keys(arrival).length === 0) {
-              return "no arrivals"
-            }
-            return Object.keys(arrival).map((finalStationHash, j) => {
-              key = i * 1000 + j
-              routeColor = (
-                "#" +
-                ("00"+(Number(props.data.routes[routeHash].color).toString(16))).slice(-6)
-              )
-              return (
-                <StationRouteArrivals
-                  key={key}
-                  data={props.data}
-                  routeHash={routeHash}
-                  finalStationHash={finalStationHash}
-                  routeColor={routeColor}
-                  station={station}
-                  updatedTrips={props.updatedTrips}
-                />
-              )
-            })
-          })
-        }
+        {stationRoutes}
       </div>
     </div>
   )

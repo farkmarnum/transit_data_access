@@ -47,7 +47,7 @@ export function processData(data) {
           , arrivalTime = elem[1]
           , finalStation = trip.branch.finalStation
           , routeHash = trip.branch.routeHash.toString()
-          // TODO figure out why each routeHash in data.routes is a string...
+          /// TODO figure out why each routeHash in data.routes is a string...
 
       // create the nexted dicts if necessary:
       try {
@@ -70,10 +70,10 @@ export function processData(data) {
       }
 
       // add the direction label to this trip's lastStation
-      // if (data.stations[finalStation].finalStationDirection && data.stations[finalStation].finalStationDirection !== trip.direction) {
-      //   devLog(`WARNING: ${data.stations[finalStation].name} has multiple trips referencing it as finalStation w/ different trip directions...`)
-      // }
-      // data.stations[finalStation].finalStationDirection = trip.direction
+      if (data.stations[finalStation].finalStationDirection && data.stations[finalStation].finalStationDirection !== trip.direction) {
+        devLog(`WARNING: ${data.stations[finalStation].name} has multiple trips referencing it as finalStation w/ different trip directions...`)
+      }
+      data.stations[finalStation].finalStationDirection = trip.direction
     }
   }
 

@@ -1,3 +1,4 @@
+@import "variables.scss";
 
 .arrivals-by-station-header {
   background-color: $primaryLight;
@@ -17,8 +18,9 @@
 .arrivals-by-station .station {
   padding: 1.2rem 0.8rem;
   margin: 2rem 1rem 0 1rem;
-  border: 0.1rem solid $lightBackground;
+  // border: 0.1rem solid $lightBackground;
   background-color: $lightBackground;
+  // background-image: linear-gradient($brightWhite 90%, $lightGrey 100%); 
   border-radius: 1rem;
   box-sizing: border-box;
 }
@@ -30,9 +32,32 @@
   margin-top: -0.5rem;
   padding-bottom: 0.5rem;
 }
+.station-name {
+  font-weight: 500;
+  font-size: 1.8rem;
+  text-align: center;
+  display: block;
+}
 .station-arrivals {
   border-bottom: 0.1rem solid $lightGrey;
   padding: 0.4rem 0;
+}
+.station-arrivals:last-of-type {
+  border: none;
+}
+.station-branches-for-route {
+  margin: 1rem 0;
+}
+.station-branches-for-route:not(:last-of-type) {
+  margin-bottom: 2rem;
+  border-bottom: 0.1rem solid $lightGrey;
+}
+.station-arrivals-direction-title {
+  font-size: 1.6rem;
+  text-align: center;
+  width: 10rem;
+  margin: 0 auto 0.5rem;
+  border-bottom: 0.1rem solid $darkGrey;
 }
 .station-route-name-outer {
   display: inline-block;
@@ -80,7 +105,4 @@
 .station-name-and-borough .borough-label {
   font-size: inherit;
 }
-.station-name {
-  font-weight: 500;
-  font-size: 1.8rem;
-}
+
