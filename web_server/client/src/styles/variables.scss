@@ -31,22 +31,26 @@ $badRed: #df0b0b;
 
 
 /* /// DIMENSIONS /// */
-$routeNameWidth: 4.5rem;
-$arrivalTimeWidth: 3.5rem;
-$arrivalTimeLeftMargin: 1rem;
+$routeIconScale: 1.25;
+$routeCircleDiameter: 2.6rem;
+$selectedRouteBorderWidth: 0.2rem;
+$circleToDiamondRatio: 1.2;
+$routeDiamondLength: $routeCircleDiameter / 1.41 * $circleToDiamondRatio;
+$routeIconMargin: $selectedRouteBorderWidth*2 + $routeCircleDiameter * ($routeIconScale - 1) + 0.1rem;
 
+$routeCircleDiameterMEDIUM: 3.6rem;
+$routeDiamondLengthMEDIUM: $routeCircleDiameterMEDIUM / 1.41 * $circleToDiamondRatio;
+$routeIconMarginMEDIUM: $selectedRouteBorderWidth*2 + $routeCircleDiameterMEDIUM * ($routeIconScale - 1) + 0.1rem;
+
+
+$routeNameWidth: $routeCircleDiameter * 1.6;
+$arrivalTimeWidth: 3.5rem;
+$arrivalTimeLeftMargin: 0.8rem;
 $arrivalsWidth: ($arrivalTimeWidth + $arrivalTimeLeftMargin) * 3;
 $stationLabelSubtractor: $arrivalsWidth + $routeNameWidth;
 
-$routeNameWidthMEDIUM: $routeNameWidth;
+$routeNameWidthMEDIUM: $routeCircleDiameterMEDIUM * 1.6;
 $arrivalTimeWidthMEDIUM: 4.5rem;
-$arrivalTimeLeftMarginMEDIUM: 1rem;
-
+$arrivalTimeLeftMarginMEDIUM: $arrivalTimeLeftMargin;
 $arrivalsWidthMEDIUM: ($arrivalTimeWidthMEDIUM + $arrivalTimeLeftMarginMEDIUM) * 3;
 $stationLabelSubtractorMEDIUM: $arrivalsWidthMEDIUM + $routeNameWidthMEDIUM;
-
-
-$routeCircleDiameter: 4rem;
-$routeDiamondLength: $routeCircleDiameter / 1.41 * 1.1;
-
-$routeIconRightMargin: 0.8rem;

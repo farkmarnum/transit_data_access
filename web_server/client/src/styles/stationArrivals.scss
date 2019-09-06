@@ -1,0 +1,86 @@
+
+.arrivals-by-station-header {
+  background-color: $primaryLight;
+  color: $brightWhite;
+  border-radius: 1rem;
+  padding: 1rem;
+}
+.arrivals-by-station input {
+  font-size: 1.6rem;
+  border: 0.1rem solid $lightBackground;
+  background-color: $lightBackground;
+  border-radius: 1rem;
+  margin: 1rem 0 0 0;
+  padding: 1rem;
+  color: $midGrey;
+}
+.arrivals-by-station .station {
+  padding: 1.2rem 0.8rem;
+  margin: 2rem 1rem 0 1rem;
+  border: 0.1rem solid $lightBackground;
+  background-color: $lightBackground;
+  border-radius: 1rem;
+  box-sizing: border-box;
+}
+
+.arrivals-by-station .station .station-header {
+  font-weight: 500;
+  border-bottom: 0.2rem solid $darkGrey;
+  margin-bottom: 0.5rem;
+  margin-top: -0.5rem;
+  padding-bottom: 0.5rem;
+}
+.station-arrivals {
+  border-bottom: 0.1rem solid $lightGrey;
+  padding: 0.4rem 0;
+}
+.station-route-name-outer {
+  display: inline-block;
+  width: $routeNameWidth;
+  vertical-align: top;
+  padding: 0.3rem 0;
+}
+
+
+
+.station-route-arrivals {
+  font-weight: 300;
+  float: right;
+  min-width: $arrivalsWidth;
+  margin-top: 1rem;
+}
+.station .arrival-time {
+  font-size: 1.3rem;
+  margin: 0;
+  width: $arrivalTimeWidth;
+  margin-left: $arrivalTimeLeftMargin;
+  display: inline-block;
+  float: left;
+}
+
+.station-name-and-borough{
+  display: inline-block;
+  vertical-align: top;
+  overflow-wrap: break-word;
+  width: -webkit-calc(100% - #{$stationLabelSubtractor)});
+  width:    -moz-calc(100% - #{$stationLabelSubtractor)});
+  width:         calc(100% - #{$stationLabelSubtractor)});
+  max-width: 40rem;
+  line-height: 1.6rem;
+  font-size: 1.2rem;
+  vertical-align: top;
+  margin-top: 0.5rem;
+}
+.station-name-and-borough .final-station-name,
+.station-name-and-borough .borough-label {
+  display: block;
+  margin: 0;
+}
+
+.station-name-and-borough .borough-label {
+  font-size: inherit;
+}
+.station-name {
+  font-weight: 500;
+  font-size: 1.8rem;
+}

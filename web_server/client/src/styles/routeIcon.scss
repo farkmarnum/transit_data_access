@@ -1,0 +1,84 @@
+// $routeCircleDiameterMEDIUM
+// $routeDiamondLengthMEDIUM
+// $routeIconMarginMEDIUM
+
+.route-circle, .route-diamond-outer {
+  position: relative;
+  width: $routeCircleDiameter;
+  height: $routeCircleDiameter;
+  line-height: $routeCircleDiameter;
+  font-size: $routeCircleDiameter * 2 / 3;
+  font-weight: 400;
+  border: none;
+  border-radius: 50%;
+  padding: 0;
+  margin: $routeIconMargin/2;
+}
+.route-diamond-outer {
+  background-color: transparent;
+  position: relative;
+  overflow: visible;
+  z-index: 1;
+}
+
+$diamondOffset: (1-$circleToDiamondRatio) * $routeDiamondLength / 1.41 / 3 + 0.3rem;
+.route-diamond-inner {
+  z-index: -1;
+  height: $routeDiamondLength;
+  width: $routeDiamondLength;
+  top: $diamondOffset;
+  left: $diamondOffset;
+  position: absolute;
+  content: '';
+  transform: rotate(45deg);
+}
+
+.route-diamond-outer.clickable:hover .route-diamond-inner,
+.route-diamond-outer.selected .route-diamond-inner {
+  height: $routeDiamondLength * $routeIconScale;
+  width: $routeDiamondLength * $routeIconScale;
+  top: $diamondOffset * $routeIconScale;
+  left: $diamondOffset * $routeIconScale;
+}
+
+$scaleChangeUnit: $routeCircleDiameter * ($routeIconScale - 1);
+.route-circle.clickable:hover,
+.route-diamond-outer.clickable:hover,
+.route-circle.selected,
+.route-diamond-outer.selected {
+  width: $routeCircleDiameter * $routeIconScale;
+  height: $routeCircleDiameter * $routeIconScale;
+  line-height: $routeCircleDiameter * $routeIconScale;
+  font-size: $routeCircleDiameter * 2 / 3 * $routeIconScale;
+
+  margin: $routeIconMargin/2 - $scaleChangeUnit/2;
+  margin-top: $routeIconMargin/2 - $scaleChangeUnit;
+  z-index: 0;
+}
+
+.route-circle.selected::after,
+.route-diamond-outer.selected::after {
+  content: '';
+  border: $selectedRouteBorderWidth solid black;
+  position: absolute;
+}
+.route-circle.selected::after {
+  top: -$selectedRouteBorderWidth + 0.1rem;
+  left: -$selectedRouteBorderWidth + 0.1rem;
+  height: $routeCircleDiameter * $routeIconScale * 0.96;
+  width: $routeCircleDiameter * $routeIconScale * 0.96 ;
+  border-radius: 50%;
+}
+
+.route-diamond-outer.selected::after {
+  top: $diamondOffset - $selectedRouteBorderWidth/2;
+  left: $diamondOffset - $selectedRouteBorderWidth/2;
+  height: $routeDiamondLength * $routeIconScale * 0.96;
+  width: $routeDiamondLength * $routeIconScale * 0.96;
+  transform: rotate(45deg);
+}
+
+.route-circle:not(.clickable), .route-diamond-outer:not(.clickable) {
+  cursor: unset;
+}
+

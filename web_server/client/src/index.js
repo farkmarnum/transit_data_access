@@ -194,76 +194,84 @@ class Main extends React.Component {
   updateRealtimeData(update) {
     let updatedTrips = new Set()
     let data = this.state.unprocessedData
+    let added, deleted, modified
 
     // Added arrivals:
-    let added = update.arrivals.added
-    Object.keys(added).forEach(tripHash => { // tripHash := String
-      updatedTrips.add(tripHash)
-      Object.entries(added[tripHash].arrival).forEach(elem => {
-        let stationArrival = elem[1]
-        data.trips[tripHash].arrivals[stationArrival.stationHash] = stationArrival.arrivalTime
-        if (!stationArrival.stationHash || !stationArrival.arrivalTime) devLog(stationArrival)
-      })
-    })
-
-    let deleted
-    // Deleted arrivals:
-    if (update.arrivals.deleted) {
-      deleted = update.arrivals.deleted.tripStationDict
-      Object.keys(deleted).forEach(tripHash => {
+    if (update.arrivals) {
+      added = update.arrivals.added
+      Object.keys(added).forEach(tripHash => { // tripHash := String
         updatedTrips.add(tripHash)
-        deleted[tripHash].stationHash.forEach(stationHash => {
-          try {
-            delete data.trips[tripHash].arrivals[stationHash]
-          } catch (e) {
-            console.log(e, tripHash, data.trips)
-            throw new Error()
-          }
+        Object.entries(added[tripHash].arrival).forEach(elem => {
+          let stationArrival = elem[1]
+          data.trips[tripHash].arrivals[stationArrival.stationHash] = stationArrival.arrivalTime
+          if (!stationArrival.stationHash || !stationArrival.arrivalTime) devLog(stationArrival)
+        })
+      })
+
+      // Deleted arrivals:
+      if (update.arrivals.deleted) {
+        deleted = update.arrivals.deleted.tripStationDict
+        Object.keys(deleted).forEach(tripHash => {
+          updatedTrips.add(tripHash)
+          deleted[tripHash].stationHash.forEach(stationHash => {
+            try {
+              delete data.trips[tripHash].arrivals[stationHash]
+            } catch (e) {
+              console.log(e, tripHash, data.trips)
+              throw new Error()
+            }
+          })
+        })
+      }
+
+      // Modified arrivals:
+      modified = update.arrivals.modified
+      Object.keys(modified).forEach(timeDiffStr => {
+        let timeDiff = parseInt(timeDiffStr)
+        let dict = modified[timeDiffStr].tripStationDict
+        Object.keys(dict).forEach(tripHash => {
+          updatedTrips.add(tripHash)
+          dict[tripHash].stationHash.forEach(stationHash => {
+            let oldArrivalTime = data.trips[tripHash].arrivals[stationHash]
+            if (!tripHash || !stationHash) console.log('!!', tripHash, stationHash, oldArrivalTime + timeDiff) // TODO: remove after testing
+            else data.trips[tripHash].arrivals[stationHash] = oldArrivalTime + timeDiff
+          })
         })
       })
     }
 
-    // Modified arrivals:
-    let modified = update.arrivals.modified
-    Object.keys(modified).forEach(timeDiffStr => {
-      let timeDiff = parseInt(timeDiffStr)
-      let dict = modified[timeDiffStr].tripStationDict
-      Object.keys(dict).forEach(tripHash => {
-        updatedTrips.add(tripHash)
-        dict[tripHash].stationHash.forEach(stationHash => {
-          let oldArrivalTime = data.trips[tripHash].arrivals[stationHash]
-          if (!tripHash || !stationHash) console.log('!!', tripHash, stationHash, oldArrivalTime + timeDiff) // TODO: remove after testing
-          else data.trips[tripHash].arrivals[stationHash] = oldArrivalTime + timeDiff
-        })
+    if (update.trips) {
+      // Added trips:
+      added = update.trips.added
+      added.forEach(obj => {
+        let tripHash = obj.tripHash
+          , trip = obj.info
+        data.trips[tripHash] = trip
       })
-    })
 
-    // Added trips:
-    added = update.trips.added
-    added.forEach(obj => {
-      let tripHash = obj.tripHash
-        , trip = obj.info
-      data.trips[tripHash] = trip
-    })
+      // Deleted trips:
+      deleted = update.trips.deleted
+      deleted.forEach(tripHash => {
+        delete data.trips[tripHash]
+      })
+    }
 
-    // Deleted trips:
-    deleted = update.trips.deleted
-    deleted.forEach(tripHash => {
-      delete data.trips[tripHash]
-    })
+    if (update.branch) {
+      // Trips with modified branches:
+      modified = update.branch
+      Object.keys(modified).forEach(tripHash => {
+        data.trips[tripHash].branch = modified[tripHash]
+      })
+    }
 
-    // Trips with modified branches:
-    modified = update.branch
-    Object.keys(modified).forEach(tripHash => {
-      data.trips[tripHash].branch = modified[tripHash]
-    })
-
-    // Trips with modified status:
-    // TODO: double check this
-    modified = update.status
-    Object.keys(modified).forEach(tripHash => {
-      data.trips[tripHash].status = modified[tripHash]
-    })
+    if (update.status) {
+      // Trips with modified status:
+      // TODO: double check this
+      modified = update.status
+      Object.keys(modified).forEach(tripHash => {
+        data.trips[tripHash].status = modified[tripHash]
+      })
+    }
 
     /// Update the data and flash the updated trips:
     const processedData = processData(data)

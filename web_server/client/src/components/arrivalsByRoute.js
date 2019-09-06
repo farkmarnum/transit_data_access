@@ -187,12 +187,24 @@ export class ArrivalsByRoute extends React.Component {
     const selectedRoute = this.props.data.routes[this.state.selectedRouteHash]
     const selectedRouteName = this.props.data.routeNameLookup[this.state.selectedRouteHash]
 
+    // let selectedRouteDisplay = ""
+    // if (selectedRoute) {
+    //   selectedRouteDisplay = (
+    //     <RouteIcon
+    //       routeName={this.props.data.routeNameLookup[this.state.selectedRouteHash]}
+    //       routeColor={toColorCode(selectedRoute.color)}
+    //       selected={true}
+    //       clickable={false}
+    //     />
+    //   )
+    // }
     return (
       <React.Fragment>
       <div className="arrivals-by-route-header">
-        <h5>
+        <h5 style={{width: "50%", display: "inline-block"}}>
           Arrivals By Route
         </h5>
+        { /*selectedRouteDisplay*/ }
         <div className="route-names-and-final-stations">
           <RouteNameList
             routeInfos={routeInfos}
