@@ -86,11 +86,15 @@ Issues
 * Docker needs a robust build/test/deploy pipeline
 
 
-Plans
+TODOs
 ------
 
-* Frontend dataUpdates should have some sort of sort+hashsum check that everything worked after an update.
+* web_client: sort station arrivals by direction
 
-* Add feature: get arrivals by station
+* web_client: clump stations by stationComplex
+
+* parser & web_client: re-implement bzip to decrease data footprint
+
+* web_client dataUpdates should have some sort of sort+hashsum check that everything worked after an update.
 
 * Add feature: trip planning / path finding
