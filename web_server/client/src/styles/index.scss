@@ -22,7 +22,7 @@ h3 {
 }
 
 .container {
-  min-width: 300px;
+  min-width: 320px;
   margin-bottom: 3rem;
   padding: 0 1rem;
   width: 100%;
@@ -118,6 +118,7 @@ h3 {
   margin: 0 auto 2rem auto;
 }
 .arrival-view-options button {
+  font-size: 1.1rem;
   padding: 0.5rem 1rem;
   margin: 0 1rem;
   line-height: 1.8rem;
@@ -161,6 +162,8 @@ h3 {
   margin-top: 1rem;
   font-size: 1.3rem;
   font-weight: 300;
+  overflow: hidden;
+  padding: 0 0.4rem;
 }
 .route-final-stations .route-final-station {
   font-size: 1.2rem;
@@ -307,6 +310,15 @@ h3 {
   .title {
     margin: 5rem auto 0 auto;
   }
+
+  .arrival-view-options {
+    max-width: 29rem;
+  }
+  .arrival-view-options button {
+    font-size: 1.4rem;
+    font-weight: 500;
+  }
+
   .data {
     width: 88%;
     margin: 12rem auto 0 auto;
