@@ -1,4 +1,5 @@
 import Fuse from "fuse.js";
+const merge = require('lodash.merge');
 
 export function devLog(entry) {
   if(process.env.NODE_ENV === 'development') {
@@ -71,29 +72,56 @@ export function processData(data) {
       }
 
       // add the direction label to this trip's lastStation
-      /// DEBUG
-        // if(finalStation === 445920373) {
-        //   console.log("445920373 is finalStation for ", trip)
-        // }
       if (data.stations[finalStation].finalStationDirection && data.stations[finalStation].finalStationDirection !== trip.direction) {
-        devLog(`WARNING: ${data.stations[finalStation].name} has multiple trips referencing it as finalStation w/ different trip directions...`)
+        devLog(`WARNING: ${data.stations[finalStation].name} has multiple trips referencing it as finalStation w/ different trip directions`)
       }
       data.stations[finalStation].finalStationDirection = trip.direction
     }
   }
 
-  /// Generate Fuse for stations
+  /// Merge stations into station complexes ///
+  // first, generate a mapping of <complexId> -> <list of stations in it>
+  let stationComplexMapping = {}
+  Object.keys(data.stations).forEach((stationHash) => {
+    let complexId = data.stations[stationHash].stationComplex
+    if (complexId) {
+      if (stationComplexMapping[complexId]) {
+        stationComplexMapping[complexId].push(stationHash)
+      } else {
+        stationComplexMapping[complexId] = [stationHash]
+      }
+    }
+  })
+  // then, create a new station object in data.stations for each station complex
+  Object.keys(stationComplexMapping).forEach((complexId) => {
+    let stations = stationComplexMapping[complexId].map(stationHash => data.stations[stationHash])
+
+    // merge all stations that are within the complex into one big station object
+    let newStation = {}
+    merge(newStation, ...stations)
+
+    // overwrite name, etc
+    newStation.name = data.stationComplexes[complexId]
+    newStation.stationComplex = null
+    newStation.isComplex = true
+
+    data.stations[complexId] = newStation // TODO make this use the hash function that the backend does?
+  })
+
+  /// Generate Fuse fuzzy search for stations ///
   const options = {
     keys: ['station'],
     shouldSort: true,
     threshold: 0.4
   }
-  const stationObjList = Object.keys(data.stations).map((stationHash) => {
-    return {
-      'station': data.stations[stationHash].name,
-      'stationHash': stationHash
-    }
-  })
+  const stationObjList = Object.keys(data.stations)
+    .filter((stationHash) => data.stations[stationHash].stationComplex == null)
+    .map((stationHash) => {
+      return {
+        'station': data.stations[stationHash].name,
+        'stationHash': stationHash
+      }
+    })
   data.stationSearch = new Fuse(stationObjList, options)
 
   return data

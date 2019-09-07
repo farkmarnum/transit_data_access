@@ -86,24 +86,26 @@ function StationBranchesForDirection(props) {
         {props.direction ? "North" : "South"}-bound
       </div>
       {
-        props.branches.map((tuple, i) => {
-          let [routeHash, finalStationHash] = tuple
-          routeColor = (
-            "#" +
-            ("00"+(Number(props.data.routes[routeHash].color).toString(16))).slice(-6)
-          )
-          return (
-            <StationRouteArrivals
-              key={ i }
-              data={props.data}
-              routeHash={routeHash}
-              finalStationHash={finalStationHash}
-              routeColor={routeColor}
-              station={props.station}
-              updatedTrips={props.updatedTrips}
-            />
-          )
-        })
+        props.branches
+          .sort((branchA, branchB) => props.data.routeNameLookup[branchA[0]] > props.data.routeNameLookup[branchB[0]])
+          .map((branch, i) => {
+            let [routeHash, finalStationHash] = branch
+            routeColor = (
+              "#" +
+              ("00"+(Number(props.data.routes[routeHash].color).toString(16))).slice(-6)
+            )
+            return (
+              <StationRouteArrivals
+                key={ i }
+                data={props.data}
+                routeHash={routeHash}
+                finalStationHash={finalStationHash}
+                routeColor={routeColor}
+                station={props.station}
+                updatedTrips={props.updatedTrips}
+              />
+            )
+          })
       }
     </div>
   )
@@ -135,7 +137,7 @@ function Station(props) {
         branches={northBranches}
         direction={true}
         updatedTrips={props.updatedTrips}
-        data={props.data} /// TODO remove
+        data={props.data}
       />
     )
   }
@@ -147,16 +149,18 @@ function Station(props) {
         branches={southBranches}
         direction={false}
         updatedTrips={props.updatedTrips}
-        data={props.data} /// TODO remove
+        data={props.data}
       />
     )
   }
 
+  if (stationRoutes.length === 0) {
+    return null
+  }
   return (
     <div className="station">
       <div className="station-header">
         <span className="station-name">{ station.name }</span>
-        {/*<span className="borough-label">{ station.borough }</span>*/}
       </div>
       <div className="station-routes">
         {stationRoutes}

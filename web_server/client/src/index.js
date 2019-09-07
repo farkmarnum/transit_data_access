@@ -8,6 +8,7 @@ import  { devLog,
           processData,
           dataReceivedMsg,
           requestFullMsg,
+          formatBytes
         } from './utils.js'
 import { ArrivalsByRoute } from './components/arrivalsByRoute.js'
 import { ArrivalsByStation } from './components/arrivalsByStation.js'
@@ -172,6 +173,7 @@ class Main extends React.Component {
           devLog('data.size - upcomingMessageBinaryLength is a difference of: ', data.size - upcomingMessageBinaryLength)
           ws.send(requestFullMsg())
         } else {
+          devLog(formatBytes(data.size))
           this.decodeZippedProto(data)
           this.setState({
             lastSuccessfulTimestamp: upcomingMessageTimestamp
