@@ -18,9 +18,7 @@
 .arrivals-by-station .station {
   padding: 1.2rem 0.8rem;
   margin: 2rem 1rem 0 1rem;
-  // border: 0.1rem solid $lightBackground;
   background-color: $lightBackground;
-  // background-image: linear-gradient($brightWhite 90%, $lightGrey 100%); 
   border-radius: 1rem;
   box-sizing: border-box;
 }
@@ -66,8 +64,6 @@
   padding: 0.3rem 0;
 }
 
-
-
 .station-route-arrivals {
   font-weight: 300;
   float: right;
@@ -106,3 +102,38 @@
   font-size: inherit;
 }
 
+
+.show-more {
+  width: 14rem;
+  margin: 2rem auto;
+  font-size: 1.3rem;
+  font-weight: 400;
+  color: $brightWhite;
+}
+.show-more:hover {
+  cursor: pointer;
+  color: $secondaryLight;
+}
+
+
+@media (min-width: 550px) {
+  .arrivals-by-station input {
+    font-size: 1.8rem;
+  }
+  .arrivals-by-station .station {
+    padding: 1.2rem;
+  }
+  .station-name {
+    font-size: 2.2rem;
+  }
+  .station-arrivals-direction-title {
+    font-size: 1.9rem;
+    width: 12rem;
+  }
+  .station .arrival-time {
+    font-size: 1.6rem;
+  }
+  .show-more {
+    font-size: 1.5rem;
+  }
+}

@@ -33,7 +33,8 @@ $badRed: #df0b0b;
 /* /// DIMENSIONS /// */
 $routeIconScale: 1.25;
 $routeCircleDiameter: 2.6rem;
-$selectedRouteBorderWidth: 0.2rem;
+$selectedRouteBorderWidth: 0.3rem;
+$selectedRouteBorderWidthInner: 0.1rem;
 $circleToDiamondRatio: 1.2;
 $routeDiamondLength: $routeCircleDiameter / 1.41 * $circleToDiamondRatio;
 $routeIconMargin: $selectedRouteBorderWidth*2 + $routeCircleDiameter * ($routeIconScale - 1) + 0.1rem;

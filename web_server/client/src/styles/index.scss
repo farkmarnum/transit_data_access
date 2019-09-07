@@ -262,18 +262,6 @@ h3 {
 }
 
 
-.show-more {
-  width: 14rem;
-  margin: 2rem auto;
-  font-size: 1.3rem;
-  font-weight: 400;
-  color: $brightWhite;
-}
-.show-more:hover {
-  cursor: pointer;
-  color: $secondaryLight;
-}
-
 .borough-label {
   margin: 0 0.2rem;
   font-size: 1.1rem;
@@ -348,107 +336,11 @@ h3 {
   .route-stations {
     font-size: 1.5rem;
   }
-  .arrivals-by-station input {
-    font-size: 1.8rem;
-  }
   .station-branch {
     font-size: 1.6rem;
   }
-  .station .arrival-time, .route-station .arrival-time {
+  .route-station .arrival-time {
     font-size: 1.6rem;
-  }
-  .arrivals-by-station .station {
-    padding: 1.2rem;
-  }
-  .show-more {
-    font-size: 1.5rem;
-  }
-
-
-  .station-route-name-outer {
-    width: $routeNameWidthMEDIUM;
-  }
-  .station-route-arrivals {
-    min-width: $arrivalsWidthMEDIUM;
-  }
-  .station .arrival-time {
-    width: $arrivalTimeWidthMEDIUM;
-    margin-left: $arrivalTimeLeftMarginMEDIUM;
-  }
-  .station-name-and-borough{
-    width: -webkit-calc(100% - #{$stationLabelSubtractorMEDIUM)});
-    width:    -moz-calc(100% - #{$stationLabelSubtractorMEDIUM)});
-    width:         calc(100% - #{$stationLabelSubtractorMEDIUM)});
-    font-size: 1.5rem;
-    margin-top: 1rem;
-  }
-
-  .route-station-name {
-    font-size: 1.4rem;
-  }
-  .route-station-name-outer {
-    width: -webkit-calc(100% - #{$stationLabelSubtractorMEDIUM)});
-    width:    -moz-calc(100% - #{$stationLabelSubtractorMEDIUM)});
-    width:         calc(100% - #{$stationLabelSubtractorMEDIUM)});
-  }
-  .route-station .arrival-times {
-    min-width: $arrivalsWidthMEDIUM;
-  }
-  .arrival-time {
-    width: $arrivalTimeWidthMEDIUM;
-    margin-left: $arrivalTimeLeftMarginMEDIUM;
-  }
-
-  .route-circle, .route-diamond-outer {
-    width: $routeCircleDiameterMEDIUM;
-    height: $routeCircleDiameterMEDIUM;
-    line-height: $routeCircleDiameterMEDIUM;
-    font-size: $routeCircleDiameterMEDIUM * 2 / 3;
-    margin: $routeIconMarginMEDIUM/2;
-  }
-  $diamondOffsetMEDIUM: (1-$circleToDiamondRatio) * $routeDiamondLengthMEDIUM / 1.41 / 3 + 0.4rem;
-  .route-diamond-inner {
-    height: $routeDiamondLengthMEDIUM;
-    width: $routeDiamondLengthMEDIUM;
-    top: $diamondOffsetMEDIUM;
-    left: $diamondOffsetMEDIUM;
-  }
-  .route-diamond-outer.clickable:hover .route-diamond-inner,
-  .route-diamond-outer.selected .route-diamond-inner {
-    height: $routeDiamondLengthMEDIUM * $routeIconScale;
-    width: $routeDiamondLengthMEDIUM * $routeIconScale;
-    top: $diamondOffsetMEDIUM * $routeIconScale;
-    left: $diamondOffsetMEDIUM * $routeIconScale;
-  }
-  $scaleChangeUnitMEDIUM: $routeCircleDiameterMEDIUM * ($routeIconScale - 1);
-  .route-circle.clickable:hover,
-  .route-diamond-outer.clickable:hover,
-  .route-circle.selected,
-  .route-diamond-outer.selected {
-    width: $routeCircleDiameterMEDIUM * $routeIconScale;
-    height: $routeCircleDiameterMEDIUM * $routeIconScale;
-    line-height: $routeCircleDiameterMEDIUM * $routeIconScale;
-    font-size: $routeCircleDiameterMEDIUM * 2 / 3 * $routeIconScale;
-    margin: $routeIconMarginMEDIUM/2 - $scaleChangeUnitMEDIUM/2;
-    margin-top: $routeIconMarginMEDIUM/2 - $scaleChangeUnitMEDIUM;
-  }
-  .route-circle.selected::after {
-    height: $routeCircleDiameterMEDIUM * $routeIconScale * 0.96;
-    width: $routeCircleDiameterMEDIUM * $routeIconScale * 0.96;
-  }
-  .route-diamond-outer.selected::after {
-    top: $diamondOffsetMEDIUM - $selectedRouteBorderWidth/2;
-    left: $diamondOffsetMEDIUM - $selectedRouteBorderWidth/2;
-    height: $routeDiamondLengthMEDIUM * $routeIconScale * 0.96;
-    width: $routeDiamondLengthMEDIUM * $routeIconScale * 0.96;
-  }
-
-  .station-name {
-    font-size: 2.2rem;
-  }
-  .station-arrivals-direction-title {
-    font-size: 1.9rem;
-    width: 12rem;
   }
 }
 

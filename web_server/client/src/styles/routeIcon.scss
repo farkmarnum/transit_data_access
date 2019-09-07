@@ -1,8 +1,7 @@
-// $routeCircleDiameterMEDIUM
-// $routeDiamondLengthMEDIUM
-// $routeIconMarginMEDIUM
+@import 'variables.scss';
 
 .route-circle, .route-diamond-outer {
+  box-sizing: border-box;
   position: relative;
   width: $routeCircleDiameter;
   height: $routeCircleDiameter;
@@ -21,8 +20,9 @@
   z-index: 1;
 }
 
-$diamondOffset: (1-$circleToDiamondRatio) * $routeDiamondLength / 1.41 / 3 + 0.3rem;
+$diamondOffset: (1-$circleToDiamondRatio) * $routeDiamondLength / 1.41 / 3 + 0.28rem;
 .route-diamond-inner {
+  box-sizing: border-box;
   z-index: -1;
   height: $routeDiamondLength;
   width: $routeDiamondLength;
@@ -48,7 +48,6 @@ $scaleChangeUnit: $routeCircleDiameter * ($routeIconScale - 1);
 .route-diamond-outer.selected {
   width: $routeCircleDiameter * $routeIconScale;
   height: $routeCircleDiameter * $routeIconScale;
-  line-height: $routeCircleDiameter * $routeIconScale;
   font-size: $routeCircleDiameter * 2 / 3 * $routeIconScale;
 
   margin: $routeIconMargin/2 - $scaleChangeUnit/2;
@@ -57,24 +56,39 @@ $scaleChangeUnit: $routeCircleDiameter * ($routeIconScale - 1);
 }
 
 .route-circle.selected::after,
-.route-diamond-outer.selected::after {
-  content: '';
-  border: $selectedRouteBorderWidth solid black;
+.route-circle.selected::before,
+.route-diamond-outer.selected::after,
+.route-diamond-outer.selected::before, {
+  box-sizing: border-box;
+  top: 0;
+  left: 0;
   position: absolute;
+  content: '';
+  height: $routeCircleDiameter * $routeIconScale;
+  width: $routeCircleDiameter * $routeIconScale;
 }
-.route-circle.selected::after {
-  top: -$selectedRouteBorderWidth + 0.1rem;
-  left: -$selectedRouteBorderWidth + 0.1rem;
-  height: $routeCircleDiameter * $routeIconScale * 0.96;
-  width: $routeCircleDiameter * $routeIconScale * 0.96 ;
+
+.route-circle.selected::after,
+.route-circle.selected::before {
   border-radius: 50%;
 }
 
+.route-circle.selected::after,
 .route-diamond-outer.selected::after {
-  top: $diamondOffset - $selectedRouteBorderWidth/2;
-  left: $diamondOffset - $selectedRouteBorderWidth/2;
-  height: $routeDiamondLength * $routeIconScale * 0.96;
-  width: $routeDiamondLength * $routeIconScale * 0.96;
+  border: $selectedRouteBorderWidth solid $brightWhite;
+}
+.route-circle.selected::before,
+.route-diamond-outer.selected::before {
+  border: $selectedRouteBorderWidthInner solid $darkestGrey;
+  z-index: 1;
+}
+
+.route-diamond-outer.selected::after,
+.route-diamond-outer.selected::before {
+  top: $diamondOffset * $routeIconScale;
+  left: $diamondOffset * $routeIconScale;
+  height: $routeDiamondLength * $routeIconScale;
+  width: $routeDiamondLength * $routeIconScale;
   transform: rotate(45deg);
 }
 
@@ -82,3 +96,105 @@ $scaleChangeUnit: $routeCircleDiameter * ($routeIconScale - 1);
   cursor: unset;
 }
 
+
+.route-circle.selected:not(:hover),
+.route-circle.selected:not(:hover)::before,
+.route-circle.selected:not(:hover)::after,
+.route-circle.clickable:not(:hover),
+.route-diamond-outer.selected:not(:hover),
+.route-diamond-outer.selected:not(:hover)::before,
+.route-diamond-outer.selected:not(:hover)::after,
+.route-diamond-outer.clickable:not(:hover),
+.route-diamond-outer.selected:not(:hover) .route-diamond-inner,
+.route-diamond-outer.clickable:not(:hover) .route-diamond-inner {
+  -webkit-transition: all 150ms linear;
+     -moz-transition: all 150ms linear;
+       -o-transition: all 150ms linear;
+          transition: all 150ms linear;
+  transition-property: min-width width height top left margin font-size;
+}
+
+
+
+@media (min-width: 550px) {
+  .station-route-name-outer {
+    width: $routeNameWidthMEDIUM;
+  }
+  .station-route-arrivals {
+    min-width: $arrivalsWidthMEDIUM;
+  }
+  .station .arrival-time {
+    width: $arrivalTimeWidthMEDIUM;
+    margin-left: $arrivalTimeLeftMarginMEDIUM;
+  }
+  .station-name-and-borough{
+    width: -webkit-calc(100% - #{$stationLabelSubtractorMEDIUM)});
+    width:    -moz-calc(100% - #{$stationLabelSubtractorMEDIUM)});
+    width:         calc(100% - #{$stationLabelSubtractorMEDIUM)});
+    font-size: 1.5rem;
+    margin-top: 1rem;
+  }
+
+  .route-station-name {
+    font-size: 1.4rem;
+  }
+  .route-station-name-outer {
+    width: -webkit-calc(100% - #{$stationLabelSubtractorMEDIUM)});
+    width:    -moz-calc(100% - #{$stationLabelSubtractorMEDIUM)});
+    width:         calc(100% - #{$stationLabelSubtractorMEDIUM)});
+  }
+  .route-station .arrival-times {
+    min-width: $arrivalsWidthMEDIUM;
+  }
+  .arrival-time {
+    width: $arrivalTimeWidthMEDIUM;
+    margin-left: $arrivalTimeLeftMarginMEDIUM;
+  }
+
+  .route-circle, .route-diamond-outer {
+    width: $routeCircleDiameterMEDIUM;
+    height: $routeCircleDiameterMEDIUM;
+    font-size: $routeCircleDiameterMEDIUM * 2 / 3;
+    margin: $routeIconMarginMEDIUM/2;
+  }
+  $diamondOffsetMEDIUM: (1-$circleToDiamondRatio) * $routeDiamondLengthMEDIUM / 1.41 / 3 + 0.4rem;
+  .route-diamond-inner {
+    height: $routeDiamondLengthMEDIUM;
+    width: $routeDiamondLengthMEDIUM;
+    top: $diamondOffsetMEDIUM;
+    left: $diamondOffsetMEDIUM;
+  }
+  .route-diamond-outer.clickable:hover .route-diamond-inner,
+  .route-diamond-outer.selected .route-diamond-inner {
+    height: $routeDiamondLengthMEDIUM * $routeIconScale;
+    width: $routeDiamondLengthMEDIUM * $routeIconScale;
+    top: $diamondOffsetMEDIUM * $routeIconScale;
+    left: $diamondOffsetMEDIUM * $routeIconScale;
+  }
+  $scaleChangeUnitMEDIUM: $routeCircleDiameterMEDIUM * ($routeIconScale - 1);
+  .route-circle.clickable:hover,
+  .route-diamond-outer.clickable:hover,
+  .route-circle.selected,
+  .route-diamond-outer.selected {
+    width: $routeCircleDiameterMEDIUM * $routeIconScale;
+    height: $routeCircleDiameterMEDIUM * $routeIconScale;
+    font-size: $routeCircleDiameterMEDIUM * 2 / 3 * $routeIconScale;
+    margin: $routeIconMarginMEDIUM/2 - $scaleChangeUnitMEDIUM/2;
+    margin-top: $routeIconMarginMEDIUM/2 - $scaleChangeUnitMEDIUM;
+  }
+  .route-circle.selected::after,
+  .route-circle.selected::before,
+  .route-diamond-outer.selected::after,
+  .route-diamond-outer.selected::before, {
+    height: $routeCircleDiameterMEDIUM * $routeIconScale;
+    width: $routeCircleDiameterMEDIUM * $routeIconScale;
+  }
+  .route-diamond-outer.selected::after,
+  .route-diamond-outer.selected::before {
+    top: $diamondOffsetMEDIUM * $routeIconScale;
+    left: $diamondOffsetMEDIUM * $routeIconScale;
+    height: $routeDiamondLengthMEDIUM * $routeIconScale;
+    width: $routeDiamondLengthMEDIUM * $routeIconScale;
+    transform: rotate(45deg);
+  }
+}
