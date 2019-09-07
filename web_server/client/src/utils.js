@@ -115,8 +115,10 @@ export function processData(data) {
     threshold: 0.4
   }
   const stationObjList = Object.keys(data.stations)
-    .filter((stationHash) => data.stations[stationHash].stationComplex == null)
-    .map((stationHash) => {
+    .filter((stationHash) => {
+      let sc = data.stations[stationHash].stationComplex
+      return (sc == null || sc === "")
+    }).map((stationHash) => {
       return {
         'station': data.stations[stationHash].name,
         'stationHash': stationHash

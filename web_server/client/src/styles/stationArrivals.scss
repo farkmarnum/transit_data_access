@@ -150,5 +150,7 @@
     width: -webkit-calc(100% - #{$stationLabelSubtractorMEDIUM)});
     width:    -moz-calc(100% - #{$stationLabelSubtractorMEDIUM)});
     width:         calc(100% - #{$stationLabelSubtractorMEDIUM)});
+    font-size: 1.4rem;
+    margin-top: 0.8rem;
   }
 }
