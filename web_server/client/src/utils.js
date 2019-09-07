@@ -1,3 +1,5 @@
+import Fuse from "fuse.js";
+
 export function devLog(entry) {
   if(process.env.NODE_ENV === 'development') {
     console.log(entry)
@@ -35,7 +37,6 @@ export function processData(data) {
   }
 
   // add an arrivals list for each station
-  data.stationNames = []
   for (let stationHash in data.stations) {
     data.stations[stationHash].arrivals = {}
   }
@@ -70,12 +71,30 @@ export function processData(data) {
       }
 
       // add the direction label to this trip's lastStation
+      /// DEBUG
+        // if(finalStation === 445920373) {
+        //   console.log("445920373 is finalStation for ", trip)
+        // }
       if (data.stations[finalStation].finalStationDirection && data.stations[finalStation].finalStationDirection !== trip.direction) {
         devLog(`WARNING: ${data.stations[finalStation].name} has multiple trips referencing it as finalStation w/ different trip directions...`)
       }
       data.stations[finalStation].finalStationDirection = trip.direction
     }
   }
+
+  /// Generate Fuse for stations
+  const options = {
+    keys: ['station'],
+    shouldSort: true,
+    threshold: 0.4
+  }
+  const stationObjList = Object.keys(data.stations).map((stationHash) => {
+    return {
+      'station': data.stations[stationHash].name,
+      'stationHash': stationHash
+    }
+  })
+  data.stationSearch = new Fuse(stationObjList, options)
 
   return data
 }

@@ -1,4 +1,5 @@
 import React from 'react'
+
 import {
   ArrivalTime,
   RouteIcon
@@ -178,9 +179,8 @@ export class ArrivalsByStation extends React.Component {
   }
 
   updateSearchText = (searchText) => {
-    let trimmedText = searchText.trim().toLowerCase()
     this.setState({
-      searchText: trimmedText,
+      searchText: searchText.trim().toLowerCase().slice(0, 10), // slice to avoid arbitrarily long searchText
       resultLimit: initResultLimit
     })
   }
@@ -194,24 +194,21 @@ export class ArrivalsByStation extends React.Component {
   render() {
     let stationList = []
     if (this.state.searchText !== "") {
-      Object.keys(this.props.data.stations).forEach((stationHash, i) => {
-        let name = this.props.data.stations[stationHash].name
-        if (name.toLowerCase().indexOf(this.state.searchText) >= 0) {
-          stationList.push(
-            <Station
-              key={ i }
-              data={ this.props.data }
-              stationHash={ stationHash }
-              updatedTrips={ this.props.updatedTrips }
-            />
-          )
-        } else {
-          return null
-        }
+      stationList = this.props.data.stationSearch
+                    .search(this.state.searchText)
+                    .map((result, i) => {
+        return (
+          <Station
+            key={ i }
+            data={ this.props.data }
+            stationHash={ result.stationHash }
+            updatedTrips={ this.props.updatedTrips }
+          />
+        )
       })
     }
 
-    let showMore = ""
+    let showMore = null
     if (stationList.length > this.state.resultLimit) {
       showMore = <div className="show-more" onClick={this.increaseResultLimit}>show more results</div>
     }
