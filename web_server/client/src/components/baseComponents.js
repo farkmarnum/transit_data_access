@@ -23,7 +23,7 @@ export function RouteIcon(props) {
     return (
       <button
         className={"route-diamond-outer" + selected + clickable}
-        style={{color: txtColor}}
+        style={{color: txtColor, borderColor: bgColor}}
         onClick={props.clickable ? props.routeClicked : noop}
       >
         { name }
@@ -38,6 +38,10 @@ export function RouteIcon(props) {
     const style = {
       color: txtColor,
       backgroundColor: bgColor,
+      borderColor: bgColor
+    }
+    if (name.length > 1) {
+      style.letterSpacing = "-0.1rem"
     }
     return (
       <button

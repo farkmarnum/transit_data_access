@@ -12,6 +12,7 @@
   border-radius: 50%;
   padding: 0;
   margin: $routeIconMargin/2;
+  letter-spacing: 0;
 }
 .route-diamond-outer {
   background-color: transparent;
@@ -79,7 +80,8 @@ $scaleChangeUnit: $routeCircleDiameter * ($routeIconScale - 1);
 }
 .route-circle.selected::before,
 .route-diamond-outer.selected::before {
-  border: $selectedRouteBorderWidthInner solid $darkestGrey;
+  border: $selectedRouteBorderWidthInner solid;
+  border-color: inherit;
   z-index: 1;
 }
 
