@@ -58,7 +58,6 @@
   border-bottom: 0.1rem solid $darkGrey;
 }
 .station-route-name-outer {
-  display: inline-block;
   width: $routeNameWidth;
   vertical-align: top;
   padding: 0.3rem 0;
@@ -135,5 +134,21 @@
   }
   .show-more {
     font-size: 1.5rem;
+  }
+
+  .station-route-name-outer {
+    width: $routeNameWidthMEDIUM;
+  }
+  .station-route-arrivals {
+    min-width: $arrivalsWidthMEDIUM;
+  }
+  .station .arrival-time {
+    width: $arrivalTimeWidthMEDIUM;
+    margin-left: $arrivalTimeLeftMarginMEDIUM;
+  }
+  .station-name-and-borough{
+    width: -webkit-calc(100% - #{$stationLabelSubtractorMEDIUM)});
+    width:    -moz-calc(100% - #{$stationLabelSubtractorMEDIUM)});
+    width:         calc(100% - #{$stationLabelSubtractorMEDIUM)});
   }
 }

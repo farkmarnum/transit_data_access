@@ -3,13 +3,12 @@ import ReactDOM from 'react-dom'
 import './styles/normalize.css'
 import './styles/skeleton.css'
 import './styles/index.scss'
-import {
-  devLog,
-  sleep,
-  processData,
-  dataReceivedMsg,
-  requestFullMsg,
-} from './utils.js'
+import  { devLog,
+          sleep,
+          processData,
+          dataReceivedMsg,
+          requestFullMsg,
+        } from './utils.js'
 import { ArrivalsByRoute } from './components/arrivalsByRoute.js'
 import { ArrivalsByStation } from './components/arrivalsByStation.js'
 
