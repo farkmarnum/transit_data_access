@@ -220,7 +220,7 @@ h3 {
   font-weight: 100;
 }
 .route-station-name-outer {
-  display: inline;
+  display: inline-block;
   width: -webkit-calc(100% - #{$arrivalsWidth)});
   width:    -moz-calc(100% - #{$arrivalsWidth)});
   width:         calc(100% - #{$arrivalsWidth)});
@@ -228,7 +228,6 @@ h3 {
   line-height: 1.1rem;
 }
 .route-station-name {
-  margin-right: 0.4rem;
   font-weight: 500;
   font-size: 1.1rem;
 }
@@ -363,6 +362,7 @@ h3 {
     width: -webkit-calc(100% - #{$arrivalsWidthMEDIUM)});
     width:    -moz-calc(100% - #{$arrivalsWidthMEDIUM)});
     width:         calc(100% - #{$arrivalsWidthMEDIUM)});
+    line-height: 1.5rem;
   }
   .route-station-name {
     font-size: 1.5rem;

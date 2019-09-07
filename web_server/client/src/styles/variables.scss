@@ -47,11 +47,11 @@ $routeIconMarginMEDIUM: $selectedRouteBorderWidth*2 + $routeCircleDiameterMEDIUM
 $routeNameWidth: $routeCircleDiameter * 1.6;
 $arrivalTimeWidth: 4rem;
 $arrivalTimeLeftMargin: $arrivalTimeWidth / 4.5;
-$arrivalsWidth: ($arrivalTimeWidth + $arrivalTimeLeftMargin) * 3;
+$arrivalsWidth: ($arrivalTimeWidth + $arrivalTimeLeftMargin) * 3 + 0.1rem; // 0.1rem for rounding errors
 $stationLabelSubtractor: $arrivalsWidth + $routeNameWidth;
 
 $routeNameWidthMEDIUM: $routeCircleDiameterMEDIUM * 1.6;
 $arrivalTimeWidthMEDIUM: 5rem;
 $arrivalTimeLeftMarginMEDIUM: $arrivalTimeWidthMEDIUM / 4.5;
-$arrivalsWidthMEDIUM: ($arrivalTimeWidthMEDIUM + $arrivalTimeLeftMarginMEDIUM) * 3;
+$arrivalsWidthMEDIUM: ($arrivalTimeWidthMEDIUM + $arrivalTimeLeftMarginMEDIUM) * 3 + 0.1rem; // 0.1rem for rounding errors
 $stationLabelSubtractorMEDIUM: $arrivalsWidthMEDIUM + $routeNameWidthMEDIUM;
