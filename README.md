@@ -2,7 +2,7 @@
 
 See it in action: [Transit Data Access](http://www.markfarnum.com)
 
-Transit Data Access is a powerful web app that gives users access to
+Transit Data Access is a lightweight web app that gives users access to
 the full GTFS realtime data feed of a transit system. Instead of being
 forced to wait for a server to respond to queries about arrivals,
 route-planning, etc, users already have all the data they need -- as up
@@ -89,12 +89,10 @@ Issues
 TODOs
 ------
 
-* web_client: sort station arrivals by direction
-
-* web_client: clump stations by stationComplex
+* web_client: add a 'trip' view to see all upcoming arrivals for your trip (like Arrivals by Route but just for one trip on that route)
 
 * parser & web_client: re-implement bzip to decrease data footprint
 
-* web_client dataUpdates should have some sort of sort+hashsum check that everything worked after an update.
+* web_client: dataUpdates should have some sort of sort+hashsum check that everything worked after an update.
 
 * Add feature: trip planning / path finding
