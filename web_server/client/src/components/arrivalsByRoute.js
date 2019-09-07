@@ -116,30 +116,80 @@ function RouteNameList(props) {
   )
 }
 
-function FinalStationsRender(props) {
-  let output
-    , station
+function FinalStationsForDirection(props) {
+  let station
+  return (
+    <React.Fragment>
+      <div className="route-arrivals-direction-title">
+        {props.direction ? "North" : "South"}-bound
+      </div>
+      {
+        [...props.directionStations].map((stationHash, i) => {
+          station = props.stations[stationHash]
+          return (
+            <button
+              className={"route-final-station " + ((props.selectedFinalStation === stationHash) ? "selected" : "")}
+              onClick={() => props.finalStationClicked(stationHash)}
+              key={i}
+            >
+            <span className="final-station-name">to { station.name }</span>
+            <span className="borough-label">{ station.borough }</span>
+            </button>
+          )
+        })
+      }
+    </React.Fragment>
+  )
+}
+
+function FinalStations(props) {
+  let output = []
   if (props.selectedRouteHash == null) {
     output = "Click a route to see arrivals!"
   } else if (props.finalStations !== null && props.finalStations.size > 0) {
-    output = [...props.finalStations].map((stationHash, i) => {
-      station = props.stations[stationHash]
-      return (
-        <button
-          className={"route-final-station " + ((props.selectedFinalStation === stationHash) ? "selected" : "")}
-          onClick={() => props.finalStationClicked(stationHash)}
-          key={i}
-        >
-        <span className="final-station-name">to { station.name }</span>
-        <span className="borough-label">{ station.borough }</span>
-        </button>
-      )
+    let northStations = []
+      , southStations = []
+    props.finalStations.forEach((finalStationHash, i) => {
+      let direction = props.stations[finalStationHash].finalStationDirection
+      if (direction === true) {
+        northStations.push(finalStationHash)
+      } else if (direction === false) {
+        southStations.push(finalStationHash)
+      } else {
+        console.error(props.stations[finalStationHash], "does not have .finalStationDirection")
+      }
     })
+
+    if (northStations.length > 0) {
+      output.push(
+        <FinalStationsForDirection
+          key={0}
+          directionStations={northStations}
+          direction={true}
+          selectedFinalStation={props.selectedFinalStation}
+          finalStationClicked={props.finalStationClicked}
+          stations={props.stations}
+        />
+      )
+    }
+    if (southStations.length > 0) {
+      output.push(
+        <FinalStationsForDirection
+          key={1}
+          directionStations={southStations}
+          direction={false}
+          selectedFinalStation={props.selectedFinalStation}
+          finalStationClicked={props.finalStationClicked}
+          stations={props.stations}
+        />
+      )
+    }
+
   } else {
     if (props.selectedRouteHash !== null) {
       output = "No trains currently running on this route."
     } else {
-      output = props.selectedRouteHash
+      output = null
     }
   }
   return (
@@ -211,7 +261,7 @@ export class ArrivalsByRoute extends React.Component {
             selectedRouteHash={this.state.selectedRouteHash}
             routeClicked={this.routeClicked}
           />
-          <FinalStationsRender
+          <FinalStations
             finalStations={this.state.finalStations}
             selectedFinalStation={this.state.selectedFinalStation}
             selectedRouteHash={this.state.selectedRouteHash}

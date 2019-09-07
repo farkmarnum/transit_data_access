@@ -52,6 +52,6 @@ $stationLabelSubtractor: $arrivalsWidth + $routeNameWidth;
 
 $routeNameWidthMEDIUM: $routeCircleDiameterMEDIUM * 1.6;
 $arrivalTimeWidthMEDIUM: 5rem;
-$arrivalTimeLeftMarginMEDIUM: $arrivalTimeLeftMargin;
+$arrivalTimeLeftMarginMEDIUM: $arrivalTimeWidthMEDIUM / 4.5;
 $arrivalsWidthMEDIUM: ($arrivalTimeWidthMEDIUM + $arrivalTimeLeftMarginMEDIUM) * 3;
 $stationLabelSubtractorMEDIUM: $arrivalsWidthMEDIUM + $routeNameWidthMEDIUM;
