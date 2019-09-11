@@ -16,7 +16,7 @@ every 15 seconds, "update" data packets (<10KB) are sent with just the informati
 that has changed since the last time the user received data.
 
 This app is containerized with Docker, consisting of four containers:
-
+ 
 * **parser**
 
 	Python process fetching and parsing static and realtime GTFS data from MTA API
