@@ -2,10 +2,19 @@
 """
 import os
 import sys
-from typing import \
-    NamedTuple, List, Set, Dict, DefaultDict, \
-    Type, TypeVar, NewType, \
-    Any, Optional, Union
+from typing import (
+    NamedTuple,
+    List,
+    Set,
+    Dict,
+    DefaultDict,
+    Type,
+    TypeVar,
+    NewType,
+    Any,
+    Optional,
+    Union,
+)
 from collections import defaultdict
 import time
 import json
@@ -20,14 +29,15 @@ import middleware  # type: ignore
 loop = asyncio.get_event_loop()
 
 
-os.makedirs('/data/static/parsed', exist_ok=True)
-os.makedirs('/data/realtime/parsed', exist_ok=True)
+os.makedirs("/data/static/parsed", exist_ok=True)
+os.makedirs("/data/realtime/parsed", exist_ok=True)
 
 
 #####################################
 #            CUSTOM TYPES           #
 #####################################
 Num = Union[int, float]
+
 
 def to_num(_str: Any) -> Num:
     try:
@@ -36,59 +46,69 @@ def to_num(_str: Any) -> Num:
         try:
             return float(_str)
         except ValueError as err:
-            print(f'{_str} cannot be converted to int or float', file=sys.stderr)
+            print(f"{_str} cannot be converted to int or float", file=sys.stderr)
             raise ValueError(err)
 
-ShortHash = NewType('ShortHash', int)
 
-StationHash  = NewType('StationHash', ShortHash)    # unique hash of station id  # noqa
-RouteHash    = NewType('RouteHash', ShortHash)      # unique hash of route id    # noqa
-TripHash     = NewType('TripHash', ShortHash)       # unique hash of trip id     # noqa
+ShortHash = NewType("ShortHash", int)
 
-SpecifiedHash = TypeVar('SpecifiedHash', StationHash, RouteHash, TripHash)
+StationHash = NewType("StationHash", ShortHash)  # unique hash of station id  # noqa
+RouteHash = NewType("RouteHash", ShortHash)  # unique hash of route id    # noqa
+TripHash = NewType("TripHash", ShortHash)  # unique hash of trip id     # noqa
 
-ArrivalTime  = NewType('ArrivalTime', int)          # POSIX time                 # noqa
-TravelTime   = NewType('TravelTime', int)           # number of seconds          # noqa
-TransferTime = NewType('TransferTime', int)         # number of seconds          # noqa
-TimeDiff = NewType('TimeDiff', int)                 # number of seconds
+SpecifiedHash = TypeVar("SpecifiedHash", StationHash, RouteHash, TripHash)
 
-TripStatus = NewType('TripStatus', int)
+ArrivalTime = NewType("ArrivalTime", int)  # POSIX time                 # noqa
+TravelTime = NewType("TravelTime", int)  # number of seconds          # noqa
+TransferTime = NewType("TransferTime", int)  # number of seconds          # noqa
+TimeDiff = NewType("TimeDiff", int)  # number of seconds
+
+TripStatus = NewType("TripStatus", int)
 STOPPED, DELAYED, ON_TIME = list(map(TripStatus, range(3)))
 
 
 #####################################
 #          CONSTANTS / ENV          #
 #####################################
-LOG_LEVEL: str = os.environ.get('LOG_LEVEL', 'INFO')
+LOG_LEVEL: str = os.environ.get("LOG_LEVEL", "INFO")
 
-STATIC_PATH: str = f'/data/static'
-REALTIME_PATH: str = f'/data/realtime'
+STATIC_PATH: str = f"/data/static"
+REALTIME_PATH: str = f"/data/realtime"
 
-REALTIME_FREQ: Num = to_num(os.environ.get('REALTIME_FREQ', 15))
-REALTIME_TIMEOUT: Num = to_num(os.environ.get('REALTIME_TIMEOUT', 3.2))
-REALTIME_MAX_ATTEMPTS: int = int(os.environ.get('REALTIME_MAX_ATTEMPTS', 3))
+REALTIME_FREQ: Num = to_num(os.environ.get("REALTIME_FREQ", 15))
+REALTIME_TIMEOUT: Num = to_num(os.environ.get("REALTIME_TIMEOUT", 3.2))
+REALTIME_MAX_ATTEMPTS: int = int(os.environ.get("REALTIME_MAX_ATTEMPTS", 3))
 
-REALTIME_DATA_DICT_CAP: int = int(os.environ.get('REALTIME_DATA_DICT_CAP', 20))
+REALTIME_DATA_DICT_CAP: int = int(os.environ.get("REALTIME_DATA_DICT_CAP", 20))
 
-MTA_API_KEY: str
-MTA_REALTIME_BASE_URL: str = os.environ.get('MTA_REALTIME_BASE_URL', 'http://datamine.mta.info/mta_esi.php')
-MTA_STATIC_URL: str = os.environ.get('MTA_STATIC_URL', 'http://web.mta.info/developers/data/nyct/subway/google_transit.zip')
+MTA_REALTIME_BASE_URL: str = os.environ.get(
+    "MTA_REALTIME_BASE_URL", f"https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs",
+)
+MTA_STATIC_URL: str = os.environ.get(
+    "MTA_STATIC_URL", "http://web.mta.info/developers/data/nyct/subway/google_transit.zip",
+)
 
 REDIS_HOST: str  # redis_server
 REDIS_PORT: int  # 6379
 
 try:
-    REDIS_HOSTNAME = os.environ['REDIS_HOSTNAME']
-    REDIS_PORT = int(os.environ['REDIS_PORT'])
-    MTA_API_KEY = os.environ['MTA_API_KEY']
+    REDIS_HOSTNAME = os.environ["REDIS_HOSTNAME"]
+    REDIS_PORT = int(os.environ["REDIS_PORT"])
+    MTA_API_KEY = os.environ["MTA_API_KEY"]
 except KeyError:
-    print('ERROR: necessary environment variables (REDIS_HOSTNAME & REDIS_PORT & MTA_API_KEY) not set', file=sys.stderr)
+    print(
+        "ERROR: necessary environment variables (REDIS_HOSTNAME & REDIS_PORT & MTA_API_KEY) not set",
+        file=sys.stderr,
+    )
     exit()
 
 try:
     assert REALTIME_FREQ > REALTIME_TIMEOUT * REALTIME_MAX_ATTEMPTS
 except AssertionError:
-    print('WARNING: REALTIME_TIMEOUT * REALTIME_MAX_ATTEMPTS > REALTIME_FREQ\nDefault values substituted.', file=sys.stderr)
+    print(
+        "WARNING: REALTIME_TIMEOUT * REALTIME_MAX_ATTEMPTS > REALTIME_FREQ\nDefault values substituted.",
+        file=sys.stderr,
+    )
     REALTIME_FREQ, REALTIME_TIMEOUT, REALTIME_MAX_ATTEMPTS = 15, 3.2, 3
 
 
@@ -98,32 +118,22 @@ REDIS_EXP = REALTIME_FREQ * REALTIME_MAX_ATTEMPTS
 #####################################
 #              LOGGING              #
 #####################################
-logging.config.dictConfig({
-    'version': 1,
-    'formatters': {
-        'verbose': {
-            'format': '%(levelname)s %(asctime)s.%(msecs)03d %(module)s %(message)s',
-            'datefmt': '%Y-%m-%d %H:%M:%S'
+logging.config.dictConfig(
+    {
+        "version": 1,
+        "formatters": {
+            "verbose": {
+                "format": "%(levelname)s %(asctime)s.%(msecs)03d %(module)s %(message)s",
+                "datefmt": "%Y-%m-%d %H:%M:%S",
+            },
+            "simple": {"format": "%(levelname)s %(message)s"},
         },
-        'simple': {
-            'format': '%(levelname)s %(message)s'
-        },
-    },
-    'handlers': {
-        'stream': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'verbose'
-        },
-    },
-    'loggers': {
-        'parser': {
-            'level': LOG_LEVEL,
-            'handlers': ['stream']
-        }
+        "handlers": {"stream": {"class": "logging.StreamHandler", "formatter": "verbose",},},
+        "loggers": {"parser": {"level": LOG_LEVEL, "handlers": ["stream"]}},
     }
-})
+)
 
-log = logging.getLogger('parser')
+log = logging.getLogger("parser")
 
 
 #####################################
@@ -136,7 +146,10 @@ def checksum(fname):
             hash_md5.update(chunk)
     return hash_md5.hexdigest()
 
+
 hasher = pyhash.super_fast_hash()
+
+
 def short_hash(input_: Any, type_hint: Type[SpecifiedHash]) -> SpecifiedHash:
     """ Returns a unique (TODO: collision handling!) int32 hash of a station, route, or trip id
     Examples:
@@ -150,30 +163,42 @@ def short_hash(input_: Any, type_hint: Type[SpecifiedHash]) -> SpecifiedHash:
     typed_hash = type_hint(ShortHash(hash_int))
     return typed_hash
 
+
 def trim_dict(dict_):
     i = 0
     while len(dict_) > REALTIME_DATA_DICT_CAP:
         if i > 1000:
-            log.warning("could not trim specified dict to the %d most recent keys", REALTIME_DATA_DICT_CAP)
+            log.warning(
+                "could not trim specified dict to the %d most recent keys", REALTIME_DATA_DICT_CAP,
+            )
             return
         del dict_[min(dict_)]
         i += 1
 
+
 #####################################
 #      TRANSIT DATA STRUCTURES      #
 #####################################
+
+
 class Branch(NamedTuple):
     route: RouteHash
     final_station: StationHash
+
 
 class StationArrival(NamedTuple):
     arrival_time: ArrivalTime
     trip_hash: TripHash
 
+
 def dict_of_list_factory():
     return defaultdict(list)
+
+
 def dict_of_dict_factory():
     return defaultdict(dict)
+
+
 def dict_of_dict_of_list_factory():
     return defaultdict(lambda: defaultdict(list))
 
@@ -185,17 +210,19 @@ class RouteInfo:
     text_color: int
     stations: Set[StationHash]
 
+
 @dataclass
 class Station:
     id_: StationHash
     name: str
     lat: float
     lon: float
-    borough: str = ''
-    n_label: str = ''
-    s_label: str = ''
-    station_complex: str = ''
+    borough: str = ""
+    n_label: str = ""
+    s_label: str = ""
+    station_complex: str = ""
     travel_times: Dict[StationHash, TravelTime] = field(default_factory=dict)
+
 
 @dataclass
 class Trip:
@@ -209,6 +236,7 @@ class Trip:
     def add_arrival(self, station: StationHash, arrival_time: ArrivalTime):
         self.arrivals[station] = ArrivalTime(arrival_time)
 
+
 @dataclass
 class StaticData:
     name: str
@@ -218,7 +246,10 @@ class StaticData:
     station_complexes: Dict[str, str] = field(default_factory=dict)
     routehash_lookup: Dict[str, RouteHash] = field(default_factory=dict)
     stationhash_lookup: Dict[str, StationHash] = field(default_factory=dict)
-    transfers: DefaultDict[StationHash, Dict[StationHash, TransferTime]] = field(default_factory=dict_of_dict_factory)
+    transfers: DefaultDict[StationHash, Dict[StationHash, TransferTime]] = field(
+        default_factory=dict_of_dict_factory
+    )
+
 
 @dataclass
 class RealtimeData(StaticData):
@@ -231,19 +262,27 @@ class TripDiff:
     deleted: List[TripHash] = field(default_factory=list)
     added: List[Trip] = field(default_factory=list)
 
+
 @dataclass
 class ArrivalsDiff:
     deleted: Dict[TripHash, List[StationHash]] = field(default_factory=dict_of_list_factory)
-    added: Dict[TripHash, Dict[StationHash, ArrivalTime]] = field(default_factory=dict_of_list_factory)
-    modified: Dict[TimeDiff, Dict[TripHash, List[StationHash]]] = field(default_factory=dict_of_dict_of_list_factory)
+    added: Dict[TripHash, Dict[StationHash, ArrivalTime]] = field(
+        default_factory=dict_of_list_factory
+    )
+    modified: Dict[TimeDiff, Dict[TripHash, List[StationHash]]] = field(
+        default_factory=dict_of_dict_of_list_factory
+    )
+
 
 @dataclass
 class StatusDiff:
     modified: Dict[TripHash, TripStatus] = field(default_factory=dict)
 
+
 @dataclass
 class BranchDiff:
     modified: Dict[TripHash, Branch] = field(default_factory=dict)
+
 
 @dataclass
 class DataDiff:
@@ -264,20 +303,20 @@ class UpdateFailed(Exception):
 class StaticJSONEncoder(json.JSONEncoder):
     """ This is for encoding the parsed static data to JSON
     """
+
     def default(self, obj):
         if isinstance(obj, set):
             return list(obj)
         if is_dataclass(obj):
-            custom_obj = {
-                "_type": str(type(obj)),
-                "value": obj.__dict__
-            }
+            custom_obj = {"_type": str(type(obj)), "value": obj.__dict__}
             return custom_obj
         return json.JSONEncoder.default(self, obj)
+
 
 class StaticJSONDecoder(json.JSONDecoder):
     """ This is for decoding (in realtime.py) the JSON-ized static parsed data
     """
+
     def __init__(self, *args, **kwargs):
         json.JSONDecoder.__init__(self, object_hook=self.object_hook, *args, **kwargs)
 
@@ -294,19 +333,20 @@ class StaticJSONDecoder(json.JSONDecoder):
         return data_dict
 
     def object_hook(self, obj):
-        if '_type' not in obj:
+        if "_type" not in obj:
             return obj
         _type_dict = {
-            '<class \'util.RouteInfo\'>': RouteInfo,
-            '<class \'util.Branch\'>': Branch,
-            '<class \'util.StationArrival\'>': StationArrival,
-            '<class \'util.RouteInfo\'>': RouteInfo,
-            '<class \'util.Station\'>': Station,
-            '<class \'util.Trip\'>': Trip,
-            '<class \'util.StaticData\'>': StaticData}
+            "<class 'util.RouteInfo'>": RouteInfo,
+            "<class 'util.Branch'>": Branch,
+            "<class 'util.StationArrival'>": StationArrival,
+            "<class 'util.RouteInfo'>": RouteInfo,
+            "<class 'util.Station'>": Station,
+            "<class 'util.Trip'>": Trip,
+            "<class 'util.StaticData'>": StaticData,
+        }
         try:
-            _type = _type_dict[obj['_type']]
-            data_dict = self.keys_to_ints(obj['value'])
+            _type = _type_dict[obj["_type"]]
+            data_dict = self.keys_to_ints(obj["value"])
             return _type(**data_dict)
         except IndexError:
             return obj
@@ -315,20 +355,20 @@ class StaticJSONDecoder(json.JSONDecoder):
 class RealtimeJSONEncoder(json.JSONEncoder):
     """ This is for encoding the parsed realtime data to JSON
     """
+
     def default(self, obj):
         if isinstance(obj, set):
             return list(obj)
         if is_dataclass(obj):
-            custom_obj = {
-                "_type": str(type(obj)),
-                "value": obj.__dict__
-            }
+            custom_obj = {"_type": str(type(obj)), "value": obj.__dict__}
             return custom_obj
         return json.JSONEncoder.default(self, obj)
+
 
 class RealtimeJSONDecoder(json.JSONDecoder):
     """ This is for decoding (in realtime.py, with data from redis) the JSON-ized parsed realtime data
     """
+
     def __init__(self, *args, **kwargs):
         json.JSONDecoder.__init__(self, object_hook=self.object_hook, *args, **kwargs)
 
@@ -345,21 +385,22 @@ class RealtimeJSONDecoder(json.JSONDecoder):
         return data_dict
 
     def object_hook(self, obj):
-        if '_type' not in obj:
+        if "_type" not in obj:
             return obj
 
         _type_dict = {
-            '<class \'util.RealtimeData\'>': RealtimeData,
-            '<class \'util.RouteInfo\'>': RouteInfo,
-            '<class \'util.StationArrival\'>': StationArrival,
-            '<class \'util.RouteInfo\'>': RouteInfo,
-            '<class \'util.Station\'>': Station,
-            '<class \'util.Trip\'>': Trip,
-            '<class \'util.StaticData\'>': StaticData}
+            "<class 'util.RealtimeData'>": RealtimeData,
+            "<class 'util.RouteInfo'>": RouteInfo,
+            "<class 'util.StationArrival'>": StationArrival,
+            "<class 'util.RouteInfo'>": RouteInfo,
+            "<class 'util.Station'>": Station,
+            "<class 'util.Trip'>": Trip,
+            "<class 'util.StaticData'>": StaticData,
+        }
 
         try:
-            _type = _type_dict[obj['_type']]
-            data_dict = self.fix_keys(obj['value'])
+            _type = _type_dict[obj["_type"]]
+            data_dict = self.fix_keys(obj["value"])
             return _type(**data_dict)
         except IndexError:
             return obj
@@ -368,6 +409,7 @@ class RealtimeJSONDecoder(json.JSONDecoder):
 class TimeLogger:
     """ Convenient little way to log how long something takes.
     """
+
     def __init__(self):
         self.times = []
 
@@ -375,7 +417,7 @@ class TimeLogger:
         self.tlog()
         return self
 
-    def tlog(self, block_name=''):
+    def tlog(self, block_name=""):
         self.times.append((time.time(), block_name))
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -383,9 +425,8 @@ class TimeLogger:
         while len(self.times) > 0:
             time_, block_name = self.times.pop(0)
             block_time = time_ - prev_time
-            log.debug('%s took %s seconds', block_name, block_time)
+            log.debug("%s took %s seconds", block_name, block_time)
             prev_time = time_
-
 
 
 #####################################
@@ -396,6 +437,7 @@ class GTFSConf(NamedTuple):
     static_url: str
     additional_static_urls: List[str]
     realtime_urls: Dict[str, str]
+
 
 # LIST_OF_FILES = [
 #     'agency.txt',
@@ -411,16 +453,17 @@ class GTFSConf(NamedTuple):
 #     'station'
 # ]
 
+
 _base_url = MTA_REALTIME_BASE_URL
-_feed_ids = sorted(['1', '2', '11', '16', '21', '26', '31', '36', '51'], key=int)
-_url_dict = {feed_id: f'{_base_url}?key={MTA_API_KEY}&feed_id={feed_id}' for feed_id in _feed_ids}
+_feed_ids = ["", "-ace", "-bdfm", "-g", "-jz", "-nqrw", "-l", "-7", "-si"]
+_url_dict = {feed_id: f"{_base_url}{feed_id}" for feed_id in _feed_ids}
 
 GTFS_CONF = GTFSConf(
-    name='MTA_subway',
+    name="MTA_subway",
     static_url=MTA_STATIC_URL,
     additional_static_urls=[
-        'http://web.mta.info/developers/data/nyct/subway/Stations.csv',
-        'http://web.mta.info/developers/data/nyct/subway/StationComplexes.csv',
+        "http://web.mta.info/developers/data/nyct/subway/Stations.csv",
+        "http://web.mta.info/developers/data/nyct/subway/StationComplexes.csv",
     ],
-    realtime_urls=_url_dict
+    realtime_urls=_url_dict,
 )

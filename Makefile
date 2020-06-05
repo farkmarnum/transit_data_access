@@ -4,8 +4,9 @@ CLUSTER := webapps
 SERVICE := tda-3
 PDIR := $(shell pwd)
 TMP := $(PWD)/../temp-tdr-build
+AWS_ID := 517918230755
 
-ECR := 517918230755.dkr.ecr.us-east-2.amazonaws.com/transit-data-access
+ECR := $(AWS_ID).dkr.ecr.us-east-2.amazonaws.com/transit-data-access
 
 build:
 	docker-compose build
@@ -23,12 +24,12 @@ aws-login:
 	$(shell aws ecr get-login --no-include-email)
 
 push:
-	docker tag transit_data_access/parser:latest 517918230755.dkr.ecr.us-east-2.amazonaws.com/transit-data-access/parser:latest \
-	&& docker tag transit_data_access/web_client:latest 517x918230755.dkr.ecr.us-east-2.amazonaws.com/transit-data-access/web_client:latest \
-	&& docker tag transit_data_access/web_server:latest 517918230755.dkr.ecr.us-east-2.amazonaws.com/transit-data-access/web_server:latest \
-	&& docker push 517918230755.dkr.ecr.us-east-2.amazonaws.com/transit-data-access/parser:latest \
-	&& docker push 517918230755.dkr.ecr.us-east-2.amazonaws.com/transit-data-access/web_server:latest \
-	&& docker push 517918230755.dkr.ecr.us-east-2.amazonaws.com/transit-data-access/web_client:latest \
+	docker tag transit_data_access/parser:latest $(AWS_ID).dkr.ecr.us-east-2.amazonaws.com/transit-data-access/parser:latest \
+	&& docker tag transit_data_access/web_client:latest $(AWS_ID).dkr.ecr.us-east-2.amazonaws.com/transit-data-access/web_client:latest \
+	&& docker tag transit_data_access/web_server:latest $(AWS_ID).dkr.ecr.us-east-2.amazonaws.com/transit-data-access/web_server:latest \
+	&& docker push $(AWS_ID).dkr.ecr.us-east-2.amazonaws.com/transit-data-access/parser:latest \
+	&& docker push $(AWS_ID).dkr.ecr.us-east-2.amazonaws.com/transit-data-access/web_server:latest \
+	&& docker push $(AWS_ID).dkr.ecr.us-east-2.amazonaws.com/transit-data-access/web_client:latest \
 
 register-task:
 	aws ecs register-task-definition --cli-input-json file://aws-deploy-conf/taskdef.json

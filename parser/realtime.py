@@ -9,20 +9,23 @@ import redis
 import asyncio
 import aiohttp  # type: ignore
 import concurrent.futures
-from google.transit.gtfs_realtime_pb2 import FeedMessage    # type: ignore
+from google.transit.gtfs_realtime_pb2 import FeedMessage  # type: ignore
 from google.protobuf.message import DecodeError
-import transit_data_access_pb2      # type: ignore
-import static                       # type: ignore
-import util as u                    # type: ignore
-import middleware                   # type: ignore
+import transit_data_access_pb2  # type: ignore
+import static  # type: ignore
+import util as u  # type: ignore
+import middleware  # type: ignore
 
-TIME_DIFF_THRESHOLD: int = 3
+TIME_DIFF_THRESHOLD = 3
 COMPRESSION_LEVEL = 9
 
-FetchStatus = NewType('FetchStatus', int)
-NONE, NEW_FEED, OLD_FEED, FETCH_FAILED, DECODE_FAILED, RUNTIME_WARNING = list(map(FetchStatus, range(6)))
+FetchStatus = NewType("FetchStatus", int)
+NONE, NEW_FEED, OLD_FEED, FETCH_FAILED, DECODE_FAILED, RUNTIME_WARNING = list(
+    map(FetchStatus, range(6))
+)
 
-Timestamp = NewType('Timestamp', int)
+Timestamp = NewType("Timestamp", int)
+
 
 class FetchResult(NamedTuple):
     status: FetchStatus
@@ -33,6 +36,7 @@ class FetchResult(NamedTuple):
 class RealtimeFeedHandler:
     """ TODO: docstring
     """
+
     def __init__(self, url: str, id_: str, redis_server: redis.Redis) -> None:
         self.url = url
         self.id_ = id_
@@ -42,25 +46,33 @@ class RealtimeFeedHandler:
         self.latest_feed: FeedMessage = None
         self.prev_feed: FeedMessage = None
 
-    async def fetch(self, thread_pool_excecutor: concurrent.futures.ThreadPoolExecutor, attempt: int = 0) -> None:
+    async def fetch(
+        self, thread_pool_excecutor: concurrent.futures.ThreadPoolExecutor, attempt: int = 0,
+    ) -> None:
         """ Fetches url, updates class attributes with feed info.
         """
         try:
+            headers = {"x-api-key": u.MTA_API_KEY}
             realtime_timeout = aiohttp.ClientTimeout(total=u.REALTIME_TIMEOUT)
             async with aiohttp.ClientSession(timeout=realtime_timeout) as session:
-                async with session.get(self.url) as response:
+                async with session.get(self.url, headers=headers) as response:
                     _raw = await response.read()
                     feed_message = FeedMessage()
 
                     loop = asyncio.get_event_loop()
-                    await loop.run_in_executor(thread_pool_excecutor, feed_message.ParseFromString, _raw)
+                    await loop.run_in_executor(
+                        thread_pool_excecutor, feed_message.ParseFromString, _raw,
+                    )
 
                     timestamp: int = feed_message.header.timestamp
                     if timestamp >= self.latest_timestamp + TIME_DIFF_THRESHOLD:
                         self.result = FetchResult(NEW_FEED, timestamp=timestamp)
-                        self.prev_feed, self.latest_feed, self.latest_timestamp = \
-                            self.latest_feed, feed_message, timestamp
-                        self.redis_server.hset('realtime:feeds', self.id_, _raw)
+                        (self.prev_feed, self.latest_feed, self.latest_timestamp,) = (
+                            self.latest_feed,
+                            feed_message,
+                            timestamp,
+                        )
+                        self.redis_server.hset("realtime:feeds", self.id_, _raw)
                     else:
                         self.result = FetchResult(OLD_FEED)
                     return
@@ -71,14 +83,16 @@ class RealtimeFeedHandler:
         except RuntimeWarning as err:
             self.result = FetchResult(RUNTIME_WARNING, error=err)
         except asyncio.TimeoutError as err:
-            self.result = FetchResult(FETCH_FAILED, error=f'TIMEOUT of {err}')
+            self.result = FetchResult(FETCH_FAILED, error=f"TIMEOUT of {err}")
 
         if attempt + 1 < u.REALTIME_MAX_ATTEMPTS:
-            u.log.debug('parser: Fetch failed for %s, trying again', self.id_)
-            await self.fetch(attempt=attempt + 1, thread_pool_excecutor=thread_pool_excecutor)
+            u.log.debug("parser: Fetch failed for %s, trying again", self.id_)
+            await self.fetch(
+                attempt=attempt + 1, thread_pool_excecutor=thread_pool_excecutor,
+            )
 
     def restore_feed_from_redis(self) -> None:
-        _raw = self.redis_server.hget('realtime:feeds', self.id_)
+        _raw = self.redis_server.hget("realtime:feeds", self.id_)
         if not _raw:
             return
 
@@ -88,13 +102,15 @@ class RealtimeFeedHandler:
             self.latest_feed = _feed
             self.latest_timestamp = _feed.header.timestamp
         except (DecodeError, SystemError, RuntimeWarning) as err:
-            u.log.error('%s: unable to parse feed %s restored from redis', err, self.id_)
+            u.log.error(
+                "%s: unable to parse feed %s restored from redis", err, self.id_,
+            )
 
 
-
-class RealtimeManager():
+class RealtimeManager:
     """docstring for RealtimeManager
     """
+
     def __init__(self, redis_handler) -> None:
         self.initial_merge_attempts = 0
         self.max_initial_merge_attempts = 10
@@ -103,40 +119,50 @@ class RealtimeManager():
         self.feed: FeedMessage = None
         self.current_timestamp: Timestamp = Timestamp(0)
         self.current_data: u.RealtimeData = None  # type: ignore
-        self.current_data_json: str = ''
-        self.current_data_zlib: bytes = b''
+        self.current_data_json: str = ""
+        self.current_data_zlib: bytes = b""
         self.data_dict: Dict[Timestamp, u.RealtimeData] = {}
 
         self.diff_dict: Dict[Timestamp, u.DataDiff] = {}
         self.diff_dict_zlib: Dict[Timestamp, bytes] = {}
 
-        self.feed_handlers = [RealtimeFeedHandler(url, id_, self.redis_server) for id_, url in u.GTFS_CONF.realtime_urls.items()]
+        self.feed_handlers = [
+            RealtimeFeedHandler(url, id_, self.redis_server)
+            for id_, url in u.GTFS_CONF.realtime_urls.items()
+        ]
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(self.feed_handlers)) as executor:
             _tasks = [executor.submit(fh.restore_feed_from_redis) for fh in self.feed_handlers]
             concurrent.futures.wait(_tasks)
 
         self.load_data_dict_from_redis()
 
-
     def load_data_dict_from_redis(self):
-        if not self.redis_server.exists('realtime_data_dict'):
-            u.log.info('No realtime_data_dict key in Redis')
+        if not self.redis_server.exists("realtime_data_dict"):
+            u.log.info("No realtime_data_dict key in Redis")
             return
 
-        _redis_data_dict_timestamps = self.redis_server.hkeys('realtime_data_dict')
+        _redis_data_dict_timestamps = self.redis_server.hkeys("realtime_data_dict")
         _oldest_timestamp_desired = time.time() - u.REALTIME_DATA_DICT_CAP * u.REALTIME_FREQ
-        _outdated_timestamps = [t for t in _redis_data_dict_timestamps if float(t) < _oldest_timestamp_desired]
-        u.log.debug('removing these timestamps from redis since they\'re too old: %s', _outdated_timestamps)
+        _outdated_timestamps = [
+            t for t in _redis_data_dict_timestamps if float(t) < _oldest_timestamp_desired
+        ]
+        u.log.debug(
+            "removing these timestamps from redis since they're too old: %s", _outdated_timestamps,
+        )
 
         if _outdated_timestamps:
-            self.redis_server.hdel('realtime_data_dict', *_outdated_timestamps)
+            self.redis_server.hdel("realtime_data_dict", *_outdated_timestamps)
 
-        data_json_dict = self.redis_server.hgetall('realtime_data_dict')
-        u.log.debug('realtime_data_dict loaded from Redis, len is %s', len(data_json_dict))
+        data_json_dict = self.redis_server.hgetall("realtime_data_dict")
+        u.log.debug(
+            "realtime_data_dict loaded from Redis, len is %s", len(data_json_dict),
+        )
 
         try:
             for timestamp, json_str in data_json_dict.items():
-                self.data_dict[int(timestamp.decode('utf-8'))] = json.loads(json_str, cls=u.RealtimeJSONDecoder)
+                self.data_dict[int(timestamp.decode("utf-8"))] = json.loads(
+                    json_str, cls=u.RealtimeJSONDecoder
+                )
         except json.decoder.JSONDecodeError as e:
             u.log.error(e)
 
@@ -144,19 +170,21 @@ class RealtimeManager():
         """get all new feeds, check each, and combine
         """
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(self.feed_handlers)) as executor:
-            u.log.debug('parser: Checking feeds!')
+            u.log.debug("parser: Checking feeds!")
             await asyncio.gather(
                 *[fh.fetch(thread_pool_excecutor=executor) for fh in self.feed_handlers]
             )
 
         for fh in self.feed_handlers:
             if fh.result.status not in [NEW_FEED, OLD_FEED]:
-                u.log.error('parser: Encountered %s when fetching feed %s', fh.result.error, fh.id_)
+                u.log.error(
+                    "parser: Encountered %s when fetching feed %s", fh.result.error, fh.id_,
+                )
 
         new_feeds = sum([int(fh.result.status == NEW_FEED) for fh in self.feed_handlers])
-        u.log.info('parser: %s new feeds', new_feeds)
+        u.log.info("parser: %s new feeds", new_feeds)
         if new_feeds < 1:
-            raise u.UpdateFailed('No new feeds.')
+            raise u.UpdateFailed("No new feeds.")
 
     def merge_feeds(self) -> None:
         """ Parses the feed into the smallest possible representation of the necessary realtime data.
@@ -169,7 +197,7 @@ class RealtimeManager():
                 try:
                     full_feed.MergeFrom(fh.prev_feed)
                 except (ValueError, TypeError) as err:
-                    u.log.error('Could not merge feed %s. Error: %s', fh.id_, err)
+                    u.log.error("Could not merge feed %s. Error: %s", fh.id_, err)
 
         self.feed = full_feed
 
@@ -177,13 +205,13 @@ class RealtimeManager():
         """Loads the static.json file into self.current_data
         """
         try:
-            static_json_str = self.redis_server.get('static:json_full').decode('utf-8')
-            u.log.debug('got static from redis!')
+            static_json_str = self.redis_server.get("static:json_full").decode("utf-8")
+            u.log.debug("got static from redis!")
         except AttributeError:
-            u.log.warning('STATIC NOT FOUND, running static parser')
+            u.log.warning("STATIC NOT FOUND, running static parser")
             sh = static.StaticHandler(self.redis_server)
             sh.update()
-            static_json_str = self.redis_server.get('static:json_full').decode('utf-8')
+            static_json_str = self.redis_server.get("static:json_full").decode("utf-8")
             del sh
 
         if not static_json_str:
@@ -199,8 +227,12 @@ class RealtimeManager():
             station_complexes={str(k): v for k, v in static_data.station_complexes.items()},
             routehash_lookup={str(k): v for k, v in static_data.routehash_lookup.items()},
             stationhash_lookup={str(k): v for k, v in static_data.stationhash_lookup.items()},
-            transfers={int(k): {int(_k): _v for _k, _v in v.items()} for k, v in static_data.transfers.items()},
-            realtime_timestamp=self.current_timestamp)
+            transfers={
+                int(k): {int(_k): _v for _k, _v in v.items()}
+                for k, v in static_data.transfers.items()
+            },
+            realtime_timestamp=self.current_timestamp,
+        )
 
     def parse(self) -> None:
         for elem in self.feed.entity:
@@ -230,14 +262,18 @@ class RealtimeManager():
                     u.log.error("%s has no direction indicator", last_stop_id)
                     continue
 
-                self.current_data.trips[trip_hash] = u.Trip(id_=trip_hash, branch=branch, direction=direction)
+                self.current_data.trips[trip_hash] = u.Trip(
+                    id_=trip_hash, branch=branch, direction=direction
+                )
 
-            if elem.HasField('trip_update'):
+            if elem.HasField("trip_update"):
                 for stop_time_update in elem.trip_update.stop_time_update:
                     try:
-                        station_hash = self.current_data.stationhash_lookup[stop_time_update.stop_id]
+                        station_hash = self.current_data.stationhash_lookup[
+                            stop_time_update.stop_id
+                        ]
                     except KeyError:
-                        u.log.debug('parser: KeyError for %s', stop_time_update.stop_id)
+                        u.log.debug("parser: KeyError for %s", stop_time_update.stop_id)
                         continue
 
                     arrival_time = u.ArrivalTime(stop_time_update.arrival.time)
@@ -249,7 +285,7 @@ class RealtimeManager():
                         continue
                     self.current_data.trips[trip_hash].add_arrival(station_hash, arrival_time)
 
-            elif elem.HasField('vehicle'):
+            elif elem.HasField("vehicle"):
                 timestamp = elem.vehicle.timestamp
                 self.current_data.trips[trip_hash].timestamp = timestamp
 
@@ -257,31 +293,34 @@ class RealtimeManager():
                     trip_hash = u.short_hash(elem.vehicle.trip.trip_id, u.TripHash)
                     self.current_data.trips[trip_hash].status = u.STOPPED
 
-
     def load_data_and_diffs(self) -> None:
         self.data_dict[self.current_timestamp] = self.current_data
 
         # TODO !!! optimize this with piping
-        self.redis_server.hset('realtime_data_dict', self.current_timestamp, self.current_data_json)
-        if self.redis_server.hlen('realtime_data_dict') > u.REALTIME_DATA_DICT_CAP:
-            self.redis_server.hdel('realtime_data_dict', min(self.redis_server.hkeys('realtime_data_dict')))
-        assert self.redis_server.hlen('realtime_data_dict') <= u.REALTIME_DATA_DICT_CAP
+        self.redis_server.hset(
+            "realtime_data_dict", self.current_timestamp, self.current_data_json,
+        )
+        if self.redis_server.hlen("realtime_data_dict") > u.REALTIME_DATA_DICT_CAP:
+            self.redis_server.hdel(
+                "realtime_data_dict", min(self.redis_server.hkeys("realtime_data_dict")),
+            )
+        assert self.redis_server.hlen("realtime_data_dict") <= u.REALTIME_DATA_DICT_CAP
 
         new_diff_dict = {}
-        for timestamp in (set(self.data_dict) - {self.current_timestamp}):
-            new_diff_dict[timestamp] = self.diff(old_data=self.data_dict[timestamp], new_data=self.current_data)
+        for timestamp in set(self.data_dict) - {self.current_timestamp}:
+            new_diff_dict[timestamp] = self.diff(
+                old_data=self.data_dict[timestamp], new_data=self.current_data
+            )
 
         self.diff_dict = new_diff_dict
-
 
     def serialize_to_JSON(self):
         """ Stores data in outfile with custom JSON encoder u.RealtimeJSONEncoder
         """
         self.current_data_json = json.dumps(self.current_data, cls=u.RealtimeJSONEncoder)
 
-        with open(u.REALTIME_PATH + '/parsed/realtime.json', 'w') as _out_stream:
+        with open(u.REALTIME_PATH + "/parsed/realtime.json", "w") as _out_stream:
             _out_stream.write(self.current_data_json)
-
 
     def diff(self, old_data: u.RealtimeData, new_data: u.RealtimeData) -> u.DataDiff:
         """ docstring for diff()
@@ -291,13 +330,13 @@ class RealtimeManager():
 
         trip_diff = u.TripDiff(
             deleted=list(set(old_trips) - set(new_trips)),
-            added=[new_trips[trip_hash] for trip_hash in (set(new_trips) - set(old_trips))]
+            added=[new_trips[trip_hash] for trip_hash in (set(new_trips) - set(old_trips))],
         )
         arrivals_diff = u.ArrivalsDiff()
         status_diff = u.StatusDiff()
         branch_diff = u.BranchDiff()
 
-        for trip_hash in (set(new_trips) & set(old_trips)):
+        for trip_hash in set(new_trips) & set(old_trips):
             new_trip = new_trips[trip_hash]
             old_trip = old_trips[trip_hash]
 
@@ -309,14 +348,24 @@ class RealtimeManager():
             if old_arrivals - new_arrivals:
                 arrivals_diff.deleted[trip_hash] = list(old_arrivals - new_arrivals)
             if new_arrivals - old_arrivals:
-                arrivals_diff.added[trip_hash] = {station_hash: new_trip.arrivals[station_hash] for station_hash in (new_arrivals - old_arrivals)}
+                arrivals_diff.added[trip_hash] = {
+                    station_hash: new_trip.arrivals[station_hash]
+                    for station_hash in (new_arrivals - old_arrivals)
+                }
 
             # Finding the modified arrivals takes a little more work, and we organize them by time_diff, then station, then trip
             #    This is for storage efficiency: most arrivals in a trip
             _intersection = list(old_arrivals & new_arrivals)
-            _modified_arrivals = list(filter(lambda station: new_trip.arrivals[station] != old_trip.arrivals[station], _intersection))
+            _modified_arrivals = list(
+                filter(
+                    lambda station: new_trip.arrivals[station] != old_trip.arrivals[station],
+                    _intersection,
+                )
+            )
             for station_hash in _modified_arrivals:
-                time_diff = u.TimeDiff(new_trip.arrivals[station_hash] - old_trip.arrivals[station_hash])
+                time_diff = u.TimeDiff(
+                    new_trip.arrivals[station_hash] - old_trip.arrivals[station_hash]
+                )
                 arrivals_diff.modified[time_diff][trip_hash].append(station_hash)
 
             # Then, find status & branch changes:
@@ -330,10 +379,10 @@ class RealtimeManager():
             trips=trip_diff,
             arrivals=arrivals_diff,
             status=status_diff,
-            branch=branch_diff)
+            branch=branch_diff,
+        )
 
         return data_diff
-
 
     def full_to_protobuf_zlib(self) -> None:
         """ doc
@@ -359,18 +408,20 @@ class RealtimeManager():
             proto_full.stations[station_hash].n_label = station.n_label
             proto_full.stations[station_hash].s_label = station.s_label
             proto_full.stations[station_hash].station_complex = station.station_complex
-            for other_station_hash, travel_time in station.travel_times.items():
+            for (other_station_hash, travel_time,) in station.travel_times.items():
                 proto_full.stations[station_hash].travel_times[other_station_hash] = travel_time
 
-        for station_complex_id, station_complex_name in data_full.station_complexes.items():
+        for (station_complex_id, station_complex_name,) in data_full.station_complexes.items():
             proto_full.station_complexes[station_complex_id] = station_complex_name
 
         for route_str, route_hash in data_full.routehash_lookup.items():
             proto_full.routehash_lookup[route_str] = route_hash
 
         for station_hash, transfers_for_station in data_full.transfers.items():
-            for other_station_hash, transfer_time in transfers_for_station.items():
-                proto_full.transfers[station_hash].transfer_times[other_station_hash] = transfer_time
+            for (other_station_hash, transfer_time,) in transfers_for_station.items():
+                proto_full.transfers[station_hash].transfer_times[
+                    other_station_hash
+                ] = transfer_time
 
         for trip_hash, trip in data_full.trips.items():
             proto_full.trips[trip_hash].branch.route_hash = trip.branch.route
@@ -381,11 +432,11 @@ class RealtimeManager():
             for station_hash, arrival_time in trip.arrivals.items():
                 proto_full.trips[trip_hash].arrivals[station_hash] = arrival_time
 
-        self.current_data_zlib = zlib.compress(proto_full.SerializeToString(), level=COMPRESSION_LEVEL)
+        self.current_data_zlib = zlib.compress(
+            proto_full.SerializeToString(), level=COMPRESSION_LEVEL
+        )
 
-        u.log.debug('full: %fKB', sys.getsizeof(self.current_data_zlib) / 1024)
-
-
+        u.log.debug("full: %fKB", sys.getsizeof(self.current_data_zlib) / 1024)
 
     def diff_to_protobuf_zlib(self, data_diff: u.DataDiff) -> bytes:
         """ doc
@@ -407,17 +458,21 @@ class RealtimeManager():
                 proto_trip.info.arrivals[station_hash] = arrival_time
 
         for trip_hash, stations_list in data_diff.arrivals.deleted.items():
-            proto_update.arrivals.deleted.trip_station_dict[trip_hash].station_hash[:] = stations_list
+            proto_update.arrivals.deleted.trip_station_dict[trip_hash].station_hash[
+                :
+            ] = stations_list
 
-        for trip_hash, station_arrival_dict in data_diff.arrivals.added.items():
+        for (trip_hash, station_arrival_dict,) in data_diff.arrivals.added.items():
             for station_hash, arrival_time in station_arrival_dict.items():
                 station_arrival = proto_update.arrivals.added[trip_hash].arrival.add()
                 station_arrival.station_hash = station_hash
                 station_arrival.arrival_time = arrival_time
 
-        for time_diff, trip_stationlist_dict in data_diff.arrivals.modified.items():
+        for (time_diff, trip_stationlist_dict,) in data_diff.arrivals.modified.items():
             for trip_hash, stations_list in trip_stationlist_dict.items():
-                proto_update.arrivals.modified[time_diff].trip_station_dict[trip_hash].station_hash[:] = stations_list
+                proto_update.arrivals.modified[time_diff].trip_station_dict[trip_hash].station_hash[
+                    :
+                ] = stations_list
 
         for trip_hash, trip_status in data_diff.status.modified.items():
             proto_update.status[trip_hash] = trip_status
@@ -426,17 +481,17 @@ class RealtimeManager():
             proto_update.branch[trip_hash].route_hash = branch.route
             proto_update.branch[trip_hash].final_station = branch.final_station
 
-        compressed_protobuf = zlib.compress(proto_update.SerializeToString(), level=COMPRESSION_LEVEL)
+        compressed_protobuf = zlib.compress(
+            proto_update.SerializeToString(), level=COMPRESSION_LEVEL
+        )
         return compressed_protobuf
-
 
     def all_diff_to_protobuf_zlib(self):
         for timestamp in sorted(self.diff_dict.keys()):
             diff = self.diff_dict[timestamp]
             _zlib = self.diff_to_protobuf_zlib(diff)
-            u.log.debug('update %s: %fKB', timestamp, sys.getsizeof(_zlib) / 1024)
+            u.log.debug("update %s: %fKB", timestamp, sys.getsizeof(_zlib) / 1024)
             self.diff_dict_zlib[timestamp] = _zlib
-
 
     def update(self) -> None:
         try:
@@ -458,7 +513,8 @@ class RealtimeManager():
             self.redis_handler.realtime_push(
                 current_timestamp=self.current_timestamp,
                 data_full=self.current_data_zlib,
-                data_diffs=self.diff_dict_zlib)
+                data_diffs=self.diff_dict_zlib,
+            )
 
         except u.UpdateFailed as err:
             self.current_data = tmp_data_placeholder
@@ -469,5 +525,9 @@ class RealtimeManager():
                     self.initial_merge_attempts += 1
                     self.update()
                 else:
-                    u.log.error('parser: Couldn\'t get all feeds, exiting after %s attempts.\n%s', self.max_initial_merge_attempts, err)
+                    u.log.error(
+                        "parser: Couldn't get all feeds, exiting after %s attempts.\n%s",
+                        self.max_initial_merge_attempts,
+                        err,
+                    )
                     exit()
