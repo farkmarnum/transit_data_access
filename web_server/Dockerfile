@@ -1,11 +1,11 @@
 # ---- Base Node ----
-FROM node:12.7 AS base
+FROM node:15 AS base
 # Create app directory
 WORKDIR /app
 
 
 # --- Dev ----
-FROM node:12.7 AS dev  
+FROM node:15 AS dev  
 # Create app directory
 WORKDIR /app
 # Install ALL app dependencies
@@ -23,7 +23,7 @@ RUN npm install --only=production
 
 
 # --- Release with Alpine ----
-FROM node:12.7-alpine AS release  
+FROM node:15-alpine AS release  
 # Create app directory
 WORKDIR /app
 COPY --from=build /app /app
