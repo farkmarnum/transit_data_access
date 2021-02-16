@@ -8,7 +8,7 @@ services:
 
   parser:
     env_file:
-      - ./config/docker.env
+      - ./config/local.env
     build: ./parser
     image: "farkmarnum/transit_data_access:parser"
     depends_on:
@@ -23,7 +23,7 @@ services:
 
   web_server:
     env_file:
-      - ./config/docker.env
+      - ./config/local.env
     build:
       context: ./web_server
       target: dev
@@ -42,7 +42,7 @@ services:
 
   web_client:
     env_file:
-      - ./config/docker.env
+      - ./config/local.env
     build:
       context: ./web_server/client
       target: dev
