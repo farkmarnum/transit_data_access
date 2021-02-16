@@ -29,8 +29,8 @@ import middleware  # type: ignore
 loop = asyncio.get_event_loop()
 
 
-os.makedirs("/data/static/parsed", exist_ok=True)
-os.makedirs("/data/realtime/parsed", exist_ok=True)
+os.makedirs("/opt/data/static/parsed", exist_ok=True)
+os.makedirs("/opt/data/realtime/parsed", exist_ok=True)
 
 
 #####################################
@@ -72,8 +72,8 @@ STOPPED, DELAYED, ON_TIME = list(map(TripStatus, range(3)))
 #####################################
 LOG_LEVEL: str = os.environ.get("LOG_LEVEL", "INFO")
 
-STATIC_PATH: str = f"/data/static"
-REALTIME_PATH: str = f"/data/realtime"
+STATIC_PATH: str = f"/opt/data/static"
+REALTIME_PATH: str = f"/opt/data/realtime"
 
 REALTIME_FREQ: Num = to_num(os.environ.get("REALTIME_FREQ", 15))
 REALTIME_TIMEOUT: Num = to_num(os.environ.get("REALTIME_TIMEOUT", 3.2))
