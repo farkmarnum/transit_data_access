@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 PATH := $(PATH)
-CLUSTER := webapps
-SERVICE := tda-3
+CLUSTER := tda
+SERVICE := tda
 PDIR := $(shell pwd)
 TMP := $(PWD)/../temp-tdr-build
 AWS_ID := 517918230755
