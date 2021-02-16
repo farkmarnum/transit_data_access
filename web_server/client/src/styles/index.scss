@@ -208,6 +208,8 @@ h3 {
 }
 
 .route-station {
+  display: flex;
+  justify-content: space-between;
   font-weight: 400;
   min-height: 3rem;
   overflow: hidden;
@@ -232,14 +234,13 @@ h3 {
   font-size: 1.1rem;
 }
 .route-station .arrival-times {
-  float: right;
   min-width: $arrivalsWidth;
   font-size: 1.3rem;
   vertical-align: top;
+  display: flex;
+  justify-content: flex-end;
 }
 .arrival-time {
-  display: inline-block;
-  float: left;
   width: $arrivalTimeWidth;
   margin: 0;
   margin-left: $arrivalTimeLeftMargin;
