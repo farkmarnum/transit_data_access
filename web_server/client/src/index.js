@@ -216,7 +216,7 @@ class Main extends React.Component {
             try {
               delete data.trips[tripHash].arrivals[stationHash]
             } catch (e) {
-              console.log(e, tripHash, data.trips)
+              console.error(e, tripHash, data.trips)
               throw new Error()
             }
           })
@@ -232,8 +232,9 @@ class Main extends React.Component {
           updatedTrips.add(tripHash)
           dict[tripHash].stationHash.forEach(stationHash => {
             let oldArrivalTime = data.trips[tripHash].arrivals[stationHash]
-            if (!tripHash || !stationHash) console.log('!!', tripHash, stationHash, oldArrivalTime + timeDiff) // TODO: remove after testing
-            else data.trips[tripHash].arrivals[stationHash] = oldArrivalTime + timeDiff
+            if (tripHash && stationHash) {
+              data.trips[tripHash].arrivals[stationHash] = oldArrivalTime + timeDiff
+            }
           })
         })
       })

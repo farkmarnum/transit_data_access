@@ -3,7 +3,7 @@ const merge = require('lodash.merge');
 
 export function devLog(entry) {
   if(process.env.NODE_ENV === 'development') {
-    console.log(entry)
+    console.info(entry)
   }
 }
 

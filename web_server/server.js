@@ -48,8 +48,8 @@ Redis.Command.setReplyTransformer('hgetall', function (result) {
 
 // Redis client for get()
 const redis = new Redis({ host: redisHostname, port: redisPort })
-redis.on('connect', () => { console.log('Redis client connected') })
-redis.on('error', (err) => { console.log('Redis error: ' + err) })
+redis.on('connect', () => { console.info('Redis client connected') })
+redis.on('error', (err) => { console.error('Redis error: ' + err) })
 
 // get the data:
 function getRedisData () {
@@ -80,7 +80,7 @@ getRedisData()
 
 // redisPubSub client for subscribe()
 const redisPubSub = new Redis({ host: redisHostname, port: redisPort })
-redisPubSub.on('connect', () => { console.log('redisPubSub client connected') })
+redisPubSub.on('connect', () => { console.info('redisPubSub client connected') })
 redisPubSub.on('error', (err) => { console.error('redisPubSub error: ' + err) })
 redisPubSub.on('message', (channel, msg) => {
   if (channel === 'realtime_updates' && msg === 'new_data') {
@@ -98,9 +98,9 @@ const server = http.createServer((req, res) => {
 
 server.listen(wsPort, hostname, 1024, (err) => {
   if (err) {
-    console.log(`Server error: ${err}`)
+    console.error(`Server error: ${err}`)
   } else {
-    console.log(`Server started, listening @ ${server.address().address}:${server.address().port}`)
+    console.info(`Server started, listening @ ${server.address().address}:${server.address().port}`)
   }
 })
 
@@ -110,20 +110,16 @@ const wsServer = new WebSocket.Server({ server: server })
 
 wsServer.on('connection', (ws, request) => {
   const clientId = querystring.parse(request.url.slice(2)).unique_id
-  // console.log('url: ', request.url, 'clientId: ', clientId)
 
   if (clients.has(clientId)) {
-    // console.log(`client reconnected: ${clientId}`)
     let client = clients.get(clientId)
     client.connected = true
     client.ws = ws
   } else {
-    // console.log(`new client w/ ID ${clientId}`)
     clients.set(clientId, new Client(ws))
   }
 
   ws.on('message', (msg) => {
-    // console.log(msg)
     try {
       let client = clients.get(clientId)
       const parsed = JSON.parse(msg)
@@ -133,12 +129,11 @@ wsServer.on('connection', (ws, request) => {
         sendFull(client)
       }
     } catch (err) {
-      console.log(err)
+      console.error(err)
     }
   })
 
   ws.on('close', () => {
-    // console.log('client disconnected: ', clientId)
     let client = clients.get(clientId)
     client.connected = false
     client.ws = null
@@ -148,13 +143,8 @@ wsServer.on('connection', (ws, request) => {
 
 function removeClient (clientId) {
   let client = clients.get(clientId)
-  if (client) {
-    if (!client.connected) {
-      // console.log(`deleting client ${clientId} from clients (new clients size = ${clients.size})`)
-      clients.delete(clientId)
-    } else {
-      // console.log(`client ${clientId} reconnected with a new ws and will not be removed`)
-    }
+  if (client && !client.connected) {
+    clients.delete(clientId)
   } else {
     console.warning(`removeClient could not find client w/ clientID ${clientId}`)
   }
@@ -191,14 +181,12 @@ function sendUpdate (client) {
   }
 }
 function pushToAll () {
-  console.log(`Received new data w/ timestamp ${latestTimestamp}, pushing it to clients`)
+  console.info(`Received new data w/ timestamp ${latestTimestamp}, pushing it to clients`)
   for (const [clientId, client] of clients.entries()) {
     if (client.ws != null && client.ws.readyState === WebSocket.OPEN) {
       if (client.lastSuccessfulTimestamp in dataUpdates) {
-        // console.log('sending update to ', clientId)
         sendUpdate(client)
       } else {
-        // console.log('sending full to ', clientId)
         sendFull(client)
       }
     }
