@@ -69,12 +69,9 @@ This React app interfaces with the backend to get data, and provides a responsiv
 
 The docker image uses a multi-stage build, sourcing from node-alpine to keep its size low.
 
-#### Docker
+#### Deployment
 
-Currently the project is built with docker-compose, and the images then manually pulled onto a server. In the future there will be a CD/CI pipeline with AWS Fargate.
-
-config/example.env gives an example of a config file for the docker environment variables. This file should be named docker.env
-
+The site is deployed on AWS ECS Fargate.
 
 Issues
 ------
